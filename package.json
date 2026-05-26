@@ -2,7 +2,7 @@
   "name": "carson",
   "version": "0.1.0",
   "private": true,
-  "description": "A GitHub App that manages your repository like a butler",
+  "description": "A GitHub App that manages your repository like a butler.",
   "homepage": "https://github.com/NexusPHP/carson#readme",
   "bugs": {
     "url": "https://github.com/NexusPHP/carson/issues"
