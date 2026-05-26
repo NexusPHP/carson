@@ -1,0 +1,5 @@
+# Normalize line endings to LF for all text files
+* text=auto eol=lf
+
+# Generated bundle: hide from PR diffs and exclude from language statistics
+dist/** linguist-generated
