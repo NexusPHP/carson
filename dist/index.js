@@ -52847,12 +52847,30 @@ var Subscriber = class {
   }
 };
 
+// src/app-identity.ts
+var cached2 = null;
+var setAppIdentity = (identity) => {
+  cached2 = identity;
+};
+var getAppIdentity = () => cached2;
+var getAppName = () => cached2?.name ?? "Carson";
+var getAppSlug = () => cached2?.slug ?? "carson";
+var getAppLogin = () => `${getAppSlug()}[bot]`;
+
 // src/template.ts
 var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
-var interpolate = (template, vars) => template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-  const value = vars[key];
-  return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+var universalVars = () => ({
+  app_name: getAppName(),
+  app_slug: getAppSlug(),
+  app_login: getAppLogin()
 });
+var interpolate = (template, vars) => {
+  const merged = { ...universalVars(), ...vars };
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+    const value = merged[key];
+    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+  });
+};
 
 // src/subscribers/conflicts-notifier.ts
 var Settings = external_exports.object({
@@ -63639,13 +63657,6 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
     ...probotOptions
   });
 }
-
-// src/app-identity.ts
-var cached2 = null;
-var setAppIdentity = (identity) => {
-  cached2 = identity;
-};
-var getAppIdentity = () => cached2;
 
 // src/index.ts
 import { readFile } from "node:fs/promises";

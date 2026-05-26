@@ -21,6 +21,15 @@ export const getAppIdentity = (): AppIdentity | null => cached;
 // where the identity has not been resolved (preflight skipped, tests, etc.).
 export const getAppName = (): string => cached?.name ?? 'Carson';
 
+// Returns the App's URL-safe slug, used in the App settings URL
+// (`https://github.com/apps/<slug>`). Falls back to the manifest default.
+export const getAppSlug = (): string => cached?.slug ?? 'carson';
+
+// Returns the bot user's GitHub login: `<slug>[bot]`. This is the author of
+// comments and check runs Carson posts, and is suffixed because GitHub
+// distinguishes bot accounts from human accounts that way.
+export const getAppLogin = (): string => `${getAppSlug()}[bot]`;
+
 export const resetAppIdentity = (): void => {
   cached = null;
 };

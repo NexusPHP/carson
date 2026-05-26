@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { resetAppIdentity, setAppIdentity } from '../src/app-identity.js';
 import { interpolate } from '../src/template.js';
 
 describe('interpolate', () => {
+  afterEach(() => {
+    resetAppIdentity();
+  });
+
   it('substitutes a single variable', () => {
     expect(interpolate('hello {{user}}', { user: 'octocat' })).toBe('hello octocat');
   });
@@ -40,5 +45,26 @@ describe('interpolate', () => {
   it('strips carson markers with surrounding whitespace and no trailing space', () => {
     expect(interpolate('{{t}}', { t: '<!--  carson:stale  --><!--carson:welcome-->ok' }))
       .toBe('ok');
+  });
+
+  it('injects {{app_name}}, {{app_slug}}, and {{app_login}} from the cached App identity', () => {
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+
+    expect(interpolate('{{app_name}} ({{app_slug}}, {{app_login}})', {}))
+      .toBe('Carson @ acme (carson-acme, carson-acme[bot])');
+  });
+
+  it('falls back to the carson defaults for universal vars when no App identity is cached', () => {
+    expect(interpolate('{{app_name}} / {{app_slug}} / {{app_login}}', {}))
+      .toBe('Carson / carson / carson[bot]');
+  });
+
+  it('lets per-call vars override the injected universal vars', () => {
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+
+    expect(interpolate(
+      '{{app_name}} / {{app_slug}} / {{app_login}}',
+      { app_name: 'CustomBot', app_slug: 'custom', app_login: 'custom-bot' },
+    )).toBe('CustomBot / custom / custom-bot');
   });
 });

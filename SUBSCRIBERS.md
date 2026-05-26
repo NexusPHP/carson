@@ -28,6 +28,18 @@ Any subscriber message you set in `carson.yml` may include `{{variable}}` placeh
 
 The set of variables available depends on the event the subscriber handles. Each subscriber's section below lists its specific variables.
 
+### Universal variables
+
+These are available to every subscriber's interpolated messages regardless of event:
+
+| Variable | Value |
+| --- | --- |
+| `{{app_name}}` | The configured name of the GitHub App (e.g. `Carson @ your-org`), as set when the App was registered. Falls back to `Carson` if the App identity has not been resolved (rare). |
+| `{{app_slug}}` | The URL-safe slug GitHub derives from the App name (e.g. `carson-your-org`). The App profile lives at `https://github.com/apps/{{app_slug}}`. Falls back to `carson`. Use this for the App URL or as a GitHub @-mention target (`@{{app_slug}}` resolves to the bot). |
+| `{{app_login}}` | The bot user's GitHub login (e.g. `carson-your-org[bot]`), which is what appears as the author of Carson's comments and check runs. Falls back to `carson[bot]`. Use this when you want the exact author identifier rather than the URL slug. |
+
+A subscriber-specific variable with the same name takes precedence over the universal one.
+
 ## Comment markers
 
 Subscribers that need to find their own prior comment on a PR or issue (to edit, delete, or minimize it) embed a hidden HTML marker in the comment body. The marker is invisible in rendered comments but visible in the raw markdown.
