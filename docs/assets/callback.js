@@ -29,6 +29,12 @@ if (!code) {
       resultEl.hidden = false;
 
       document.getElementById('app-id').value = String(data.id);
+      document.getElementById('app-name').textContent = data.name || '(unnamed)';
+      document.getElementById('app-login').textContent = data.slug ? data.slug + '[bot]' : '(unknown)';
+      const owner = data.owner;
+      document.getElementById('app-owner').textContent = owner
+        ? owner.login + ' (' + (owner.type || 'Account') + ')'
+        : '(unknown)';
       const pemDisplay = document.getElementById('pem-display');
       pemDisplay.textContent = data.pem;
 
