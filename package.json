@@ -1,0 +1,50 @@
+{
+  "name": "carson",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A GitHub App that manages your repository like a butler",
+  "homepage": "https://github.com/NexusPHP/carson#readme",
+  "bugs": {
+    "url": "https://github.com/NexusPHP/carson/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NexusPHP/carson.git"
+  },
+  "license": "MIT",
+  "author": "John Paul E. Balandan, CPA <paulbalandan@gmail.com>",
+  "type": "module",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\"",
+    "lint": "eslint --color src tests \"*.config.ts\"",
+    "lint:fix": "eslint --color --fix src tests \"*.config.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@octokit/webhooks": "^14.2.0",
+    "probot": "^14.3.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@stylistic/eslint-plugin": "^5.0.0",
+    "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^3.0.4",
+    "esbuild": "^0.28.0",
+    "eslint": "^9.18.0",
+    "jiti": "^2.4.2",
+    "nock": "^14.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^3.0.4"
+  },
+  "engines": {
+    "node": "^24 || ^26",
+    "npm": "^11"
+  }
+}
