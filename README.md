@@ -123,7 +123,7 @@ npm run build
 
 The `dist/index.js` bundle is committed to the repository so consumers can run the action directly from a tag or SHA. CI will fail if `dist/` is out of date relative to `src/`.
 
-The `docs/` directory holds the click-through installer that's served at <https://nexusphp.github.io/carson/>. It is plain HTML and JavaScript with no build step. GitHub Pages is configured to deploy from the `1.x` branch's `/docs` folder.
+The `docs/` directory holds the click-through installer that's served at <https://nexusphp.github.io/carson/>. It is plain HTML and JavaScript with no build step. The [`pages.yml`](.github/workflows/pages.yml) workflow deploys it via GitHub Actions, running only when files under `docs/` (or the workflow itself) change on `1.x`.
 
 ## License
 
