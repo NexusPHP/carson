@@ -16,9 +16,12 @@
   <section>
     <h2>Personal account</h2>
     <p>Creates a Carson App in your personal account with the required permissions pre-filled.</p>
-    <form action="https://github.com/settings/apps/new" method="post">
+    <form id="personal-form" action="https://github.com/settings/apps/new" method="post">
+      <label for="personal-app-name">App name</label>
+      <input type="text" id="personal-app-name" placeholder="Carson @ your-handle" required autocomplete="off">
       <input type="hidden" name="manifest" id="personal-manifest">
       <button type="submit" id="personal-button" disabled>Create Carson App</button>
+      <p class="hint">GitHub App names must be globally unique. Use something like "Carson @ your-handle".</p>
     </form>
   </section>
 
@@ -26,9 +29,13 @@
     <h2>Organisation</h2>
     <p>Creates a Carson App in your organisation. You must be an admin of the org.</p>
     <form id="org-form" method="post">
-      <input type="text" id="org-name" placeholder="Organisation name" required autocomplete="off">
+      <label for="org-name">Organisation name</label>
+      <input type="text" id="org-name" placeholder="my-org" required autocomplete="off">
+      <label for="org-app-name">App name</label>
+      <input type="text" id="org-app-name" placeholder="Carson @ my-org" required autocomplete="off">
       <input type="hidden" name="manifest" id="org-manifest">
       <button type="submit" id="org-button" disabled>Create Carson App</button>
+      <p class="hint">The App name auto-fills as you type the org name. Edit it if you want something different.</p>
     </form>
   </section>
 
