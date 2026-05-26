@@ -1,7 +1,12 @@
+import * as core from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig, resetConfigCache, setRegisteredSubscribers } from '../../src/configuration/cache.js';
 import type { Context } from 'probot';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
+
+vi.mock('@actions/core', () => ({
+  warning: vi.fn(),
+}));
 
 interface ContextHarness {
   context: Context<EmitterWebhookEventName>;
@@ -26,6 +31,7 @@ const makeContext = (raw: unknown, repo = { owner: 'acme', repo: 'widgets' }): C
 describe('config cache', () => {
   beforeEach(() => {
     setRegisteredSubscribers(['welcome']);
+    vi.mocked(core.warning).mockClear();
   });
 
   afterEach(() => {
@@ -86,11 +92,17 @@ describe('config cache', () => {
     await loadConfig(context);
     expect(warnMock).toHaveBeenCalledOnce();
     expect(warnMock).toHaveBeenCalledWith('carson.yml lists unknown subscriber "welcomee"');
+    expect(core.warning).toHaveBeenCalledOnce();
+    expect(core.warning).toHaveBeenCalledWith(
+      'carson.yml lists unknown subscriber "welcomee"',
+      { file: '.github/carson.yml' },
+    );
   });
 
   it('does not warn when all subscriber ids are registered', async () => {
     const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome'] });
     await loadConfig(context);
     expect(warnMock).not.toHaveBeenCalled();
+    expect(core.warning).not.toHaveBeenCalled();
   });
 });
