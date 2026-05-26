@@ -20,14 +20,14 @@
     </section>
 
     <section>
-      <h2>App identity</h2>
+      <h2>Application identity</h2>
       <dl class="identity">
         <dt>Name</dt>
-        <dd id="app-name"></dd>
+        <dd id="app-name">Carson</dd>
         <dt>Bot login</dt>
-        <dd id="app-login"></dd>
+        <dd id="app-login">carson[bot]</dd>
         <dt>Owner</dt>
-        <dd id="app-owner"></dd>
+        <dd id="app-owner">(unknown)</dd>
       </dl>
       <p class="status">Carson posts comments and check runs as the bot login above. Treat this as the App's GitHub handle.</p>
     </section>
@@ -35,7 +35,7 @@
     <section>
       <h2>App ID</h2>
       <div class="field">
-        <input type="text" id="app-id" readonly>
+        <input type="text" id="app-id" readonly placeholder="1234567">
         <button type="button" id="copy-app-id" class="secondary">Copy</button>
       </div>
     </section>
@@ -50,13 +50,59 @@
     </section>
 
     <section>
+      <h2>Open the App settings</h2>
+      <p class="status">From the App settings page you can install Carson on repositories, regenerate the private key, or review the App's permissions.</p>
+      <a id="app-settings-link" class="button" target="_blank" rel="noopener">Open App settings on GitHub</a>
+    </section>
+
+    <section>
+      <h2>Workflow file</h2>
+      <p class="status">Save as <code>.github/workflows/carson.yml</code> in each repository where Carson should run. Trim triggers you do not need.</p>
+      <pre id="workflow-yaml">name: Carson
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+  pull_request_review:
+    types: [submitted]
+  push:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  carson:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: NexusPHP/carson@&lt;commit-sha&gt; # v1.0.0
+        with:
+          app_id: ${{ secrets.CARSON_APP_ID }}
+          private_key: ${{ secrets.CARSON_PRIVATE_KEY }}
+</pre>
+      <button type="button" id="copy-workflow" class="secondary">Copy</button>
+    </section>
+
+    <section>
+      <h2>Configuration file</h2>
+      <p class="status">Save as <code>.github/carson.yml</code> on the default branch. Carson reads its config from the default branch only, so pull requests cannot alter the bot's behaviour.</p>
+      <pre id="carson-yaml">version: 1
+subscribers: []
+</pre>
+      <button type="button" id="copy-carson" class="secondary">Copy</button>
+    </section>
+
+    <section>
       <h2>Next steps</h2>
       <ol>
         <li>In the repository or organisation where Carson will run, go to <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong>.</li>
         <li>Add a secret named <code>CARSON_APP_ID</code> with the value above.</li>
         <li>Add a secret named <code>CARSON_PRIVATE_KEY</code> with the full PEM contents, including the <code>-----BEGIN</code> and <code>-----END</code> lines.</li>
-        <li>Install the App on the repositories you want Carson to act on. <span id="install-link-host"></span></li>
-        <li>Add the workflow from the <a href="https://github.com/NexusPHP/carson#workflow">Usage</a> section of the README to your repository.</li>
+        <li>Install the App on the repositories you want Carson to act on.</li>
+        <li>Commit the workflow file above to your repository.</li>
+        <li>Commit the configuration file above to your default branch and list the subscribers you want enabled. See <a href="https://github.com/NexusPHP/carson/blob/1.x/SUBSCRIBERS.md" target="_blank" rel="noopener">SUBSCRIBERS.md</a> for the full list.</li>
       </ol>
     </section>
   </div>

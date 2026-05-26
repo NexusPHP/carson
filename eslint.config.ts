@@ -84,6 +84,7 @@ const config: ConfigArray = tsEslint.config(
         fetch: 'readonly',
         location: 'readonly',
         navigator: 'readonly',
+        setTimeout: 'readonly',
         window: 'readonly',
       },
     },
