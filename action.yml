@@ -1,0 +1,22 @@
+name: 'Carson'
+description: 'A GitHub App that manages your repository like a butler'
+author: 'John Paul E. Balandan, CPA'
+
+branding:
+  icon: 'user-check'
+  color: 'gray-dark'
+
+inputs:
+  app_id:
+    description: 'GitHub App ID'
+    required: true
+  private_key:
+    description: 'GitHub App private key (PEM)'
+    required: true
+  webhook_secret:
+    description: 'GitHub App webhook secret. Optional.'
+    required: false
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
