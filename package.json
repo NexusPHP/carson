@@ -35,14 +35,14 @@
     "@eslint/js": "^9.18.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^25.9.1",
-    "@vitest/coverage-v8": "^3.0.4",
+    "@vitest/coverage-v8": "^4.1.7",
     "esbuild": "^0.28.0",
     "eslint": "^9.18.0",
     "jiti": "^2.4.2",
     "nock": "^14.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
-    "vitest": "^3.0.4"
+    "vitest": "^4.1.7"
   },
   "engines": {
     "node": "^24 || ^26",
