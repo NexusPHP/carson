@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
-import app from './app.js';
+import app, { carson } from './app.js';
+import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 import { readFile } from 'node:fs/promises';
@@ -34,11 +35,27 @@ const main = async (): Promise<void> => {
   });
 
   await probot.load(app);
-  await probot.receive({
-    id: runId,
-    name: eventName,
-    payload,
-  } as EmitterWebhookEvent);
+
+  if (eventName === 'schedule') {
+    const repository = process.env['GITHUB_REPOSITORY'];
+
+    if (repository === undefined) {
+      core.setFailed('GITHUB_REPOSITORY must be set for scheduled events');
+      return;
+    }
+
+    const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
+
+    if (result.failed) {
+      handlerFailed = true;
+    }
+  } else {
+    await probot.receive({
+      id: runId,
+      name: eventName,
+      payload,
+    } as EmitterWebhookEvent);
+  }
 
   if (handlerFailed) {
     core.setFailed('One or more subscribers failed');

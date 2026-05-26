@@ -9,8 +9,10 @@
   },
   "public": false,
   "default_permissions": {
+    "checks": "write",
     "contents": "read",
-    "issues": "write"
+    "issues": "write",
+    "pull_requests": "write"
   },
   "default_events": []
 }
