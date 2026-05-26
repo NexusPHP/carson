@@ -7,11 +7,11 @@ describe('interpolate', () => {
     resetAppIdentity();
   });
 
-  it('substitutes a single variable', () => {
+  it('substitutes a single placeholder from the context', () => {
     expect(interpolate('hello {{user}}', { user: 'octocat' })).toBe('hello octocat');
   });
 
-  it('substitutes multiple variables', () => {
+  it('substitutes multiple placeholders from the context', () => {
     expect(interpolate('{{a}}-{{b}}-{{a}}', { a: '1', b: '2' })).toBe('1-2-1');
   });
 
@@ -54,12 +54,12 @@ describe('interpolate', () => {
       .toBe('Carson @ acme (carson-acme, carson-acme[bot])');
   });
 
-  it('falls back to the carson defaults for universal vars when no App identity is cached', () => {
+  it('falls back to the carson defaults for the universal context when no App identity is cached', () => {
     expect(interpolate('{{app_name}} / {{app_slug}} / {{app_login}}', {}))
       .toBe('Carson / carson / carson[bot]');
   });
 
-  it('lets per-call vars override the injected universal vars', () => {
+  it('lets per-call context override the injected universal context', () => {
     setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
 
     expect(interpolate(

@@ -20,25 +20,25 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 
 ## Template interpolation
 
-Any subscriber message you set in `carson.yml` may include `{{variable}}` placeholders. Syntax:
+Any subscriber message you set in `carson.yml` may include `{{placeholder}}` tokens that are interpolated from a context dictionary. Syntax:
 
 - `{{name}}` and `{{ name }}` are equivalent. Whitespace inside the braces is tolerated.
 - The placeholder name must be a single `\w+` token (letters, digits, underscore). Anything more complex (`{{ user.name }}`, `{{ a-b }}`) is left verbatim.
 - Unknown placeholders are also left verbatim, so a typo like `{{usre}}` will appear literally in the comment. This is intentional: silent empty-string substitution hides mistakes.
 
-The set of variables available depends on the event the subscriber handles. Each subscriber's section below lists its specific variables.
+The context keys available depend on the event the subscriber handles. Each subscriber's section below lists its specific context.
 
-### Universal variables
+### Universal context
 
-These are available to every subscriber's interpolated messages regardless of event:
+These keys are available to every subscriber's interpolated messages regardless of event:
 
-| Variable | Value |
+| Key | Value |
 | --- | --- |
 | `{{app_name}}` | The configured name of the GitHub App (e.g. `Carson @ your-org`), as set when the App was registered. Falls back to `Carson` if the App identity has not been resolved (rare). |
 | `{{app_slug}}` | The URL-safe slug GitHub derives from the App name (e.g. `carson-your-org`). The App profile lives at `https://github.com/apps/{{app_slug}}`. Falls back to `carson`. Use this for the App URL or as a GitHub @-mention target (`@{{app_slug}}` resolves to the bot). |
 | `{{app_login}}` | The bot user's GitHub login (e.g. `carson-your-org[bot]`), which is what appears as the author of Carson's comments and check runs. Falls back to `carson[bot]`. Use this when you want the exact author identifier rather than the URL slug. |
 
-A subscriber-specific variable with the same name takes precedence over the universal one.
+A subscriber-specific context key with the same name takes precedence over the universal one.
 
 ## Comment markers
 
@@ -79,9 +79,9 @@ If GitHub has not yet computed the PR's mergeable state (transient `mergeable: n
 | --- | --- | --- |
 | `message` | string | ``@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.`` |
 
-### Interpolation variables
+### Context
 
-| Variable | Value |
+| Key | Value |
 | --- | --- |
 | `{{user}}` | GitHub login of the PR author |
 | `{{repo}}` | Repository name |
@@ -130,9 +130,9 @@ on:
 
 If `comment` is set, Carson posts it on the issue *before* locking (you can't comment after the lock). The comment supports template interpolation.
 
-### Interpolation variables (for `comment`)
+### Context (for `comment`)
 
-| Variable | Value |
+| Key | Value |
 | --- | --- |
 | `{{user}}` | GitHub login of the issue's original opener (left verbatim if the user is a ghost) |
 | `{{number}}` | Issue number |
@@ -239,9 +239,9 @@ on:
 | `close_message` | string | `Closing this {{type}} due to extended inactivity.` |
 | `exempt_labels` | array of strings | `[]` |
 
-### Interpolation variables
+### Context
 
-| Variable | Value |
+| Key | Value |
 | --- | --- |
 | `{{user}}` | GitHub login of the item's author (left verbatim if the user is a ghost) |
 | `{{number}}` | Issue or PR number |
@@ -292,9 +292,9 @@ Comments on a PR or issue when the author's `author_association` is `FIRST_TIMER
 | `pull_request` | string | `Thanks for opening your first pull request, @{{user}}!` |
 | `issue` | string | `Thanks for opening your first issue, @{{user}}!` |
 
-### Interpolation variables
+### Context
 
-| Variable | Value |
+| Key | Value |
 | --- | --- |
 | `{{user}}` | GitHub login of the author |
 | `{{repo}}` | Repository name |

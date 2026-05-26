@@ -32,8 +32,8 @@ export class LockOldIssuesSubscriber extends Subscriber {
     });
   }
 
-  async #run(context: ScheduledContext): Promise<void> {
-    const config = await this.loadEnabledConfig(context);
+  async #run(scheduled: ScheduledContext): Promise<void> {
+    const config = await this.loadEnabledConfig(scheduled);
 
     if (config === null) {
       return;
@@ -44,9 +44,9 @@ export class LockOldIssuesSubscriber extends Subscriber {
     const reason = settings.reason ?? DEFAULT_REASON;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - days * MS_PER_DAY;
-    const { owner, repo } = context.repo();
+    const { owner, repo } = scheduled.repo();
 
-    const issues = await context.octokit.paginate(context.octokit.rest.issues.listForRepo, {
+    const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
       owner,
       repo,
       state: 'closed',
@@ -79,25 +79,25 @@ export class LockOldIssuesSubscriber extends Subscriber {
       }
 
       if (settings.comment !== undefined) {
-        const vars: Record<string, string | number> = {
+        const context: Record<string, string | number> = {
           number: issue.number,
           repo,
           days,
         };
 
         if (issue.user !== null) {
-          vars['user'] = issue.user.login;
+          context['user'] = issue.user.login;
         }
 
-        await context.octokit.rest.issues.createComment({
+        await scheduled.octokit.rest.issues.createComment({
           owner,
           repo,
           issue_number: issue.number,
-          body: interpolate(settings.comment, vars),
+          body: interpolate(settings.comment, context),
         });
       }
 
-      await context.octokit.rest.issues.lock({
+      await scheduled.octokit.rest.issues.lock({
         owner,
         repo,
         issue_number: issue.number,
@@ -106,6 +106,6 @@ export class LockOldIssuesSubscriber extends Subscriber {
       locked += 1;
     }
 
-    context.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
+    scheduled.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
   }
 }

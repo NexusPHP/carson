@@ -63,7 +63,7 @@ All registered subscriber IDs are pushed into [src/configuration/cache.ts](src/c
 
 1. Create `src/subscribers/<id>.ts` exporting a class that extends `Subscriber`.
 2. Register it in [src/app.ts](src/app.ts). The constructor argument to `new Carson([...])` is the source of truth.
-3. Document it in [SUBSCRIBERS.md](SUBSCRIBERS.md) (triggers, permissions, settings, interpolation variables, example) and add a link from the index in [README.md](README.md).
+3. Document it in [SUBSCRIBERS.md](SUBSCRIBERS.md) (triggers, permissions, settings, interpolation context, example) and add a link from the index in [README.md](README.md).
 4. Add tests under `tests/subscribers/<id>.test.ts` following the pattern in [tests/subscribers/welcome.test.ts](tests/subscribers/welcome.test.ts): a real `Probot` plus nock-mocked GitHub API plus `probot.receive(...)`.
 5. If the subscriber needs an event the consumer workflow doesn't yet emit, note it in `SUBSCRIBERS.md`. The consumer's `.github/workflows/carson.yml` must include the trigger.
 
@@ -101,7 +101,7 @@ Per-subscriber settings are validated lazily by each subscriber with its own Zod
 
 ### Templates
 
-[src/template.ts](src/template.ts) is a deliberately minimal `{{name}}` / `{{ name }}` interpolator. Only `\w+` placeholders are recognized. Anything more complex (`{{ user.name }}`) is left verbatim, and unknown placeholders are left verbatim too (silent empty-string substitution would hide typos). Each subscriber documents the variables it exposes in [SUBSCRIBERS.md](SUBSCRIBERS.md#template-interpolation).
+[src/template.ts](src/template.ts) is a deliberately minimal `{{name}}` / `{{ name }}` interpolator. Only `\w+` placeholders are recognized. Anything more complex (`{{ user.name }}`) is left verbatim, and unknown placeholders are left verbatim too (silent empty-string substitution would hide typos). Each call passes a `TemplateContext` dictionary. Each subscriber documents the context keys it exposes in [SUBSCRIBERS.md](SUBSCRIBERS.md#template-interpolation).
 
 ### Comment markers
 

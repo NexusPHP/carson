@@ -113,8 +113,8 @@ export class StaleSubscriber extends Subscriber {
     });
   }
 
-  async #run(context: ScheduledContext): Promise<void> {
-    const config = await this.loadEnabledConfig(context);
+  async #run(scheduled: ScheduledContext): Promise<void> {
+    const config = await this.loadEnabledConfig(scheduled);
 
     if (config === null) {
       return;
@@ -129,9 +129,9 @@ export class StaleSubscriber extends Subscriber {
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY;
     const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY;
-    const { owner, repo } = context.repo();
+    const { owner, repo } = scheduled.repo();
 
-    const items = await context.octokit.paginate(context.octokit.rest.issues.listForRepo, {
+    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
       owner,
       repo,
       state: 'open',
@@ -154,7 +154,7 @@ export class StaleSubscriber extends Subscriber {
       const isStale = labelNames.includes(staleLabel);
       const kind = item.pull_request === undefined ? 'issue' : 'pull request';
 
-      const vars: Record<string, string | number> = {
+      const context: Record<string, string | number> = {
         number: item.number,
         repo,
         title: item.title,
@@ -164,18 +164,18 @@ export class StaleSubscriber extends Subscriber {
       };
 
       if (item.user !== null) {
-        vars['user'] = item.user.login;
+        context['user'] = item.user.login;
       }
 
       if (isStale) {
         if (updatedAt < closeCutoff) {
-          await context.octokit.rest.issues.createComment({
+          await scheduled.octokit.rest.issues.createComment({
             owner,
             repo,
             issue_number: item.number,
-            body: interpolate(closeMessage, vars),
+            body: interpolate(closeMessage, context),
           });
-          await context.octokit.rest.issues.update({
+          await scheduled.octokit.rest.issues.update({
             owner,
             repo,
             issue_number: item.number,
@@ -184,22 +184,22 @@ export class StaleSubscriber extends Subscriber {
           closed += 1;
         }
       } else if (updatedAt < staleCutoff) {
-        await context.octokit.rest.issues.addLabels({
+        await scheduled.octokit.rest.issues.addLabels({
           owner,
           repo,
           issue_number: item.number,
           labels: [staleLabel],
         });
-        await context.octokit.rest.issues.createComment({
+        await scheduled.octokit.rest.issues.createComment({
           owner,
           repo,
           issue_number: item.number,
-          body: `${interpolate(staleMessage, vars)}\n\n${COMMENT_MARKER}`,
+          body: `${interpolate(staleMessage, context)}\n\n${COMMENT_MARKER}`,
         });
         staled += 1;
       }
     }
 
-    context.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
+    scheduled.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
   }
 }

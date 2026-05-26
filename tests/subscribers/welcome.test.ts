@@ -339,7 +339,7 @@ describe('welcome subscriber (via app)', () => {
     expect(commentScope.isDone()).toBe(true);
   });
 
-  it('interpolates variables in a custom issue message', async () => {
+  it('interpolates context keys in a custom issue message', async () => {
     mockInstallationToken();
     mockConfig([
       'version: 1',
