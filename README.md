@@ -57,7 +57,9 @@ name: Carson
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
   issues:
     types: [opened]
   issue_comment:
@@ -101,7 +103,10 @@ Carson reads its configuration from the **default branch only**, so pull request
 
 ## Available subscribers
 
-- **welcome**: comments on newly opened pull requests and issues.
+See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
+
+- **conflicts-notifier**: comments on PRs with merge conflicts and marks the comment resolved when fixed.
+- **welcome**: greets first-time contributors on their first pull request or issue.
 
 ## Development
 
