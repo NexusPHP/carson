@@ -30,11 +30,13 @@ Fill in:
 - **Homepage URL**: your project URL or `https://github.com/NexusPHP/carson`.
 - **Webhook**: uncheck **Active**. Carson does not receive webhooks. It is triggered by your workflow.
 - **Repository permissions**:
+  - **Checks**: Read and write (for the `signed-commits` check run).
   - **Contents**: Read-only (to read `.github/carson.yml`).
-  - **Issues**: Read and write (to comment on issues and pull requests).
+  - **Issues**: Read and write (to comment on, label, lock, and close issues and pull requests).
+  - **Pull requests**: Read-only (to read PR metadata and commit lists).
 - **Subscribe to events**: none.
 
-The minimum required permissions are also captured in [`.github/app-manifest.json`](.github/app-manifest.json) for reference. New subscribers may request additional permissions, which their documentation will list.
+These match the permissions captured in [`.github/app-manifest.json`](.github/app-manifest.json), which the click-through installer uses. New subscribers may request additional permissions, which their documentation will list.
 
 ### 2. Generate a private key
 
