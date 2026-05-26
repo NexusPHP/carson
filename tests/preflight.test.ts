@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { findMissingPermissions, formatMissingPermissionsError, runPreflight } from '../src/preflight.js';
+import { getAppName, resetAppIdentity } from '../src/app-identity.js';
 import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
 import { Carson } from '../src/carson.js';
 import type { Probot } from 'probot';
@@ -67,39 +68,56 @@ describe('findMissingPermissions', () => {
 });
 
 describe('formatMissingPermissionsError', () => {
-  it('includes the App html_url when provided', () => {
+  it('includes the App html_url and identity when both are provided', () => {
     const out = formatMissingPermissionsError(
       [{ subscriberId: 's1', permission: 'issues', required: 'write', granted: 'read' }],
       'https://github.com/apps/carson-acme',
+      { name: 'Carson @ acme', slug: 'carson-acme', id: 42 },
     );
 
-    expect(out).toContain('Carson is missing required GitHub App permissions:');
+    expect(out).toContain('Carson @ acme is missing required GitHub App permissions:');
     expect(out).toContain('  - issues: required "write", granted "read" (s1)');
     expect(out).toContain('Update permissions in your GitHub App settings: https://github.com/apps/carson-acme');
   });
 
-  it('falls back to a generic settings message when html_url is undefined', () => {
+  it('falls back to a generic header and footer when identity and html_url are undefined', () => {
     const out = formatMissingPermissionsError(
       [{ subscriberId: 's1', permission: 'checks', required: 'write', granted: undefined }],
       undefined,
+      undefined,
     );
 
+    expect(out).toContain('Carson is missing required GitHub App permissions:');
     expect(out).toContain('  - checks: required "write", not granted (s1)');
     expect(out).toContain('Update permissions in your GitHub App settings.');
     expect(out).not.toContain('http');
   });
 });
 
+interface AppDataStub {
+  permissions?: Record<string, string> | undefined;
+  html_url?: string | undefined;
+  name?: string | undefined;
+  slug?: string | undefined;
+  id?: number | undefined;
+}
+
 interface HarnessOverrides {
-  appData?: { permissions?: Record<string, string>; html_url?: string } | null;
+  appData?: AppDataStub | null;
   installFails?: boolean;
   config?: unknown;
 }
 
+const DEFAULT_APP_DATA: AppDataStub = {
+  permissions: { contents: 'read', issues: 'write' },
+  html_url: 'https://github.com/apps/test',
+  name: 'Carson @ test',
+  slug: 'carson-test',
+  id: 12345,
+};
+
 const makeProbot = (overrides: HarnessOverrides = {}): Probot => {
-  const appData = overrides.appData === undefined
-    ? { permissions: { contents: 'read', issues: 'write' }, html_url: 'https://github.com/apps/test' }
-    : overrides.appData;
+  const appData = overrides.appData === undefined ? DEFAULT_APP_DATA : overrides.appData;
   const getAuthenticated = vi.fn().mockResolvedValue({ data: appData });
   const getRepoInstallation = overrides.installFails === true
     ? vi.fn().mockRejectedValue(new Error('Not Found'))
@@ -127,6 +145,7 @@ describe('runPreflight', () => {
 
   beforeEach(() => {
     resetConfigCache();
+    resetAppIdentity();
     setFailed.mockClear();
   });
 
@@ -142,7 +161,7 @@ describe('runPreflight', () => {
 
   it('fails and reports each missing permission when the App is under-permissioned', async () => {
     const probot = makeProbot({
-      appData: { permissions: { contents: 'read' }, html_url: 'https://github.com/apps/test' },
+      appData: { ...DEFAULT_APP_DATA, permissions: { contents: 'read' } },
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
@@ -151,6 +170,7 @@ describe('runPreflight', () => {
     expect(ok).toBe(false);
     expect(setFailed).toHaveBeenCalledOnce();
     const message = setFailed.mock.calls[0]?.[0] as string;
+    expect(message).toContain('Carson @ test is missing required GitHub App permissions:');
     expect(message).toContain('issues: required "write", not granted (s1)');
     expect(message).toContain('https://github.com/apps/test');
   });
@@ -185,8 +205,22 @@ describe('runPreflight', () => {
     expect(setFailed).not.toHaveBeenCalled();
   });
 
+  it('falls back to the default name and slug when the App response omits them', async () => {
+    const probot = makeProbot({
+      appData: { ...DEFAULT_APP_DATA, name: undefined, slug: undefined },
+    });
+    const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
+
+    const ok = await runPreflight(probot, carson, 'acme/widgets');
+
+    expect(ok).toBe(true);
+    expect(getAppName()).toBe('Carson');
+  });
+
   it('treats a missing permissions field on the App as no permissions', async () => {
-    const probot = makeProbot({ appData: { html_url: 'https://github.com/apps/test' } });
+    const probot = makeProbot({
+      appData: { ...DEFAULT_APP_DATA, permissions: undefined },
+    });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
     const ok = await runPreflight(probot, carson, 'acme/widgets');
@@ -209,7 +243,7 @@ describe('runPreflight', () => {
 
   it('omits the html_url line when the App data has no html_url', async () => {
     const probot = makeProbot({
-      appData: { permissions: { contents: 'read' } },
+      appData: { ...DEFAULT_APP_DATA, html_url: undefined, permissions: { contents: 'read' } },
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
@@ -222,7 +256,7 @@ describe('runPreflight', () => {
 
   it('ignores subscribers that are bundled but not enabled in carson.yml', async () => {
     const probot = makeProbot({
-      appData: { permissions: { contents: 'read', issues: 'read' }, html_url: 'https://github.com/apps/test' },
+      appData: { ...DEFAULT_APP_DATA, permissions: { contents: 'read', issues: 'read' } },
       config: { version: 1, subscribers: ['s1'] },
     });
     const carson = new Carson([

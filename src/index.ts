@@ -3,6 +3,7 @@ import app, { carson } from './app.js';
 import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
+import { getAppIdentity } from './app-identity.js';
 import { readFile } from 'node:fs/promises';
 import { runPreflight } from './preflight.js';
 
@@ -40,6 +41,12 @@ const main = async (): Promise<void> => {
 
   if (!await runPreflight(probot, carson, repository)) {
     return;
+  }
+
+  const identity = getAppIdentity();
+
+  if (identity !== null) {
+    probot.log.info(`Running as ${identity.slug}[bot] (App "${identity.name}", ID ${identity.id})`);
   }
 
   if (eventName === 'schedule') {

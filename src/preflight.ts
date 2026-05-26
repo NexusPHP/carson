@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { type AppIdentity, setAppIdentity } from './app-identity.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
 import { type PermissionLevel, type RequiredPermissions, type Subscriber } from './subscriber.js';
 import type { Carson } from './carson.js';
@@ -48,8 +49,9 @@ export const findMissingPermissions = (
 export const formatMissingPermissionsError = (
   missing: readonly MissingPermission[],
   appHtmlUrl: string | undefined,
+  app: AppIdentity | undefined,
 ): string => {
-  const header = 'Carson is missing required GitHub App permissions:';
+  const header = `${app?.name ?? 'Carson'} is missing required GitHub App permissions:`;
   const body = missing.map((m) => {
     const grantedText = m.granted === undefined ? 'not granted' : `granted "${m.granted}"`;
     return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
@@ -82,6 +84,13 @@ export const runPreflight = async (
     probot.log.warn('preflight: apps.getAuthenticated returned no app, skipping');
     return true;
   }
+
+  const identity: AppIdentity = {
+    name: app.name ?? 'Carson',
+    slug: app.slug ?? 'carson',
+    id: app.id,
+  };
+  setAppIdentity(identity);
 
   let installationId: number;
 
@@ -117,7 +126,7 @@ export const runPreflight = async (
   const missing = findMissingPermissions(enabled, granted);
 
   if (missing.length > 0) {
-    core.setFailed(formatMissingPermissionsError(missing, app.html_url));
+    core.setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
     return false;
   }
 

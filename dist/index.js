@@ -63640,6 +63640,13 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
   });
 }
 
+// src/app-identity.ts
+var cached2 = null;
+var setAppIdentity = (identity) => {
+  cached2 = identity;
+};
+var getAppIdentity = () => cached2;
+
 // src/index.ts
 import { readFile } from "node:fs/promises";
 
@@ -63661,8 +63668,8 @@ var findMissingPermissions = (enabled, granted) => [
   ...collectMissing("<base>", BASE_PERMISSIONS, granted),
   ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted))
 ];
-var formatMissingPermissionsError = (missing, appHtmlUrl) => {
-  const header = "Carson is missing required GitHub App permissions:";
+var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
+  const header = `${app?.name ?? "Carson"} is missing required GitHub App permissions:`;
   const body = missing.map((m) => {
     const grantedText = m.granted === void 0 ? "not granted" : `granted "${m.granted}"`;
     return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
@@ -63684,6 +63691,12 @@ var runPreflight = async (probot, carson2, repository) => {
     probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
     return true;
   }
+  const identity = {
+    name: app.name ?? "Carson",
+    slug: app.slug ?? "carson",
+    id: app.id
+  };
+  setAppIdentity(identity);
   let installationId;
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
@@ -63713,7 +63726,7 @@ var runPreflight = async (probot, carson2, repository) => {
   const granted = app.permissions ?? {};
   const missing = findMissingPermissions(enabled, granted);
   if (missing.length > 0) {
-    setFailed(formatMissingPermissionsError(missing, app.html_url));
+    setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
     return false;
   }
   return true;
@@ -63748,6 +63761,10 @@ var main = async () => {
   await probot.load(app_default);
   if (!await runPreflight(probot, carson, repository)) {
     return;
+  }
+  const identity = getAppIdentity();
+  if (identity !== null) {
+    probot.log.info(`Running as ${identity.slug}[bot] (App "${identity.name}", ID ${identity.id})`);
   }
   if (eventName === "schedule") {
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
