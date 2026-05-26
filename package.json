@@ -32,12 +32,12 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
+    "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.7",
     "esbuild": "^0.28.0",
-    "eslint": "^9.18.0",
+    "eslint": "^10.4.0",
     "jiti": "^2.4.2",
     "nock": "^14.0.0",
     "typescript": "^6.0.3",
