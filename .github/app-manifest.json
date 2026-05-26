@@ -1,0 +1,16 @@
+{
+  "name": "Carson",
+  "description": "Repository butler distributed as a GitHub Action.",
+  "url": "https://github.com/NexusPHP/carson",
+  "redirect_url": "https://nexusphp.github.io/carson/install/",
+  "hook_attributes": {
+    "url": "https://github.com/NexusPHP/carson",
+    "active": false
+  },
+  "public": false,
+  "default_permissions": {
+    "contents": "read",
+    "issues": "write"
+  },
+  "default_events": []
+}
