@@ -50,9 +50,12 @@ const main = async (): Promise<void> => {
       handlerFailed = true;
     }
   } else {
+    // pull_request_target has the same payload as pull_request. Route both
+    // to the same handlers so subscribers register one event name.
+    const name = eventName === 'pull_request_target' ? 'pull_request' : eventName;
     await probot.receive({
       id: runId,
-      name: eventName,
+      name,
       payload,
     } as EmitterWebhookEvent);
   }

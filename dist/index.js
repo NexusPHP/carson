@@ -63657,9 +63657,10 @@ var main = async () => {
       handlerFailed = true;
     }
   } else {
+    const name = eventName === "pull_request_target" ? "pull_request" : eventName;
     await probot.receive({
       id: runId,
-      name: eventName,
+      name,
       payload
     });
   }
