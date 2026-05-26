@@ -4,4 +4,3 @@
 /!mock-cert.pem
 /.env
 /coverage
-/package-lock.json
