@@ -1,5 +1,11 @@
 # Carson
 
+[![Build](https://github.com/NexusPHP/carson/actions/workflows/build.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/build.yml)
+[![Lint](https://github.com/NexusPHP/carson/actions/workflows/lint.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/lint.yml)
+[![Test](https://github.com/NexusPHP/carson/actions/workflows/test.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/test.yml)
+[![Typecheck](https://github.com/NexusPHP/carson/actions/workflows/typecheck.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/typecheck.yml)
+[![Pages](https://github.com/NexusPHP/carson/actions/workflows/pages.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/pages.yml)
+
 A GitHub App that manages your repository like a butler. Distributed as a GitHub Action.
 
 Carson runs as a **per-consumer GitHub App**: each org or user that wants to use Carson registers their own App, generates a private key, and stores both as Actions secrets. The App identity ("Carson @ Acme") is yours, not ours. There is no central Carson App to install.
@@ -105,11 +111,11 @@ Carson reads its configuration from the **default branch only**, so pull request
 
 See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
 
-- **conflicts-notifier**: comments on PRs with merge conflicts and marks the comment resolved when fixed.
-- **lock-old-issues**: locks closed issues that have been inactive past a configurable age.
-- **signed-commits**: posts a check requiring every commit in a PR to be signed and verified.
-- **stale**: marks inactive issues and PRs stale, then closes them after a further grace period.
-- **welcome**: greets first-time contributors on their first pull request or issue.
+- [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
+- [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
+- [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
+- [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
+- [**welcome**](SUBSCRIBERS.md#welcome): greets first-time contributors on their first pull request or issue.
 
 ## Development
 
