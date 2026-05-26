@@ -42523,8 +42523,74 @@ ${COMMENT_MARKER}`;
   }
 };
 
-// src/subscribers/welcome.ts
+// src/subscribers/signed-commits.ts
 var Settings2 = external_exports.object({
+  name: external_exports.string().optional(),
+  treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
+});
+var DEFAULT_NAME = "Carson / signed-commits";
+var DEFAULT_TREATMENT = "failure";
+var PR_EVENTS2 = [
+  "pull_request.opened",
+  "pull_request.synchronize",
+  "pull_request.reopened"
+];
+var SignedCommitsSubscriber = class extends Subscriber {
+  id = "signed-commits";
+  description = "Posts a check run requiring all commits in a pull request to be signed and verified.";
+  register(probot) {
+    probot.on(PR_EVENTS2, async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    if (context.isBot) {
+      return;
+    }
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
+    const checkName = settings.name ?? DEFAULT_NAME;
+    const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
+    const pr = context.payload.pull_request;
+    const { owner, repo } = context.repo();
+    const commits = await context.octokit.paginate(context.octokit.rest.pulls.listCommits, {
+      owner,
+      repo,
+      pull_number: pr.number,
+      per_page: 100
+    });
+    const unsigned = commits.filter((c) => c.commit.verification?.verified !== true).map((c) => ({
+      sha: c.sha,
+      subject: c.commit.message.split("\n")[0],
+      author: c.commit.author?.name ?? c.author?.login ?? "unknown"
+    }));
+    const conclusion = unsigned.length === 0 ? "success" : treatment;
+    const output = unsigned.length === 0 ? {
+      title: `All ${commits.length} commit(s) signed`,
+      summary: `Every commit in this pull request has a verified signature.`
+    } : {
+      title: `${unsigned.length} unsigned commit(s)`,
+      summary: `${unsigned.length} of ${commits.length} commit(s) are unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
+      text: unsigned.map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.subject} (${c.author})`).join("\n")
+    };
+    await context.octokit.rest.checks.create({
+      owner,
+      repo,
+      name: checkName,
+      head_sha: pr.head.sha,
+      status: "completed",
+      conclusion,
+      output
+    });
+    context.log.info(`signed-commits check ${conclusion} for PR #${pr.number}`);
+  }
+};
+
+// src/subscribers/welcome.ts
+var Settings3 = external_exports.object({
   pull_request: external_exports.string().optional(),
   issue: external_exports.string().optional()
 });
@@ -42547,7 +42613,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings3) ?? {};
       const body = interpolate(settings.pull_request ?? DEFAULT_PR_MESSAGE, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -42572,7 +42638,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings3) ?? {};
       const body = interpolate(settings.issue ?? DEFAULT_ISSUE_MESSAGE, {
         user: issue2.user.login,
         repo: context.payload.repository.name,
@@ -42588,6 +42654,7 @@ var WelcomeSubscriber = class extends Subscriber {
 // src/app.ts
 var carson = new Carson([
   new ConflictsNotifierSubscriber(),
+  new SignedCommitsSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;

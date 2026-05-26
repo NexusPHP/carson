@@ -106,6 +106,7 @@ Carson reads its configuration from the **default branch only**, so pull request
 See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
 
 - **conflicts-notifier**: comments on PRs with merge conflicts and marks the comment resolved when fixed.
+- **signed-commits**: posts a check requiring every commit in a PR to be signed and verified.
 - **welcome**: greets first-time contributors on their first pull request or issue.
 
 ## Development

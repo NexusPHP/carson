@@ -10,6 +10,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - [Comment markers](#comment-markers)
 - Subscribers
   - [conflicts-notifier](#conflicts-notifier)
+  - [signed-commits](#signed-commits)
   - [welcome](#welcome)
 
 ## Template interpolation
@@ -79,6 +80,40 @@ subscribers:
 settings:
   conflicts-notifier:
     message: "@{{user}} #{{number}} conflicts with `{{base}}`. Please rebase."
+```
+
+---
+
+## signed-commits
+
+Posts a [Check Run](https://docs.github.com/en/rest/checks/runs) on each pull request that passes if every commit has a verified signature and fails if any commit is unsigned.
+
+**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`
+**Permissions**: `checks: write`, `pull_requests: read`
+
+Each event re-evaluates every commit on the PR head and updates a single rolling check (keyed by check name, so updates replace rather than duplicate). The check's output lists the offending commits with the short SHA, first-line subject, and author name to help the contributor identify what needs re-signing.
+
+GitHub considers a commit verified if it has a valid GPG, SSH, or S/MIME signature, or if it was created via GitHub's web UI / API (which signs automatically). Commits pushed from a developer machine without a signing key configured will appear unverified.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `name` | string | `Carson / signed-commits` |
+| `treat_unsigned_as` | `"failure"` or `"neutral"` | `failure` |
+
+`treat_unsigned_as: neutral` is useful for an advisory rollout: the check still appears in the PR's checks list but doesn't block merging. Flip to the default `failure` (or wire it into branch protection as required) once contributors have had time to set up signing.
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - signed-commits
+settings:
+  signed-commits:
+    name: "Signed commits"
+    treat_unsigned_as: neutral
 ```
 
 ---
