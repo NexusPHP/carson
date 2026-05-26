@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -14,13 +15,114 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Create GitHub Release
-        run: gh release create "$TAG" \
-          --repo "$REPO" \
-          --generate-notes \
-          --draft \
-          --verify-tag
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve previous release tag
+        id: prev
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PREV_TAG=$(gh release list \
+            --repo "$REPO" \
+            --exclude-drafts \
+            --limit 100 \
+            --json tagName \
+            --jq ".[] | select(.tagName != \"$TAG\") | .tagName" \
+            | head -n1)
+          echo "tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Detect App permission changes
+        id: perms
+        env:
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous release tag, skipping permission diff."
+            {
+              echo 'warning<<EOF'
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if PREV_MANIFEST=$(git show "$PREV_TAG:.github/app-manifest.json" 2>/dev/null); then
+            PREV_PERMS=$(echo "$PREV_MANIFEST" | jq -c '.default_permissions // {}')
+          else
+            PREV_PERMS='{}'
+          fi
+          CURR_PERMS=$(jq -c '.default_permissions // {}' .github/app-manifest.json)
+
+          WARNING=$(jq -nr \
+            --argjson prev "$PREV_PERMS" \
+            --argjson curr "$CURR_PERMS" \
+            --arg prev_tag "$PREV_TAG" \
+            '
+            {"read": 1, "write": 2, "admin": 3} as $rank
+            | ($curr | to_entries) | map(
+                .key as $k | .value as $v |
+                ($prev[$k]) as $p |
+                if $p == null then "- `\($k)`: newly required at `\($v)`"
+                elif ($rank[$v] // 0) > ($rank[$p] // 0) then "- `\($k)`: upgraded from `\($p)` to `\($v)`"
+                else empty
+                end
+              ) as $changes
+            | if ($changes | length) > 0 then
+                "> [!IMPORTANT]\n"
+                + "> **GitHub App permission changes since " + $prev_tag + "**\n"
+                + ">\n"
+                + "> Carson is distributed as a per-consumer GitHub App, so existing installations do not auto-upgrade when the manifest changes. To use this release, open your App settings, go to **Permissions & events**, apply the changes below, and accept the resulting permission request on each installation:\n"
+                + ">\n"
+                + ($changes | map("> " + .) | join("\n"))
+                + "\n\n---\n\n"
+              else "" end
+            ')
+
+          {
+            echo 'warning<<EOF'
+            echo "$WARNING"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          GENERATED=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            --jq '.body')
+          {
+            echo 'body<<EOF'
+            echo "$GENERATED"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          WARNING: ${{ steps.perms.outputs.warning }}
+          NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --notes "${WARNING}${NOTES}" \
+            --draft \
+            --verify-tag
