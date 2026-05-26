@@ -4,6 +4,7 @@ import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 import { readFile } from 'node:fs/promises';
+import { runPreflight } from './preflight.js';
 
 const main = async (): Promise<void> => {
   const appId = core.getInput('app_id', { required: true });
@@ -13,9 +14,10 @@ const main = async (): Promise<void> => {
   const eventName = process.env['GITHUB_EVENT_NAME'];
   const eventPath = process.env['GITHUB_EVENT_PATH'];
   const runId = process.env['GITHUB_RUN_ID'];
+  const repository = process.env['GITHUB_REPOSITORY'];
 
-  if (eventName === undefined || eventPath === undefined || runId === undefined) {
-    core.setFailed('GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, and GITHUB_RUN_ID must be set');
+  if (eventName === undefined || eventPath === undefined || runId === undefined || repository === undefined) {
+    core.setFailed('GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, GITHUB_RUN_ID, and GITHUB_REPOSITORY must be set');
     return;
   }
 
@@ -36,14 +38,11 @@ const main = async (): Promise<void> => {
 
   await probot.load(app);
 
+  if (!await runPreflight(probot, carson, repository)) {
+    return;
+  }
+
   if (eventName === 'schedule') {
-    const repository = process.env['GITHUB_REPOSITORY'];
-
-    if (repository === undefined) {
-      core.setFailed('GITHUB_REPOSITORY must be set for scheduled events');
-      return;
-    }
-
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
 
     if (result.failed) {

@@ -187,7 +187,7 @@ settings:
 Marks inactive issues and pull requests as stale, then closes them after a further grace period.
 
 **Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
-**Permissions**: `issues: write`, `pull_requests: write`
+**Permissions**: `issues: write`
 
 On each scheduled run, the subscriber walks every open issue and PR. For each:
 

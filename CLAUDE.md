@@ -37,10 +37,12 @@ Engines: Node `^24 || ^26`, npm `^11`. CI runs the matrix on Node 24 and 26.
 
 ### Entrypoint and dispatch
 
-[src/index.ts](src/index.ts) is the action entry. It reads `GITHUB_EVENT_NAME` / `GITHUB_EVENT_PATH` / `GITHUB_RUN_ID` from the runner environment, constructs a Probot via `createProbot({ overrides: { appId, privateKey, secret? } })`, loads [src/app.ts](src/app.ts) (which exposes `carson.app`), then:
+[src/index.ts](src/index.ts) is the action entry. It reads `GITHUB_EVENT_NAME` / `GITHUB_EVENT_PATH` / `GITHUB_RUN_ID` / `GITHUB_REPOSITORY` from the runner environment, constructs a Probot via `createProbot({ overrides: { appId, privateKey, secret? } })`, loads [src/app.ts](src/app.ts) (which exposes `carson.app`), runs a preflight (see below), then dispatches:
 
 - If `eventName === 'schedule'`: calls `dispatchScheduled(probot, carson.scheduled, GITHUB_REPOSITORY, payload)`. Scheduled events do not flow through Probot's webhook router (they have no installation in the payload), so the dispatcher resolves the installation via `apps.getRepoInstallation` and invokes each registered handler with a hand-built `ScheduledContext`.
 - Otherwise: hands the payload to `probot.receive(...)`, which routes to the standard webhook handlers each subscriber registered. The entrypoint rewrites `pull_request_target` to `pull_request` before delivery (identical payload shape), so subscribers register `pull_request.*` once and fire for both triggers. Consumers should prefer `pull_request_target` in their workflow because `pull_request` does not expose secrets on fork PRs.
+
+The preflight ([src/preflight.ts](src/preflight.ts) `runPreflight(...)`) fetches the App via `apps.getAuthenticated` and compares its `permissions` to the union of `BASE_PERMISSIONS` (`contents: read` for loading `carson.yml`) and each enabled subscriber's `requiredPermissions`. If anything is missing or under-granted, the action `setFailed`s with a per-subscriber breakdown and a link to the App's settings page, before any subscriber gets a chance to 403. The check is silently skipped if the App is not installed on the repo or if `carson.yml` is absent. This exists because the per-consumer App model has no mechanism to push permission upgrades: when we add a permission to [`.github/app-manifest.json`](.github/app-manifest.json), existing consumer-owned Apps don't auto-upgrade, so the preflight catches the mismatch loudly instead of letting the subscriber fail with a confusing 403.
 
 A `probot.onError` handler flips a `handlerFailed` flag so the action fails the run if any subscriber threw. **A thrown subscriber does not abort other subscribers.** They all run and the action fails at the end.
 
@@ -50,6 +52,7 @@ A `probot.onError` handler flips a `handlerFailed` flag so the action fails the 
 
 - `id: string`: must match the ID consumers list under `subscribers:` in `.github/carson.yml`.
 - `description: string`.
+- `requiredPermissions: RequiredPermissions`: the GitHub App permissions this subscriber needs at runtime (e.g. `{ issues: 'write', pull_requests: 'read' }`). Used by [src/preflight.ts](src/preflight.ts) to fail the workflow with a clear error when the App is under-permissioned. Must match the per-subscriber row in [SUBSCRIBERS.md](SUBSCRIBERS.md) and the actual API calls in the handler.
 - `register(probot)`: attach webhook handlers via `probot.on('event.action', handler)`.
 - `registerScheduled(registrar)` (optional): attach a `ScheduledHandler` for cron runs.
 - `loadEnabledConfig(context)`: inherited helper that returns the parsed `CarsonConfig` only if the subscriber's `id` is listed under `subscribers:`. Returns `null` (and the handler should bail) if the config is missing, invalid, or doesn't enable this subscriber.

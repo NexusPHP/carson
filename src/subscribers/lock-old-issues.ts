@@ -1,7 +1,7 @@
+import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
 import type { Probot } from 'probot';
-import { Subscriber } from '../subscriber.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -21,6 +21,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000; // 86,400,000 ms
 export class LockOldIssuesSubscriber extends Subscriber {
   public readonly id = 'lock-old-issues';
   public readonly description = 'Locks closed issues that have been inactive past a configurable threshold.';
+  public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   public register(_probot: Probot): void {}

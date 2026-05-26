@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { Subscriber } from '../subscriber.js';
+import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -34,6 +34,10 @@ interface UnsignedCommit {
 export class SignedCommitsSubscriber extends Subscriber {
   public readonly id = 'signed-commits';
   public readonly description = 'Posts a check run requiring all commits in a pull request to be signed and verified.';
+  public readonly requiredPermissions: RequiredPermissions = {
+    checks: 'write',
+    pull_requests: 'read',
+  };
 
   public register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {

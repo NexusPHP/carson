@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
+import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { interpolate } from '../template.js';
-import { Subscriber } from '../subscriber.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -18,6 +18,7 @@ const isFirstTimer = (association: string): boolean => FIRST_TIMER_ASSOCIATIONS.
 export class WelcomeSubscriber extends Subscriber {
   public readonly id = 'welcome';
   public readonly description = 'Greets first-time contributors on their first pull request or issue.';
+  public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
 
   public register(probot: Probot): void {
     probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {

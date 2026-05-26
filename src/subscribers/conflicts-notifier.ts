@@ -1,7 +1,7 @@
 import type { Context, Probot } from 'probot';
+import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
 import { interpolate } from '../template.js';
-import { Subscriber } from '../subscriber.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -74,6 +74,10 @@ const UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
 export class ConflictsNotifierSubscriber extends Subscriber {
   public readonly id = 'conflicts-notifier';
   public readonly description = 'Comments on PRs with merge conflicts and marks the comment resolved when fixed.';
+  public readonly requiredPermissions: RequiredPermissions = {
+    issues: 'write',
+    pull_requests: 'read',
+  };
 
   public register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {

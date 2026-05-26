@@ -1,7 +1,7 @@
 import type { Context, Probot } from 'probot';
+import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
-import { Subscriber } from '../subscriber.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -31,6 +31,7 @@ const MINIMIZE_MUTATION = `mutation($subjectId: ID!) {
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';
   public readonly description = 'Marks inactive issues and pull requests as stale, then closes them after a further grace period.';
+  public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
 
   public register(probot: Probot): void {
     probot.on(['issue_comment.created', 'issues.edited'], async (context): Promise<void> => {

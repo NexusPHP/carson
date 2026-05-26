@@ -3,9 +3,13 @@ import type { CarsonConfig } from './configuration/schema.js';
 import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
 
+export type PermissionLevel = 'read' | 'write' | 'admin';
+export type RequiredPermissions = Readonly<Record<string, PermissionLevel>>;
+
 export abstract class Subscriber {
   public abstract readonly id: string;
   public abstract readonly description: string;
+  public abstract readonly requiredPermissions: RequiredPermissions;
 
   public abstract register(probot: Probot): void;
 

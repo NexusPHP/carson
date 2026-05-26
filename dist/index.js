@@ -52825,14 +52825,10 @@ var Carson = class _Carson {
   get scheduled() {
     return this.#scheduled;
   }
+  get subscribers() {
+    return this.#subscribers;
+  }
 };
-
-// src/template.ts
-var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
-var interpolate = (template, vars) => template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-  const value = vars[key];
-  return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
-});
 
 // src/subscriber.ts
 var Subscriber = class {
@@ -52850,6 +52846,13 @@ var Subscriber = class {
     return config3;
   }
 };
+
+// src/template.ts
+var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
+var interpolate = (template, vars) => template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+  const value = vars[key];
+  return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+});
 
 // src/subscribers/conflicts-notifier.ts
 var Settings = external_exports.object({
@@ -52891,6 +52894,10 @@ var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
 var ConflictsNotifierSubscriber = class extends Subscriber {
   id = "conflicts-notifier";
   description = "Comments on PRs with merge conflicts and marks the comment resolved when fixed.";
+  requiredPermissions = {
+    issues: "write",
+    pull_requests: "read"
+  };
   register(probot) {
     probot.on(PR_EVENTS, async (context) => {
       await this.#handlePrEvent(context);
@@ -53022,6 +53029,7 @@ var MS_PER_DAY = 24 * 60 * 60 * 1e3;
 var LockOldIssuesSubscriber = class extends Subscriber {
   id = "lock-old-issues";
   description = "Locks closed issues that have been inactive past a configurable threshold.";
+  requiredPermissions = { issues: "write" };
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   register(_probot) {
   }
@@ -53109,6 +53117,10 @@ var PR_EVENTS2 = [
 var SignedCommitsSubscriber = class extends Subscriber {
   id = "signed-commits";
   description = "Posts a check run requiring all commits in a pull request to be signed and verified.";
+  requiredPermissions = {
+    checks: "write",
+    pull_requests: "read"
+  };
   register(probot) {
     probot.on(PR_EVENTS2, async (context) => {
       await this.#handle(context);
@@ -53184,6 +53196,7 @@ var MINIMIZE_MUTATION2 = `mutation($subjectId: ID!) {
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
+  requiredPermissions = { issues: "write" };
   register(probot) {
     probot.on(["issue_comment.created", "issues.edited"], async (context) => {
       const ctx = context;
@@ -53334,6 +53347,7 @@ var isFirstTimer = (association) => FIRST_TIMER_ASSOCIATIONS.includes(associatio
 var WelcomeSubscriber = class extends Subscriber {
   id = "welcome";
   description = "Greets first-time contributors on their first pull request or issue.";
+  requiredPermissions = { issues: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       if (context.isBot) {
@@ -63628,6 +63642,84 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
 
 // src/index.ts
 import { readFile } from "node:fs/promises";
+
+// src/preflight.ts
+var BASE_PERMISSIONS = { contents: "read" };
+var LEVEL_RANK = {
+  read: 1,
+  write: 2,
+  admin: 3
+};
+var isSufficient = (granted, required2) => granted !== void 0 && LEVEL_RANK[granted] >= LEVEL_RANK[required2];
+var collectMissing = (subscriberId, required2, granted) => Object.entries(required2).filter(([perm, level]) => !isSufficient(granted[perm], level)).map(([perm, level]) => ({
+  subscriberId,
+  permission: perm,
+  required: level,
+  granted: granted[perm]
+}));
+var findMissingPermissions = (enabled, granted) => [
+  ...collectMissing("<base>", BASE_PERMISSIONS, granted),
+  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted))
+];
+var formatMissingPermissionsError = (missing, appHtmlUrl) => {
+  const header = "Carson is missing required GitHub App permissions:";
+  const body = missing.map((m) => {
+    const grantedText = m.granted === void 0 ? "not granted" : `granted "${m.granted}"`;
+    return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
+  });
+  const footer = appHtmlUrl === void 0 ? "Update permissions in your GitHub App settings." : `Update permissions in your GitHub App settings: ${appHtmlUrl}`;
+  return [header, ...body, footer].join("\n");
+};
+var runPreflight = async (probot, carson2, repository) => {
+  const slash = repository.indexOf("/");
+  if (slash === -1) {
+    setFailed("GITHUB_REPOSITORY must be in owner/repo format");
+    return false;
+  }
+  const owner = repository.slice(0, slash);
+  const repo = repository.slice(slash + 1);
+  const appOctokit = await probot.auth();
+  const { data: app } = await appOctokit.rest.apps.getAuthenticated();
+  if (app === null) {
+    probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
+    return true;
+  }
+  let installationId;
+  try {
+    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    installationId = installation.id;
+  } catch (error52) {
+    probot.log.warn({ err: error52 }, "preflight: could not resolve installation, skipping");
+    return true;
+  }
+  const installationOctokit = await probot.auth(installationId);
+  const loadable = {
+    config: async (file2) => {
+      const result = await installationOctokit.config.get({
+        owner,
+        repo,
+        path: `.github/${file2}`
+      });
+      return result.config;
+    },
+    repo: () => ({ owner, repo }),
+    log: probot.log
+  };
+  const config3 = await loadConfig(loadable);
+  if (config3 === null) {
+    return true;
+  }
+  const enabled = carson2.subscribers.filter((s) => config3.subscribers.includes(s.id));
+  const granted = app.permissions ?? {};
+  const missing = findMissingPermissions(enabled, granted);
+  if (missing.length > 0) {
+    setFailed(formatMissingPermissionsError(missing, app.html_url));
+    return false;
+  }
+  return true;
+};
+
+// src/index.ts
 var main = async () => {
   const appId = getInput("app_id", { required: true });
   const privateKey = getInput("private_key", { required: true });
@@ -63635,8 +63727,9 @@ var main = async () => {
   const eventName = process.env["GITHUB_EVENT_NAME"];
   const eventPath = process.env["GITHUB_EVENT_PATH"];
   const runId = process.env["GITHUB_RUN_ID"];
-  if (eventName === void 0 || eventPath === void 0 || runId === void 0) {
-    setFailed("GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, and GITHUB_RUN_ID must be set");
+  const repository = process.env["GITHUB_REPOSITORY"];
+  if (eventName === void 0 || eventPath === void 0 || runId === void 0 || repository === void 0) {
+    setFailed("GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, GITHUB_RUN_ID, and GITHUB_REPOSITORY must be set");
     return;
   }
   const payload = JSON.parse(await readFile(eventPath, "utf8"));
@@ -63653,12 +63746,10 @@ var main = async () => {
     handlerFailed = true;
   });
   await probot.load(app_default);
+  if (!await runPreflight(probot, carson, repository)) {
+    return;
+  }
   if (eventName === "schedule") {
-    const repository = process.env["GITHUB_REPOSITORY"];
-    if (repository === void 0) {
-      setFailed("GITHUB_REPOSITORY must be set for scheduled events");
-      return;
-    }
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
     if (result.failed) {
       handlerFailed = true;

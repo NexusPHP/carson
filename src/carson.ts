@@ -32,4 +32,8 @@ export class Carson {
   public get scheduled(): ScheduledRegistrar {
     return this.#scheduled;
   }
+
+  public get subscribers(): readonly Subscriber[] {
+    return this.#subscribers;
+  }
 }

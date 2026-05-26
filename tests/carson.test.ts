@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
 import { Carson } from '../src/carson.js';
 import type { Probot } from 'probot';
 import { ScheduledRegistrar } from '../src/scheduled.js';
-import { Subscriber } from '../src/subscriber.js';
 
 class FakeSubscriber extends Subscriber {
   public readonly id = 'fake';
   public readonly description = 'fake subscriber for tests';
+  public readonly requiredPermissions: RequiredPermissions = {};
   public registerCalls: Probot[] = [];
   public scheduledCalls: ScheduledRegistrar[] = [];
 
