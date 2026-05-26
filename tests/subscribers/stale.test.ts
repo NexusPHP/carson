@@ -316,14 +316,20 @@ const mockRemoveLabel = (issueNumber: number, label: string): nock.Scope => {
     .reply(200, []);
 };
 
-const mockListComments = (
-  issueNumber: number,
-  comments: { node_id: string; body: string }[],
-): nock.Scope => {
+interface ListedComment {
+  node_id: string;
+  body: string;
+  user?: { type: string } | null;
+}
+
+const mockListComments = (issueNumber: number, comments: ListedComment[]): nock.Scope => {
   return nock('https://api.github.com')
     .get(`/repos/acme/widgets/issues/${issueNumber}/comments`)
     .query({ per_page: '100' })
-    .reply(200, comments);
+    .reply(200, comments.map((c) => ({
+      ...c,
+      user: c.user === undefined ? { type: 'Bot' } : c.user,
+    })));
 };
 
 interface GraphqlBody {
@@ -484,6 +490,42 @@ describe('stale subscriber (webhook un-stale)', () => {
 
     await probot.receive({
       id: 'evt-unstale-no-marker',
+      name: 'issue_comment',
+      payload: issueCommentPayload() as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores a stale-marker comment authored by a non-bot user (forgery defense)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+    const removeScope = mockRemoveLabel(42, 'stale');
+    mockListComments(42, [
+      { node_id: 'C_forged', body: 'forgery\n\n<!-- carson:stale -->', user: { type: 'User' } },
+    ]);
+
+    await probot.receive({
+      id: 'evt-unstale-forged',
+      name: 'issue_comment',
+      payload: issueCommentPayload() as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores a stale-marker comment with a null user (deleted account)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+    const removeScope = mockRemoveLabel(42, 'stale');
+    mockListComments(42, [
+      { node_id: 'C_ghost', body: 'ghost\n\n<!-- carson:stale -->', user: null },
+    ]);
+
+    await probot.receive({
+      id: 'evt-unstale-ghost',
       name: 'issue_comment',
       payload: issueCommentPayload() as never,
     });

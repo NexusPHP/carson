@@ -91,7 +91,11 @@ export class StaleSubscriber extends Subscriber {
       issue_number: issueNumber,
       per_page: 100,
     });
-    const stalePost = comments.find((c) => c.body?.includes(COMMENT_MARKER) === true);
+    // Filter to bot-authored comments so a human PR participant can't forge
+    // the marker in their own comment and steal/suppress the lookup.
+    const stalePost = comments.find((c) =>
+      c.user?.type === 'Bot' && c.body?.includes(COMMENT_MARKER) === true,
+    );
 
     if (stalePost !== undefined) {
       await context.octokit.graphql(MINIMIZE_MUTATION, { subjectId: stalePost.node_id });

@@ -52869,6 +52869,9 @@ var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
           id
           body
           isMinimized
+          author {
+            __typename
+          }
         }
       }
     }
@@ -52995,7 +52998,7 @@ ${COMMENT_MARKER}`;
       number: prNumber
     });
     const match = response.repository.pullRequest.comments.nodes.find(
-      (node) => node.body.includes(COMMENT_MARKER)
+      (node) => node.author?.__typename === "Bot" && node.body.includes(COMMENT_MARKER)
     );
     if (match === void 0) {
       return null;
@@ -53223,7 +53226,9 @@ var StaleSubscriber = class extends Subscriber {
       issue_number: issueNumber,
       per_page: 100
     });
-    const stalePost = comments.find((c) => c.body?.includes(COMMENT_MARKER2) === true);
+    const stalePost = comments.find(
+      (c) => c.user?.type === "Bot" && c.body?.includes(COMMENT_MARKER2) === true
+    );
     if (stalePost !== void 0) {
       await context.octokit.graphql(MINIMIZE_MUTATION2, { subjectId: stalePost.node_id });
       context.log.info(`stale: minimized stale notice on #${issueNumber}`);

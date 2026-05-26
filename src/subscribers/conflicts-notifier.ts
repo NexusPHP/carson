@@ -31,7 +31,12 @@ interface CommentsQueryResponse {
   repository: {
     pullRequest: {
       comments: {
-        nodes: { id: string; body: string; isMinimized: boolean }[];
+        nodes: {
+          id: string;
+          body: string;
+          isMinimized: boolean;
+          author: { __typename: string } | null;
+        }[];
       };
     };
   };
@@ -45,6 +50,9 @@ const COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
           id
           body
           isMinimized
+          author {
+            __typename
+          }
         }
       }
     }
@@ -211,8 +219,10 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       number: prNumber,
     });
 
+    // Filter to bot-authored comments so a human PR participant can't forge
+    // the marker in their own comment and steal/suppress the lookup.
     const match = response.repository.pullRequest.comments.nodes.find((node) =>
-      node.body.includes(COMMENT_MARKER),
+      node.author?.__typename === 'Bot' && node.body.includes(COMMENT_MARKER),
     );
 
     if (match === undefined) {

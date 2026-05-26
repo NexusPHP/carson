@@ -52,14 +52,28 @@ interface GraphqlBody {
   variables?: Record<string, unknown>;
 }
 
-const mockCommentsQuery = (
-  nodes: { id: string; body: string; isMinimized: boolean }[],
-): nock.Scope => {
+interface CommentNode {
+  id: string;
+  body: string;
+  isMinimized: boolean;
+  author?: { __typename: string } | null;
+}
+
+const mockCommentsQuery = (nodes: CommentNode[]): nock.Scope => {
   return nock('https://api.github.com')
     .post('/graphql', (body: GraphqlBody) => body.query.includes('pullRequest(number'))
     .reply(200, {
       data: {
-        repository: { pullRequest: { comments: { nodes } } },
+        repository: {
+          pullRequest: {
+            comments: {
+              nodes: nodes.map((n) => ({
+                ...n,
+                author: n.author === undefined ? { __typename: 'Bot' } : n.author,
+              })),
+            },
+          },
+        },
       },
     });
 };
@@ -320,6 +334,56 @@ describe('conflicts-notifier subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores a marker comment authored by a non-bot user (forgery defense)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([
+      {
+        id: NODE_ID,
+        body: 'forgery attempt\n\n<!-- carson:conflicts-notifier -->',
+        isMinimized: false,
+        author: { __typename: 'User' },
+      },
+    ]);
+
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
+
+    await probot.receive({
+      id: 'evt-conflict-forged',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
+  });
+
+  it('ignores a marker comment with a null author (deleted account)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([
+      {
+        id: NODE_ID,
+        body: 'ghost\n\n<!-- carson:conflicts-notifier -->',
+        isMinimized: false,
+        author: null,
+      },
+    ]);
+
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
+
+    await probot.receive({
+      id: 'evt-conflict-ghost-author',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('skips when mergeable is still null (GitHub has not computed it yet)', async () => {
