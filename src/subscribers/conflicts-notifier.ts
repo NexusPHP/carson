@@ -42,10 +42,13 @@ interface CommentsQueryResponse {
   };
 }
 
+// Read the most recent 100 comments so Carson's marker comment is preserved
+// at the tail of a long thread. The marker is always at the end of the body
+// and Carson posts at most once per PR.
 const COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      comments(first: 100) {
+      comments(last: 100) {
         nodes {
           id
           body

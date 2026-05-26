@@ -52886,7 +52886,7 @@ var PR_EVENTS = [
 var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      comments(first: 100) {
+      comments(last: 100) {
         nodes {
           id
           body
