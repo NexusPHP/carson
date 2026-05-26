@@ -14,7 +14,8 @@ Carson runs as a **per-consumer GitHub App**: each org or user that wants to use
 
 The fastest path is the click-through installer at <https://nexusphp.github.io/carson/>. It POSTs Carson's [app-manifest](.github/app-manifest.json) to GitHub, walks you through confirming the App in your personal account or organization, and then shows you the App ID and private key with copy / download controls so you can save them as Actions secrets. Two browser tabs and you're done.
 
-If you prefer to set up the App by hand, follow the manual steps below.
+<details>
+<summary>If you prefer to set up the App by hand, follow the manual steps below.</summary>
 
 ### 1. Register the GitHub App (manual)
 
@@ -51,6 +52,8 @@ In the repository (or organization, for multi-repo use), go to **Settings → Se
 - `CARSON_PRIVATE_KEY`: the full contents of the `.pem` file from step 2, including the `-----BEGIN`/`-----END` lines.
 
 The secret names are conventional. The workflow snippet below uses `CARSON_*`. Use whatever names you prefer, as long as they match.
+
+</details>
 
 ## Usage
 

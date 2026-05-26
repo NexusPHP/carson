@@ -4,7 +4,8 @@ This document describes each subscriber Carson ships with: what it does, how to 
 
 To use a subscriber, list its ID under `subscribers:` in your repository's `.github/carson.yml`. Subscribers not listed there will not run, even though they are bundled with Carson.
 
-## Index
+<details>
+<summary><strong>Index</strong></summary>
 
 - [Template interpolation](#template-interpolation)
 - [Comment markers](#comment-markers)
@@ -14,6 +15,8 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [signed-commits](#signed-commits)
   - [stale](#stale)
   - [welcome](#welcome)
+
+</details>
 
 ## Template interpolation
 
