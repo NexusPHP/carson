@@ -3,6 +3,10 @@ import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
 
 const config: ConfigArray = tsEslint.config(
+  {
+    name: 'ignores',
+    ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
+  },
   eslint.configs.recommended,
   tsEslint.configs.strict,
   tsEslint.configs.stylistic,
@@ -17,7 +21,8 @@ const config: ConfigArray = tsEslint.config(
     semi: true,
   }),
   {
-    name: 'additional-rules',
+    name: 'typed-rules',
+    files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -63,6 +68,24 @@ const config: ConfigArray = tsEslint.config(
       '@typescript-eslint/return-await': ['error', 'always'],
       '@typescript-eslint/require-await': 'error',
       '@typescript-eslint/strict-boolean-expressions': 'error',
+    },
+  },
+  {
+    name: 'browser-js',
+    files: ['docs/**/*.js'],
+    extends: [tsEslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: {
+        Blob: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        console: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        location: 'readonly',
+        navigator: 'readonly',
+        window: 'readonly',
+      },
     },
   },
 );

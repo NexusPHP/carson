@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://raw.githubusercontent.com; form-action https://github.com; base-uri 'none'">
+  <meta name="color-scheme" content="light dark">
+  <title>Install Carson</title>
+  <link rel="stylesheet" href="assets/landing.css">
+</head>
+<body>
+  <h1>Install Carson</h1>
+  <p class="lede">A GitHub App that manages your repository like a butler.</p>
+
+  <section>
+    <h2>Personal account</h2>
+    <p>Creates a Carson App in your personal account with the required permissions pre-filled.</p>
+    <form action="https://github.com/settings/apps/new" method="post">
+      <input type="hidden" name="manifest" id="personal-manifest">
+      <button type="submit" id="personal-button" disabled>Create Carson App</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Organisation</h2>
+    <p>Creates a Carson App in your organisation. You must be an admin of the org.</p>
+    <form id="org-form" method="post">
+      <input type="text" id="org-name" placeholder="Organisation name" required autocomplete="off">
+      <input type="hidden" name="manifest" id="org-manifest">
+      <button type="submit" id="org-button" disabled>Create Carson App</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Or set up manually</h2>
+    <p class="manual">If you prefer to register the App by hand, follow the <a href="https://github.com/NexusPHP/carson#setup">Setup guide</a> in the README. The required permissions live in <a href="https://github.com/NexusPHP/carson/blob/HEAD/.github/app-manifest.json">app-manifest.json</a>.</p>
+  </section>
+
+  <div id="error-host"></div>
+
+  <script src="assets/landing.js"></script>
+</body>
+</html>

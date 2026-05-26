@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://api.github.com; form-action 'none'; base-uri 'none'">
+  <meta name="color-scheme" content="light dark">
+  <title>Carson App Created</title>
+  <link rel="stylesheet" href="../assets/callback.css">
+</head>
+<body>
+  <h1>Carson App Created</h1>
+
+  <p id="status" class="status">Exchanging code for credentials...</p>
+
+  <div id="result" hidden>
+    <section class="warning">
+      <strong>Save these now.</strong> This is the only time GitHub will reveal the private key. You can regenerate one later, but this specific key cannot be retrieved again.
+    </section>
+
+    <section>
+      <h2>App ID</h2>
+      <div class="field">
+        <input type="text" id="app-id" readonly>
+        <button type="button" id="copy-app-id" class="secondary">Copy</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Private key</h2>
+      <p class="status">Download the <code>.pem</code> file or copy the contents.</p>
+      <button type="button" id="download-pem">Download .pem</button>
+      <button type="button" id="copy-pem" class="secondary">Copy</button>
+      <button type="button" id="reveal-pem" class="secondary">Reveal</button>
+      <pre id="pem-display" hidden></pre>
+    </section>
+
+    <section>
+      <h2>Next steps</h2>
+      <ol>
+        <li>In the repository or organisation where Carson will run, go to <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong>.</li>
+        <li>Add a secret named <code>CARSON_APP_ID</code> with the value above.</li>
+        <li>Add a secret named <code>CARSON_PRIVATE_KEY</code> with the full PEM contents, including the <code>-----BEGIN</code> and <code>-----END</code> lines.</li>
+        <li>Install the App on the repositories you want Carson to act on. <span id="install-link-host"></span></li>
+        <li>Add the workflow from the <a href="https://github.com/NexusPHP/carson#workflow">Usage</a> section of the README to your repository.</li>
+      </ol>
+    </section>
+  </div>
+
+  <div id="error-host"></div>
+
+  <script src="../assets/callback.js"></script>
+</body>
+</html>

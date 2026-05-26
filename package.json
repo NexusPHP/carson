@@ -19,8 +19,8 @@
   },
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\"",
-    "lint": "eslint --color src tests \"*.config.ts\"",
-    "lint:fix": "eslint --color --fix src tests \"*.config.ts\"",
+    "lint": "eslint --color src tests docs \"*.config.ts\"",
+    "lint:fix": "eslint --color --fix src tests docs \"*.config.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage"
   },
