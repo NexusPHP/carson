@@ -38197,6 +38197,20 @@ var ScheduledRegistrar = class {
     return this.#handlers;
   }
 };
+var buildContext = (octokit, log, owner, repo, payload) => ({
+  octokit,
+  log,
+  payload,
+  repo: () => ({ owner, repo }),
+  config: async (file) => {
+    const result = await octokit.config.get({
+      owner,
+      repo,
+      path: `.github/${file}`
+    });
+    return result.config;
+  }
+});
 var dispatchScheduled = async (probot, registrar, repository, payload) => {
   const slash = repository.indexOf("/");
   if (slash === -1) {
@@ -38207,13 +38221,7 @@ var dispatchScheduled = async (probot, registrar, repository, payload) => {
   const appOctokit = await probot.auth();
   const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
   const octokit = await probot.auth(installation.id);
-  const context = {
-    octokit,
-    log: probot.log,
-    owner,
-    repo,
-    payload
-  };
+  const context = buildContext(octokit, probot.log, owner, repo, payload);
   let failed = false;
   for (const handler2 of registrar.handlers) {
     try {
@@ -42523,8 +42531,93 @@ ${COMMENT_MARKER}`;
   }
 };
 
-// src/subscribers/signed-commits.ts
+// src/subscribers/lock-old-issues.ts
+var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
 var Settings2 = external_exports.object({
+  days: external_exports.number().int().positive().optional(),
+  reason: external_exports.enum(LOCK_REASONS).optional(),
+  exempt_labels: external_exports.array(external_exports.string()).optional(),
+  comment: external_exports.string().optional()
+});
+var DEFAULT_DAYS = 90;
+var DEFAULT_REASON = "resolved";
+var MS_PER_DAY = 24 * 60 * 60 * 1e3;
+var LockOldIssuesSubscriber = class extends Subscriber {
+  id = "lock-old-issues";
+  description = "Locks closed issues that have been inactive past a configurable threshold.";
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  register(_probot) {
+  }
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#run(context);
+    });
+  }
+  async #run(context) {
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
+    const days = settings.days ?? DEFAULT_DAYS;
+    const reason = settings.reason ?? DEFAULT_REASON;
+    const exemptLabels = new Set(settings.exempt_labels ?? []);
+    const cutoff = Date.now() - days * MS_PER_DAY;
+    const { owner, repo } = context.repo();
+    const issues = await context.octokit.paginate(context.octokit.rest.issues.listForRepo, {
+      owner,
+      repo,
+      state: "closed",
+      per_page: 100
+    });
+    let locked = 0;
+    for (const issue2 of issues) {
+      if (issue2.pull_request !== void 0) {
+        continue;
+      }
+      if (issue2.locked) {
+        continue;
+      }
+      if (issue2.closed_at === null) {
+        continue;
+      }
+      if (new Date(issue2.closed_at).getTime() > cutoff) {
+        continue;
+      }
+      const labelNames = issue2.labels.map((label) => typeof label === "string" ? label : label.name);
+      if (labelNames.some((name) => name !== void 0 && exemptLabels.has(name))) {
+        continue;
+      }
+      if (settings.comment !== void 0) {
+        const vars = {
+          number: issue2.number,
+          repo,
+          days
+        };
+        if (issue2.user !== null) {
+          vars["user"] = issue2.user.login;
+        }
+        await context.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: issue2.number,
+          body: interpolate(settings.comment, vars)
+        });
+      }
+      await context.octokit.rest.issues.lock({
+        owner,
+        repo,
+        issue_number: issue2.number,
+        lock_reason: reason
+      });
+      locked += 1;
+    }
+    context.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
+  }
+};
+
+// src/subscribers/signed-commits.ts
+var Settings3 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
@@ -42551,7 +42644,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     if (config2 === null) {
       return;
     }
-    const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
+    const settings = subscriberSettings(config2, this.id, Settings3) ?? {};
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
     const pr = context.payload.pull_request;
@@ -42590,7 +42683,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/welcome.ts
-var Settings3 = external_exports.object({
+var Settings4 = external_exports.object({
   pull_request: external_exports.string().optional(),
   issue: external_exports.string().optional()
 });
@@ -42613,7 +42706,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings3) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
       const body = interpolate(settings.pull_request ?? DEFAULT_PR_MESSAGE, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -42638,7 +42731,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings3) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
       const body = interpolate(settings.issue ?? DEFAULT_ISSUE_MESSAGE, {
         user: issue2.user.login,
         repo: context.payload.repository.name,
@@ -42654,6 +42747,7 @@ var WelcomeSubscriber = class extends Subscriber {
 // src/app.ts
 var carson = new Carson([
   new ConflictsNotifierSubscriber(),
+  new LockOldIssuesSubscriber(),
   new SignedCommitsSubscriber(),
   new WelcomeSubscriber()
 ]);

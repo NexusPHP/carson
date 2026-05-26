@@ -1,10 +1,15 @@
 import * as core from '@actions/core';
 import { type CarsonConfig, CarsonConfigSchema } from './schema.js';
-import type { Context } from 'probot';
-import type { EmitterWebhookEventName } from '@octokit/webhooks';
+import type { Logger } from 'pino';
 
 const CONFIG_FILE = 'carson.yml';
 const CONFIG_PATH = `.github/${CONFIG_FILE}`;
+
+export interface ConfigLoadable {
+  config: <T>(file: string) => Promise<T | null>;
+  repo: () => { owner: string; repo: string };
+  log: Logger;
+}
 
 const cache = new Map<string, Promise<CarsonConfig | null>>();
 let registeredIds: readonly string[] = [];
@@ -13,9 +18,7 @@ export const setRegisteredSubscribers = (ids: readonly string[]): void => {
   registeredIds = ids;
 };
 
-const fetchAndParse = async <E extends EmitterWebhookEventName>(
-  context: Context<E>,
-): Promise<CarsonConfig | null> => {
+const fetchAndParse = async (context: ConfigLoadable): Promise<CarsonConfig | null> => {
   const raw = await context.config<Record<string, unknown>>(CONFIG_FILE);
 
   if (raw === null) {
@@ -41,9 +44,7 @@ const fetchAndParse = async <E extends EmitterWebhookEventName>(
   return parsed.data;
 };
 
-export const loadConfig = async <E extends EmitterWebhookEventName>(
-  context: Context<E>,
-): Promise<CarsonConfig | null> => {
+export const loadConfig = async (context: ConfigLoadable): Promise<CarsonConfig | null> => {
   const { owner, repo } = context.repo();
   const key = `${owner}/${repo}`;
   let pending = cache.get(key);

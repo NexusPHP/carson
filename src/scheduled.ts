@@ -7,11 +7,11 @@ export interface SchedulePayload {
 }
 
 export interface ScheduledContext {
-  octokit: InstanceType<typeof ProbotOctokit>;
-  log: Logger;
-  owner: string;
-  repo: string;
-  payload: SchedulePayload;
+  readonly octokit: InstanceType<typeof ProbotOctokit>;
+  readonly log: Logger;
+  readonly payload: SchedulePayload;
+  repo: () => { owner: string; repo: string };
+  config: <T>(file: string) => Promise<T | null>;
 }
 
 export type ScheduledHandler = (context: ScheduledContext) => Promise<void>;
@@ -32,6 +32,27 @@ export interface ScheduledDispatchResult {
   failed: boolean;
 }
 
+const buildContext = (
+  octokit: InstanceType<typeof ProbotOctokit>,
+  log: Logger,
+  owner: string,
+  repo: string,
+  payload: SchedulePayload,
+): ScheduledContext => ({
+  octokit,
+  log,
+  payload,
+  repo: () => ({ owner, repo }),
+  config: async <T>(file: string): Promise<T | null> => {
+    const result = await octokit.config.get({
+      owner,
+      repo,
+      path: `.github/${file}`,
+    });
+    return result.config as T | null;
+  },
+});
+
 export const dispatchScheduled = async (
   probot: Probot,
   registrar: ScheduledRegistrar,
@@ -51,13 +72,7 @@ export const dispatchScheduled = async (
   const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
   const octokit = await probot.auth(installation.id);
 
-  const context: ScheduledContext = {
-    octokit,
-    log: probot.log,
-    owner,
-    repo,
-    payload,
-  };
+  const context = buildContext(octokit, probot.log, owner, repo, payload);
 
   let failed = false;
 

@@ -10,6 +10,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - [Comment markers](#comment-markers)
 - Subscribers
   - [conflicts-notifier](#conflicts-notifier)
+  - [lock-old-issues](#lock-old-issues)
   - [signed-commits](#signed-commits)
   - [welcome](#welcome)
 
@@ -80,6 +81,64 @@ subscribers:
 settings:
   conflicts-notifier:
     message: "@{{user}} #{{number}} conflicts with `{{base}}`. Please rebase."
+```
+
+---
+
+## lock-old-issues
+
+Locks closed issues that have been inactive past a configurable age, preventing necro-comments on resolved threads.
+
+**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
+**Permissions**: `issues: write`
+
+On each scheduled run, the subscriber walks the repository's closed issues (paginated), skips pull requests, skips already-locked issues, skips issues whose `closed_at` is more recent than the configured threshold, skips issues carrying any of the exempt labels, and locks the rest using GitHub's lock reason classifier.
+
+The action runner needs to receive `schedule` events for this to run. Add a cron schedule to your `.github/workflows/carson.yml`:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC
+```
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `days` | positive integer | `90` |
+| `reason` | one of `off-topic`, `too heated`, `resolved`, `spam` | `resolved` |
+| `exempt_labels` | array of strings | `[]` |
+| `comment` | string | (no comment posted) |
+
+If `comment` is set, Carson posts it on the issue *before* locking (you can't comment after the lock). The comment supports template interpolation.
+
+### Interpolation variables (for `comment`)
+
+| Variable | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the issue's original opener (left verbatim if the user is a ghost) |
+| `{{number}}` | Issue number |
+| `{{repo}}` | Repository name |
+| `{{days}}` | The threshold in days (whatever's configured, defaulting to `90`) |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - lock-old-issues
+settings:
+  lock-old-issues:
+    days: 180
+    reason: resolved
+    exempt_labels:
+      - pinned
+      - security
+    comment: |
+      This issue has been quiet for {{days}} days, so I'm locking it to keep
+      the discussion focused. If you have new information, please open a fresh
+      issue and link back to this one.
 ```
 
 ---

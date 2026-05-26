@@ -1,7 +1,6 @@
-import type { Context, Probot } from 'probot';
+import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
 import type { CarsonConfig } from './configuration/schema.js';
-import type { EmitterWebhookEventName } from '@octokit/webhooks';
-import { loadConfig } from './configuration/cache.js';
+import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
 
 export abstract class Subscriber {
@@ -13,9 +12,7 @@ export abstract class Subscriber {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   public registerScheduled(_registrar: ScheduledRegistrar): void {}
 
-  protected async loadEnabledConfig<E extends EmitterWebhookEventName>(
-    context: Context<E>,
-  ): Promise<CarsonConfig | null> {
+  protected async loadEnabledConfig(context: ConfigLoadable): Promise<CarsonConfig | null> {
     const config = await loadConfig(context);
 
     if (config === null) {

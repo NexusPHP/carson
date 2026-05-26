@@ -5,11 +5,13 @@ import type { Probot } from 'probot';
 interface ProbotHarness {
   probot: Probot;
   getRepoInstallation: ReturnType<typeof vi.fn>;
-  installationOctokit: { tag: string };
+  installationOctokit: { tag: string; config: { get: ReturnType<typeof vi.fn> } };
+  configGet: ReturnType<typeof vi.fn>;
 }
 
 const makeProbot = (installationId = 99): ProbotHarness => {
-  const installationOctokit = { tag: 'installation' };
+  const configGet = vi.fn().mockResolvedValue({ config: { stub: true }, files: [] });
+  const installationOctokit = { tag: 'installation', config: { get: configGet } };
   const getRepoInstallation = vi.fn().mockResolvedValue({ data: { id: installationId } });
   const appOctokit = { rest: { apps: { getRepoInstallation } } };
   const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
@@ -21,7 +23,7 @@ const makeProbot = (installationId = 99): ProbotHarness => {
 
   const probot = { auth, log } as unknown as Probot;
 
-  return { probot, getRepoInstallation, installationOctokit };
+  return { probot, getRepoInstallation, installationOctokit, configGet };
 };
 
 describe('ScheduledRegistrar', () => {
@@ -54,12 +56,10 @@ describe('dispatchScheduled', () => {
     expect(getRepoInstallation).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets' });
     expect(result).toEqual({ failed: false });
     expect(handler).toHaveBeenCalledOnce();
-    expect(handler.mock.calls[0]?.[0]).toMatchObject({
-      octokit: installationOctokit,
-      owner: 'acme',
-      repo: 'widgets',
-      payload,
-    });
+    const passedContext = handler.mock.calls[0]?.[0] as { octokit: unknown; payload: unknown; repo: () => { owner: string; repo: string } };
+    expect(passedContext.octokit).toBe(installationOctokit);
+    expect(passedContext.payload).toEqual(payload);
+    expect(passedContext.repo()).toEqual({ owner: 'acme', repo: 'widgets' });
   });
 
   it('splits owner and repo on the first slash only', async () => {
@@ -70,7 +70,8 @@ describe('dispatchScheduled', () => {
 
     await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 
-    expect(handler.mock.calls[0]?.[0]).toMatchObject({ owner: 'acme', repo: 'widgets' });
+    const passedContext = handler.mock.calls[0]?.[0] as { repo: () => { owner: string; repo: string } };
+    expect(passedContext.repo()).toEqual({ owner: 'acme', repo: 'widgets' });
   });
 
   it('throws when GITHUB_REPOSITORY is not in owner/repo format', async () => {
@@ -111,5 +112,20 @@ describe('dispatchScheduled', () => {
     const result = await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 
     expect(result).toEqual({ failed: false });
+  });
+
+  it('exposes a config method that reads .github/<file> via octokit.config.get', async () => {
+    const { probot, configGet } = makeProbot();
+    const registrar = new ScheduledRegistrar();
+    let result: unknown;
+    const handler = vi.fn(async (ctx: { config: <T>(file: string) => Promise<T | null> }) => {
+      result = await ctx.config('carson.yml');
+    });
+    registrar.on(handler as unknown as ScheduledHandler);
+
+    await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
+
+    expect(configGet).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', path: '.github/carson.yml' });
+    expect(result).toEqual({ stub: true });
   });
 });
