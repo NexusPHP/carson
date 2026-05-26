@@ -516,6 +516,24 @@ describe('stale subscriber (webhook un-stale)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
+  it('ignores a bot comment whose marker is mid-body, not at the end (anchor defense)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+    const removeScope = mockRemoveLabel(42, 'stale');
+    mockListComments(42, [
+      { node_id: 'C_mid', body: 'welcome <!-- carson:stale --> trailing text' },
+    ]);
+
+    await probot.receive({
+      id: 'evt-unstale-midbody',
+      name: 'issue_comment',
+      payload: issueCommentPayload() as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   it('ignores a stale-marker comment with a null user (deleted account)', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_STALE_ENABLED);

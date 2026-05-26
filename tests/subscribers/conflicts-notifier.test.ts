@@ -361,6 +361,30 @@ describe('conflicts-notifier subscriber (via app)', () => {
     expect(createScope.isDone()).toBe(true);
   });
 
+  it('ignores a bot comment whose marker is mid-body, not at the end (anchor defense)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([
+      {
+        id: NODE_ID,
+        body: 'welcome <!-- carson:conflicts-notifier --> tail text after marker',
+        isMinimized: false,
+      },
+    ]);
+
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
+
+    await probot.receive({
+      id: 'evt-conflict-midbody',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
+  });
+
   it('ignores a marker comment with a null author (deleted account)', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);

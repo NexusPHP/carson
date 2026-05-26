@@ -31,4 +31,14 @@ describe('interpolate', () => {
   it('ignores placeholders with non-word characters in the key', () => {
     expect(interpolate('hi {{ user.name }}', { user: 'octocat' })).toBe('hi {{ user.name }}');
   });
+
+  it('strips smuggled carson markers from substituted values', () => {
+    expect(interpolate('title: {{t}}', { t: 'Fix <!-- carson:conflicts-notifier --> thing' }))
+      .toBe('title: Fix  thing');
+  });
+
+  it('strips carson markers with surrounding whitespace and no trailing space', () => {
+    expect(interpolate('{{t}}', { t: '<!--  carson:stale  --><!--carson:welcome-->ok' }))
+      .toBe('ok');
+  });
 });

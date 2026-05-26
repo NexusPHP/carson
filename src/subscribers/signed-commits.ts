@@ -11,6 +11,11 @@ const Settings = z.object({
 const DEFAULT_NAME = 'Carson / signed-commits';
 const DEFAULT_TREATMENT: 'failure' | 'neutral' = 'failure';
 
+// Escape the markdown specials that enable link/image/HTML/code breakout in
+// check output. Cosmetic markdown (*, _, ~) is left alone. Rendered output
+// is identical for benign text.
+const escapeMarkdown = (s: string): string => s.replace(/[\\`[\]()<>!]/g, '\\$&');
+
 type SignedCommitsEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
 type SignedCommitsContext = Context<SignedCommitsEvent>;
 
@@ -79,7 +84,7 @@ export class SignedCommitsSubscriber extends Subscriber {
           title: `${unsigned.length} unsigned commit(s)`,
           summary: `${unsigned.length} of ${commits.length} commit(s) are unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
           text: unsigned
-            .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.subject} (${c.author})`)
+            .map((c) => `- \`${c.sha.slice(0, 7)}\` ${escapeMarkdown(c.subject)} (${escapeMarkdown(c.author)})`)
             .join('\n'),
         };
 

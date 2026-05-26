@@ -160,6 +160,36 @@ describe('signed-commits subscriber (via app)', () => {
     expect(checkScope.isDone()).toBe(true);
   });
 
+  it('escapes markdown specials in commit subject and author (injection defense)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockListCommits([
+      {
+        sha: 'eeeeeee3333333333333333333333333333eeeee',
+        verified: false,
+        subject: '[click](http://evil.example)',
+        author: '<img src=x>',
+      },
+    ]);
+
+    const checkScope = mockCreateCheck((body) => {
+      const text = body.output.text ?? '';
+      expect(text).not.toContain('[click](http://evil.example)');
+      expect(text).not.toContain('<img src=x>');
+      expect(text).toContain('\\[click\\]\\(http://evil.example\\)');
+      expect(text).toContain('\\<img src=x\\>');
+      return true;
+    });
+
+    await probot.receive({
+      id: 'evt-sc-escape',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(checkScope.isDone()).toBe(true);
+  });
+
   it('posts a neutral check when treat_unsigned_as is neutral', async () => {
     mockInstallationToken();
     mockConfig([

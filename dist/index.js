@@ -52828,9 +52828,10 @@ var Carson = class _Carson {
 };
 
 // src/template.ts
+var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
 var interpolate = (template, vars) => template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
   const value = vars[key];
-  return value === void 0 ? match : String(value);
+  return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
 });
 
 // src/subscriber.ts
@@ -52998,7 +52999,7 @@ ${COMMENT_MARKER}`;
       number: prNumber
     });
     const match = response.repository.pullRequest.comments.nodes.find(
-      (node) => node.author?.__typename === "Bot" && node.body.includes(COMMENT_MARKER)
+      (node) => node.author?.__typename === "Bot" && node.body.endsWith(COMMENT_MARKER)
     );
     if (match === void 0) {
       return null;
@@ -53099,6 +53100,7 @@ var Settings3 = external_exports.object({
 });
 var DEFAULT_NAME = "Carson / signed-commits";
 var DEFAULT_TREATMENT = "failure";
+var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
 var PR_EVENTS2 = [
   "pull_request.opened",
   "pull_request.synchronize",
@@ -53143,7 +53145,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     } : {
       title: `${unsigned.length} unsigned commit(s)`,
       summary: `${unsigned.length} of ${commits.length} commit(s) are unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
-      text: unsigned.map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.subject} (${c.author})`).join("\n")
+      text: unsigned.map((c) => `- \`${c.sha.slice(0, 7)}\` ${escapeMarkdown(c.subject)} (${escapeMarkdown(c.author)})`).join("\n")
     };
     await context.octokit.rest.checks.create({
       owner,
@@ -53227,7 +53229,7 @@ var StaleSubscriber = class extends Subscriber {
       per_page: 100
     });
     const stalePost = comments.find(
-      (c) => c.user?.type === "Bot" && c.body?.includes(COMMENT_MARKER2) === true
+      (c) => c.user?.type === "Bot" && c.body?.endsWith(COMMENT_MARKER2) === true
     );
     if (stalePost !== void 0) {
       await context.octokit.graphql(MINIMIZE_MUTATION2, { subjectId: stalePost.node_id });

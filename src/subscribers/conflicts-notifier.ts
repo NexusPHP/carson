@@ -219,10 +219,11 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       number: prNumber,
     });
 
-    // Filter to bot-authored comments so a human PR participant can't forge
-    // the marker in their own comment and steal/suppress the lookup.
+    // Filter to bot-authored comments and require the marker at end-of-body.
+    // Carson always appends the marker last, so anchoring rejects a marker
+    // that ended up mid-body via attacker-controlled interpolation.
     const match = response.repository.pullRequest.comments.nodes.find((node) =>
-      node.author?.__typename === 'Bot' && node.body.includes(COMMENT_MARKER),
+      node.author?.__typename === 'Bot' && node.body.endsWith(COMMENT_MARKER),
     );
 
     if (match === undefined) {

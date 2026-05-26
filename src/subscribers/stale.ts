@@ -91,10 +91,11 @@ export class StaleSubscriber extends Subscriber {
       issue_number: issueNumber,
       per_page: 100,
     });
-    // Filter to bot-authored comments so a human PR participant can't forge
-    // the marker in their own comment and steal/suppress the lookup.
+    // Filter to bot-authored comments and require the marker at end-of-body.
+    // Carson always appends the marker last, so anchoring rejects a marker
+    // that ended up mid-body via attacker-controlled interpolation.
     const stalePost = comments.find((c) =>
-      c.user?.type === 'Bot' && c.body?.includes(COMMENT_MARKER) === true,
+      c.user?.type === 'Bot' && c.body?.endsWith(COMMENT_MARKER) === true,
     );
 
     if (stalePost !== undefined) {
