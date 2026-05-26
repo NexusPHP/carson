@@ -42369,8 +42369,162 @@ var Subscriber = class {
   }
 };
 
-// src/subscribers/welcome.ts
+// src/subscribers/conflicts-notifier.ts
 var Settings = external_exports.object({
+  message: external_exports.string().optional()
+});
+var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
+var COMMENT_MARKER = "<!-- carson:conflicts-notifier -->";
+var PR_EVENTS = [
+  "pull_request.opened",
+  "pull_request.synchronize",
+  "pull_request.reopened"
+];
+var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      comments(first: 100) {
+        nodes {
+          id
+          body
+          isMinimized
+        }
+      }
+    }
+  }
+}`;
+var MINIMIZE_MUTATION = `mutation($subjectId: ID!) {
+  minimizeComment(input: { subjectId: $subjectId, classifier: RESOLVED }) {
+    minimizedComment { isMinimized }
+  }
+}`;
+var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
+  unminimizeComment(input: { subjectId: $subjectId }) {
+    unminimizedComment { ... on IssueComment { id } }
+  }
+}`;
+var ConflictsNotifierSubscriber = class extends Subscriber {
+  id = "conflicts-notifier";
+  description = "Comments on PRs with merge conflicts and marks the comment resolved when fixed.";
+  register(probot) {
+    probot.on(PR_EVENTS, async (context) => {
+      await this.#handlePrEvent(context);
+    });
+    probot.on("push", async (context) => {
+      await this.#handlePushEvent(context);
+    });
+  }
+  async #handlePrEvent(context) {
+    if (context.isBot) {
+      return;
+    }
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    await this.#checkPR(context, context.payload.pull_request.number, config2);
+  }
+  async #handlePushEvent(context) {
+    if (context.isBot) {
+      return;
+    }
+    const ref = context.payload.ref;
+    if (!ref.startsWith("refs/heads/")) {
+      return;
+    }
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    const branch = ref.slice("refs/heads/".length);
+    const { owner, repo } = context.repo();
+    const prs = await context.octokit.paginate(context.octokit.rest.pulls.list, {
+      owner,
+      repo,
+      base: branch,
+      state: "open",
+      per_page: 100
+    });
+    for (const pr of prs) {
+      await this.#checkPR(context, pr.number, config2);
+    }
+  }
+  async #checkPR(context, prNumber, config2) {
+    const { owner, repo } = context.repo();
+    const { data: pr } = await context.octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber
+    });
+    if (pr.mergeable === null) {
+      context.log.info(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      return;
+    }
+    if (pr.user === null) {
+      return;
+    }
+    const hasConflict = pr.mergeable === false;
+    const existing = await this.#findExistingComment(context, prNumber);
+    if (hasConflict) {
+      await this.#handleConflict(context, pr, config2, existing);
+    } else {
+      await this.#handleNoConflict(context, prNumber, existing);
+    }
+  }
+  async #handleConflict(context, pr, config2, existing) {
+    const { owner, repo } = context.repo();
+    if (existing === null) {
+      const settings = subscriberSettings(config2, this.id, Settings) ?? {};
+      const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
+        user: pr.user.login,
+        repo,
+        number: pr.number,
+        title: pr.title,
+        base: pr.base.ref
+      });
+      const body = `${message}
+
+${COMMENT_MARKER}`;
+      await context.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: pr.number,
+        body
+      });
+      context.log.info(`posted conflict notice on PR #${pr.number}`);
+      return;
+    }
+    if (existing.isMinimized) {
+      await context.octokit.graphql(UNMINIMIZE_MUTATION, { subjectId: existing.id });
+      context.log.info(`reopened conflict notice on PR #${pr.number}`);
+    }
+  }
+  async #handleNoConflict(context, prNumber, existing) {
+    if (existing === null || existing.isMinimized) {
+      return;
+    }
+    await context.octokit.graphql(MINIMIZE_MUTATION, { subjectId: existing.id });
+    context.log.info(`resolved conflict notice on PR #${prNumber}`);
+  }
+  async #findExistingComment(context, prNumber) {
+    const { owner, repo } = context.repo();
+    const response = await context.octokit.graphql(COMMENTS_QUERY, {
+      owner,
+      repo,
+      number: prNumber
+    });
+    const match = response.repository.pullRequest.comments.nodes.find(
+      (node) => node.body.includes(COMMENT_MARKER)
+    );
+    if (match === void 0) {
+      return null;
+    }
+    return { id: match.id, isMinimized: match.isMinimized };
+  }
+};
+
+// src/subscribers/welcome.ts
+var Settings2 = external_exports.object({
   pull_request: external_exports.string().optional(),
   issue: external_exports.string().optional()
 });
@@ -42393,7 +42547,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
       const body = interpolate(settings.pull_request ?? DEFAULT_PR_MESSAGE, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -42418,7 +42572,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings2) ?? {};
       const body = interpolate(settings.issue ?? DEFAULT_ISSUE_MESSAGE, {
         user: issue2.user.login,
         repo: context.payload.repository.name,
@@ -42433,6 +42587,7 @@ var WelcomeSubscriber = class extends Subscriber {
 
 // src/app.ts
 var carson = new Carson([
+  new ConflictsNotifierSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;

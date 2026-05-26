@@ -160,6 +160,9 @@ describe('welcome subscriber (via app)', () => {
   });
 
   it('does nothing on pull_request.opened when the author is not a first-time contributor', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-non-first',
       name: 'pull_request',
