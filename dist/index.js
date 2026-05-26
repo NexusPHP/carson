@@ -42682,8 +42682,168 @@ var SignedCommitsSubscriber = class extends Subscriber {
   }
 };
 
-// src/subscribers/welcome.ts
+// src/subscribers/stale.ts
 var Settings4 = external_exports.object({
+  days_until_stale: external_exports.number().int().positive().optional(),
+  days_until_close: external_exports.number().int().positive().optional(),
+  stale_label: external_exports.string().optional(),
+  stale_message: external_exports.string().optional(),
+  close_message: external_exports.string().optional(),
+  exempt_labels: external_exports.array(external_exports.string()).optional()
+});
+var DEFAULT_DAYS_STALE = 60;
+var DEFAULT_DAYS_CLOSE = 7;
+var DEFAULT_STALE_LABEL = "stale";
+var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
+var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}} due to extended inactivity.";
+var COMMENT_MARKER2 = "<!-- carson:stale -->";
+var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
+var MINIMIZE_MUTATION2 = `mutation($subjectId: ID!) {
+  minimizeComment(input: { subjectId: $subjectId, classifier: OUTDATED }) {
+    minimizedComment { isMinimized }
+  }
+}`;
+var StaleSubscriber = class extends Subscriber {
+  id = "stale";
+  description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
+  register(probot) {
+    probot.on(["issue_comment.created", "issues.edited"], async (context) => {
+      const ctx = context;
+      await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);
+    });
+    probot.on(["pull_request.synchronize", "pull_request.edited"], async (context) => {
+      const ctx = context;
+      await this.#processActivity(ctx, ctx.payload.pull_request.number, ctx.payload.pull_request.labels);
+    });
+    probot.on("pull_request_review.submitted", async (context) => {
+      await this.#processActivity(
+        context,
+        context.payload.pull_request.number,
+        context.payload.pull_request.labels
+      );
+    });
+  }
+  async #processActivity(context, issueNumber, rawLabels) {
+    if (context.isBot) {
+      return;
+    }
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
+    const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
+    const labelNames = (rawLabels ?? []).map((label) => label.name).filter((name) => name !== void 0);
+    if (!labelNames.includes(staleLabel)) {
+      return;
+    }
+    const { owner, repo } = context.repo();
+    await context.octokit.rest.issues.removeLabel({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      name: staleLabel
+    });
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: issueNumber,
+      per_page: 100
+    });
+    const stalePost = comments.find((c) => c.body?.includes(COMMENT_MARKER2) === true);
+    if (stalePost !== void 0) {
+      await context.octokit.graphql(MINIMIZE_MUTATION2, { subjectId: stalePost.node_id });
+      context.log.info(`stale: minimized stale notice on #${issueNumber}`);
+    }
+    context.log.info(`stale: removed "${staleLabel}" from #${issueNumber} after activity`);
+  }
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#run(context);
+    });
+  }
+  async #run(context) {
+    const config2 = await this.loadEnabledConfig(context);
+    if (config2 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
+    const daysUntilStale = settings.days_until_stale ?? DEFAULT_DAYS_STALE;
+    const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
+    const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
+    const staleMessage = settings.stale_message ?? DEFAULT_STALE_MESSAGE;
+    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE;
+    const exemptLabels = new Set(settings.exempt_labels ?? []);
+    const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY2;
+    const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
+    const { owner, repo } = context.repo();
+    const items = await context.octokit.paginate(context.octokit.rest.issues.listForRepo, {
+      owner,
+      repo,
+      state: "open",
+      per_page: 100
+    });
+    let staled = 0;
+    let closed = 0;
+    for (const item of items) {
+      const labelNames = item.labels.map((label) => typeof label === "string" ? label : label.name).filter((name) => name !== void 0);
+      if (labelNames.some((name) => exemptLabels.has(name))) {
+        continue;
+      }
+      const updatedAt = new Date(item.updated_at).getTime();
+      const isStale = labelNames.includes(staleLabel);
+      const kind = item.pull_request === void 0 ? "issue" : "pull request";
+      const vars = {
+        number: item.number,
+        repo,
+        title: item.title,
+        type: kind,
+        days_inactive: daysUntilStale,
+        days_until_close: daysUntilClose
+      };
+      if (item.user !== null) {
+        vars["user"] = item.user.login;
+      }
+      if (isStale) {
+        if (updatedAt < closeCutoff) {
+          await context.octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: item.number,
+            body: interpolate(closeMessage, vars)
+          });
+          await context.octokit.rest.issues.update({
+            owner,
+            repo,
+            issue_number: item.number,
+            state: "closed"
+          });
+          closed += 1;
+        }
+      } else if (updatedAt < staleCutoff) {
+        await context.octokit.rest.issues.addLabels({
+          owner,
+          repo,
+          issue_number: item.number,
+          labels: [staleLabel]
+        });
+        await context.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: item.number,
+          body: `${interpolate(staleMessage, vars)}
+
+${COMMENT_MARKER2}`
+        });
+        staled += 1;
+      }
+    }
+    context.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
+  }
+};
+
+// src/subscribers/welcome.ts
+var Settings5 = external_exports.object({
   pull_request: external_exports.string().optional(),
   issue: external_exports.string().optional()
 });
@@ -42706,7 +42866,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings5) ?? {};
       const body = interpolate(settings.pull_request ?? DEFAULT_PR_MESSAGE, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -42731,7 +42891,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config2 === null) {
         return;
       }
-      const settings = subscriberSettings(config2, this.id, Settings4) ?? {};
+      const settings = subscriberSettings(config2, this.id, Settings5) ?? {};
       const body = interpolate(settings.issue ?? DEFAULT_ISSUE_MESSAGE, {
         user: issue2.user.login,
         repo: context.payload.repository.name,
@@ -42749,6 +42909,7 @@ var carson = new Carson([
   new ConflictsNotifierSubscriber(),
   new LockOldIssuesSubscriber(),
   new SignedCommitsSubscriber(),
+  new StaleSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;

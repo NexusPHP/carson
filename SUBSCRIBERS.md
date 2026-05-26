@@ -12,6 +12,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [conflicts-notifier](#conflicts-notifier)
   - [lock-old-issues](#lock-old-issues)
   - [signed-commits](#signed-commits)
+  - [stale](#stale)
   - [welcome](#welcome)
 
 ## Template interpolation
@@ -33,6 +34,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | Marker | Used by |
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
+| `<!-- carson:stale -->` | [stale](#stale) |
 
 ---
 
@@ -173,6 +175,88 @@ settings:
   signed-commits:
     name: "Signed commits"
     treat_unsigned_as: neutral
+```
+
+---
+
+## stale
+
+Marks inactive issues and pull requests as stale, then closes them after a further grace period.
+
+**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
+**Permissions**: `issues: write`, `pull_requests: write`
+
+On each scheduled run, the subscriber walks every open issue and PR. For each:
+
+- If the item has any exempt label, skip.
+- If the item already has the stale label and its `updated_at` is older than `days_until_close`, post the close message and close.
+- Else if the item has no stale label and its `updated_at` is older than `days_until_stale`, apply the stale label and post the stale message.
+- Otherwise, skip.
+
+In addition, the subscriber listens to the following webhook events and **removes the stale label + minimizes Carson's stale notice as `OUTDATED`** when a stale item gets new human activity:
+
+- `issue_comment.created`
+- `issues.edited`
+- `pull_request.synchronize`
+- `pull_request.edited`
+- `pull_request_review.submitted`
+
+The stale notice is identified by the hidden marker `<!-- carson:stale -->` appended to its body. If the marker isn't found (e.g. on items that became stale before this version shipped), the label is still removed but no comment is minimized.
+
+Bot senders (including Carson's own stale comment and Dependabot's auto-rebase) do not un-stale. The signal is meant to capture maintainer attention specifically. To re-enable a closed-by-stale item, a maintainer can reopen it manually. The next scheduled run will not re-stale it for `days_until_stale` more days.
+
+Add a cron schedule to your `.github/workflows/carson.yml` so the action runs periodically:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC
+```
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `days_until_stale` | positive integer | `60` |
+| `days_until_close` | positive integer | `7` |
+| `stale_label` | string | `stale` |
+| `stale_message` | string | `This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.` |
+| `close_message` | string | `Closing this {{type}} due to extended inactivity.` |
+| `exempt_labels` | array of strings | `[]` |
+
+### Interpolation variables
+
+| Variable | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the item's author (left verbatim if the user is a ghost) |
+| `{{number}}` | Issue or PR number |
+| `{{repo}}` | Repository name |
+| `{{title}}` | Item title |
+| `{{type}}` | `issue` or `pull request` |
+| `{{days_inactive}}` | The configured `days_until_stale` value |
+| `{{days_until_close}}` | The configured `days_until_close` value |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - stale
+settings:
+  stale:
+    days_until_stale: 60
+    days_until_close: 14
+    stale_label: stale
+    stale_message: |
+      @{{user}} this {{type}} has been inactive for {{days_inactive}} days
+      and is being marked stale. It will be closed in {{days_until_close}}
+      days without further activity.
+    close_message: |
+      Closing this {{type}} due to extended inactivity. Feel free to open
+      a fresh issue if this still matters and link back to {{number}}.
+    exempt_labels:
+      - pinned
+      - security
 ```
 
 ---

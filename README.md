@@ -108,6 +108,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - **conflicts-notifier**: comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - **lock-old-issues**: locks closed issues that have been inactive past a configurable age.
 - **signed-commits**: posts a check requiring every commit in a PR to be signed and verified.
+- **stale**: marks inactive issues and PRs stale, then closes them after a further grace period.
 - **welcome**: greets first-time contributors on their first pull request or issue.
 
 ## Development
