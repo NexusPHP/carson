@@ -4,10 +4,6 @@ import { loadConfig, resetConfigCache, setRegisteredSubscribers } from '../../sr
 import type { Context } from 'probot';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 
-vi.mock('@actions/core', () => ({
-  warning: vi.fn(),
-}));
-
 interface ContextHarness {
   context: Context<EmitterWebhookEventName>;
   configMock: ReturnType<typeof vi.fn>;

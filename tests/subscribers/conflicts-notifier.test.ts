@@ -169,6 +169,7 @@ describe('conflicts-notifier subscriber (via app)', () => {
     probot = new Probot({
       appId: 123,
       privateKey,
+      logLevel: 'fatal',
       Octokit: ProbotOctokit.defaults({
         retry: { enabled: false },
         throttle: { enabled: false },

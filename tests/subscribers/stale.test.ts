@@ -406,6 +406,7 @@ describe('stale subscriber (webhook un-stale)', () => {
     probot = new Probot({
       appId: 123,
       privateKey: WEBHOOK_PRIVATE_KEY,
+      logLevel: 'fatal',
       Octokit: ProbotOctokit.defaults({
         retry: { enabled: false },
         throttle: { enabled: false },
