@@ -53005,6 +53005,13 @@ var findCarsonComment = (comments, options2) => {
   );
 };
 
+// src/concurrency.ts
+var forEachConcurrent = async (items, concurrency, fn) => {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.all(items.slice(i, i + concurrency).map(fn));
+  }
+};
+
 // src/template.ts
 var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
 var universalContext = () => ({
@@ -53026,6 +53033,7 @@ var Settings = external_exports.object({
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
 var COMMENT_MARKER = "<!-- carson:conflicts-notifier -->";
+var CONCURRENCY = 5;
 var PR_EVENTS = [
   "pull_request.opened",
   "pull_request.synchronize",
@@ -53093,9 +53101,9 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       state: "open",
       per_page: 100
     });
-    for (const pr of prs) {
+    await forEachConcurrent(prs, CONCURRENCY, async (pr) => {
       await this.#checkPr(context, pr.number, config3);
-    }
+    });
   }
   async #checkPr(context, prNumber, config3) {
     const { owner, repo } = context.repo();
@@ -53188,6 +53196,7 @@ var Settings2 = external_exports.object({
 var DEFAULT_DAYS = 90;
 var DEFAULT_REASON = "resolved";
 var MS_PER_DAY = 24 * 60 * 60 * 1e3;
+var CONCURRENCY2 = 5;
 var LockOldIssuesSubscriber = class extends Subscriber {
   id = "lock-old-issues";
   description = "Locks closed issues that have been inactive past a configurable threshold.";
@@ -53215,21 +53224,21 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       per_page: 100
     });
     let locked = 0;
-    for (const issue3 of issues) {
+    await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
       if (issue3.pull_request !== void 0) {
-        continue;
+        return;
       }
       if (issue3.locked) {
-        continue;
+        return;
       }
       if (issue3.closed_at === null) {
-        continue;
+        return;
       }
       if (new Date(issue3.closed_at).getTime() > cutoff) {
-        continue;
+        return;
       }
       if (labelNames(issue3.labels).some((name) => exemptLabels.has(name))) {
-        continue;
+        return;
       }
       if (settings.comment !== void 0) {
         const context = {
@@ -53254,7 +53263,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
         lock_reason: reason
       });
       locked += 1;
-    }
+    });
     scheduled.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
   }
 };
@@ -53343,6 +53352,7 @@ var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive
 var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}} due to extended inactivity.";
 var COMMENT_MARKER2 = "<!-- carson:stale -->";
 var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY3 = 5;
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
@@ -53425,10 +53435,10 @@ var StaleSubscriber = class extends Subscriber {
     });
     let staled = 0;
     let closed = 0;
-    for (const item of items) {
+    await forEachConcurrent(items, CONCURRENCY3, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
-        continue;
+        return;
       }
       const updatedAt = new Date(item.updated_at).getTime();
       const isStale = names.includes(staleLabel);
@@ -53477,7 +53487,7 @@ ${COMMENT_MARKER2}`
         });
         staled += 1;
       }
-    }
+    });
     scheduled.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
   }
 };

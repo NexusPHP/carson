@@ -1,5 +1,6 @@
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { z } from 'zod';
@@ -15,7 +16,8 @@ const Settings = z.object({
 
 const DEFAULT_DAYS = 90;
 const DEFAULT_REASON: (typeof LOCK_REASONS)[number] = 'resolved';
-const MS_PER_DAY = 24 * 60 * 60 * 1000; // 86,400,000 ms
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const CONCURRENCY = 5;
 
 export class LockOldIssuesSubscriber extends Subscriber {
   public readonly id = 'lock-old-issues';
@@ -51,25 +53,25 @@ export class LockOldIssuesSubscriber extends Subscriber {
 
     let locked = 0;
 
-    for (const issue of issues) {
+    await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.pull_request !== undefined) {
-        continue;
+        return;
       }
 
       if (issue.locked) {
-        continue;
+        return;
       }
 
       if (issue.closed_at === null) {
-        continue;
+        return;
       }
 
       if (new Date(issue.closed_at).getTime() > cutoff) {
-        continue;
+        return;
       }
 
       if (labelNames(issue.labels).some((name) => exemptLabels.has(name))) {
-        continue;
+        return;
       }
 
       if (settings.comment !== undefined) {
@@ -98,7 +100,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
         lock_reason: reason,
       });
       locked += 1;
-    }
+    });
 
     scheduled.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
   }

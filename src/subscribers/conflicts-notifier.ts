@@ -2,6 +2,7 @@ import type { Context, Probot } from 'probot';
 import { findCarsonComment, minimizeComment, unminimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
+import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
@@ -12,6 +13,7 @@ const Settings = z.object({
 
 const DEFAULT_MESSAGE = '@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.';
 const COMMENT_MARKER = '<!-- carson:conflicts-notifier -->';
+const CONCURRENCY = 5;
 
 type PrEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
 type SupportedEvent = PrEvent | 'push';
@@ -122,9 +124,9 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       per_page: 100,
     });
 
-    for (const pr of prs) {
+    await forEachConcurrent(prs, CONCURRENCY, async (pr) => {
       await this.#checkPr(context, pr.number, config);
-    }
+    });
   }
 
   async #checkPr(context: SubscriberContext, prNumber: number, config: CarsonConfig): Promise<void> {

@@ -2,6 +2,7 @@ import type { Context, Probot } from 'probot';
 import { findCarsonComment, minimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { z } from 'zod';
@@ -22,6 +23,7 @@ const DEFAULT_STALE_MESSAGE = 'This {{type}} has been inactive for {{days_inacti
 const DEFAULT_CLOSE_MESSAGE = 'Closing this {{type}} due to extended inactivity.';
 const COMMENT_MARKER = '<!-- carson:stale -->';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const CONCURRENCY = 5;
 
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';
@@ -127,11 +129,11 @@ export class StaleSubscriber extends Subscriber {
     let staled = 0;
     let closed = 0;
 
-    for (const item of items) {
+    await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);
 
       if (names.some((name) => exemptLabels.has(name))) {
-        continue;
+        return;
       }
 
       const updatedAt = new Date(item.updated_at).getTime();
@@ -182,7 +184,7 @@ export class StaleSubscriber extends Subscriber {
         });
         staled += 1;
       }
-    }
+    });
 
     scheduled.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
   }
