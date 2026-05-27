@@ -73,7 +73,7 @@ describe('formatMissingPermissionsError', () => {
     const out = formatMissingPermissionsError(
       [{ subscriberId: 's1', permission: 'issues', required: 'write', installGranted: 'read', appDeclared: 'write' }],
       'https://github.com/apps/carson-acme',
-      { name: 'Carson @ acme', slug: 'carson-acme', id: 42 },
+      { name: 'Carson @ acme', slug: 'carson-acme' },
     );
 
     expect(out).toContain('Carson @ acme is missing required GitHub App permissions:');
@@ -109,7 +109,6 @@ interface AppDataStub {
   html_url?: string | undefined;
   name?: string | undefined;
   slug?: string | undefined;
-  id?: number | undefined;
 }
 
 interface InstallationStub {
@@ -130,7 +129,6 @@ const DEFAULT_APP_DATA: AppDataStub = {
   html_url: 'https://github.com/apps/test',
   name: 'Carson @ test',
   slug: 'carson-test',
-  id: 12345,
 };
 
 const DEFAULT_INSTALLATION: InstallationStub = {

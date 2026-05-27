@@ -48,7 +48,7 @@ describe('interpolate', () => {
   });
 
   it('injects {{app_name}}, {{app_slug}}, and {{app_login}} from the cached App identity', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
 
     expect(interpolate('{{app_name}} ({{app_slug}}, {{app_login}})', {}))
       .toBe('Carson @ acme (carson-acme, carson-acme[bot])');
@@ -60,7 +60,7 @@ describe('interpolate', () => {
   });
 
   it('lets per-call context override the injected universal context', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
 
     expect(interpolate(
       '{{app_name}} / {{app_slug}} / {{app_login}}',

@@ -104,7 +104,6 @@ export const runPreflight = async (
   const identity: AppIdentity = {
     name: app.name ?? 'Carson',
     slug: app.slug ?? 'carson',
-    id: app.id,
   };
   setAppIdentity(identity);
 

@@ -1,12 +1,12 @@
 // Cached identity of the GitHub App the action is currently running as.
 // Set once by the preflight after a successful `apps.getAuthenticated` call,
 // then read by subscribers that interpolate the App name into messages and
-// by the entrypoint for traceability logging.
+// by the entrypoint for traceability logging. The numeric App ID is omitted
+// because it is sensitive when paired with the App PEM.
 
 export interface AppIdentity {
   readonly name: string;
   readonly slug: string;
-  readonly id: number;
 }
 
 let cached: AppIdentity | null = null;

@@ -47,7 +47,7 @@ const main = async (): Promise<void> => {
   const identity = getAppIdentity();
 
   if (identity !== null) {
-    probot.log.info(`Running as ${identity.slug}[bot] (App "${identity.name}", ID ${identity.id})`);
+    probot.log.info(`Running as ${identity.slug}[bot] ("${identity.name}")`);
   }
 
   if (eventName === 'schedule') {

@@ -23,16 +23,16 @@ describe('app-identity', () => {
   });
 
   it('exposes the configured identity after setAppIdentity', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
 
-    expect(getAppIdentity()).toEqual({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+    expect(getAppIdentity()).toEqual({ name: 'Carson @ acme', slug: 'carson-acme' });
     expect(getAppName()).toBe('Carson @ acme');
     expect(getAppSlug()).toBe('carson-acme');
     expect(getAppLogin()).toBe('carson-acme[bot]');
   });
 
   it('clears the cached identity on reset', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme', id: 42 });
+    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
     resetAppIdentity();
 
     expect(getAppIdentity()).toBeNull();

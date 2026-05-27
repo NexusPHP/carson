@@ -52874,8 +52874,7 @@ var runPreflight = async (probot, carson2, repository) => {
   }
   const identity = {
     name: app.name ?? "Carson",
-    slug: app.slug ?? "carson",
-    id: app.id
+    slug: app.slug ?? "carson"
   };
   setAppIdentity(identity);
   let installationId;
@@ -63844,7 +63843,7 @@ var main = async () => {
   }
   const identity = getAppIdentity();
   if (identity !== null) {
-    probot.log.info(`Running as ${identity.slug}[bot] (App "${identity.name}", ID ${identity.id})`);
+    probot.log.info(`Running as ${identity.slug}[bot] ("${identity.name}")`);
   }
   if (eventName === "schedule") {
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
