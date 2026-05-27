@@ -3,6 +3,7 @@ import { Probot, ProbotOctokit } from 'probot';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
 import app from '../../src/app.js';
 import { generateKeyPairSync } from 'node:crypto';
+import { logger } from '../../src/logger.js';
 import nock from 'nock';
 import { resetConfigCache } from '../../src/configuration/cache.js';
 import { StaleSubscriber } from '../../src/subscribers/stale.js';
@@ -84,10 +85,12 @@ describe('stale subscriber', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    logger.init(makeStubLog() as never);
   });
 
   afterEach(() => {
     resetConfigCache();
+    logger.reset();
     vi.useRealTimers();
   });
 

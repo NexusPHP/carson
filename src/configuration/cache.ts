@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { type CarsonConfig, CarsonConfigSchema } from './schema.js';
+import { logger } from '../logger.js';
 import type { Logger } from 'pino';
 import type { ProbotOctokit } from 'probot';
 
@@ -44,9 +45,10 @@ const fetchAndParse = async (
   }
 
   const parsed = CarsonConfigSchema.safeParse(raw);
+  const log = logger.for('config');
 
   if (!parsed.success) {
-    context.log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
+    log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
 
     return null;
   }
@@ -54,8 +56,8 @@ const fetchAndParse = async (
   if (knownIds !== undefined) {
     for (const id of parsed.data.subscribers) {
       if (!knownIds.includes(id)) {
-        const message = `${CONFIG_FILE} lists unknown subscriber "${id}"`;
-        context.log.warn(message);
+        const message = `Unknown subscriber "${id}" listed in ${CONFIG_FILE}`;
+        log.warn(message);
         core.warning(message, { file: CONFIG_PATH });
       }
     }

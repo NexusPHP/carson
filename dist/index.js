@@ -2088,9 +2088,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve3, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve2(data);
+              return err ? reject(err) : resolve3(data);
             });
           });
         }
@@ -2128,12 +2128,12 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve3, reject) => {
             this.destroy(err, (err2, data) => {
               return err2 ? (
                 /* istanbul ignore next: should never error */
                 reject(err2)
-              ) : resolve2(data);
+              ) : resolve3(data);
             });
           });
         }
@@ -4400,8 +4400,8 @@ var require_util2 = __commonJS({
     function createDeferredPromise2() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve2, reject) => {
-        res = resolve2;
+      const promise2 = new Promise((resolve3, reject) => {
+        res = resolve3;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -6580,12 +6580,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve3, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve3;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -7222,12 +7222,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve3, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve3;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -7705,16 +7705,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       async [kClose]() {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve2;
+            this[kClosedResolve] = resolve3;
           } else {
-            resolve2(null);
+            resolve3(null);
           }
         });
       }
       async [kDestroy](err) {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request7 = requests[i];
@@ -7725,7 +7725,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve2(null);
+            resolve3(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -7776,7 +7776,7 @@ var require_client = __commonJS({
         });
       }
       try {
-        const socket = await new Promise((resolve2, reject) => {
+        const socket = await new Promise((resolve3, reject) => {
           client[kConnector]({
             host,
             hostname: hostname3,
@@ -7788,7 +7788,7 @@ var require_client = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve2(socket2);
+              resolve3(socket2);
             }
           });
         });
@@ -8124,8 +8124,8 @@ var require_pool_base = __commonJS({
         if (this[kQueue].isEmpty()) {
           await Promise.all(this[kClients].map((c) => c.close()));
         } else {
-          await new Promise((resolve2) => {
-            this[kClosedResolve] = resolve2;
+          await new Promise((resolve3) => {
+            this[kClosedResolve] = resolve3;
           });
         }
       }
@@ -9340,7 +9340,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return null;
         }
-        return await new Promise((resolve2, reject) => {
+        return await new Promise((resolve3, reject) => {
           if (this[kContentLength] > limit) {
             this.destroy(new AbortError());
           }
@@ -9353,7 +9353,7 @@ var require_readable = __commonJS({
             if (signal?.aborted) {
               reject(signal.reason ?? new AbortError());
             } else {
-              resolve2(null);
+              resolve3(null);
             }
           }).on("error", noop9).on("data", function(chunk) {
             limit -= chunk.length;
@@ -9372,7 +9372,7 @@ var require_readable = __commonJS({
     }
     async function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve3, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -9389,7 +9389,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve2,
+              resolve: resolve3,
               reject,
               length: 0,
               body: []
@@ -9459,18 +9459,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2) {
-      const { type, body, resolve: resolve2, stream, length } = consume2;
+      const { type, body, resolve: resolve3, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve2(chunksDecode(body, length));
+          resolve3(chunksDecode(body, length));
         } else if (type === "json") {
-          resolve2(JSON.parse(chunksDecode(body, length)));
+          resolve3(JSON.parse(chunksDecode(body, length)));
         } else if (type === "arrayBuffer") {
-          resolve2(chunksConcat(body, length).buffer);
+          resolve3(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve2(new Blob(body, { type: stream[kContentType] }));
+          resolve3(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve2(chunksConcat(body, length));
+          resolve3(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -9727,9 +9727,9 @@ var require_api_request = __commonJS({
     };
     function request7(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           request7.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -9952,9 +9952,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -10239,9 +10239,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -10333,9 +10333,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -14197,7 +14197,7 @@ var require_fetch = __commonJS({
       function dispatch({ body }) {
         const url2 = requestCurrentURL(request7);
         const agent = fetchParams.controller.dispatcher;
-        return new Promise((resolve2, reject) => agent.dispatch(
+        return new Promise((resolve3, reject) => agent.dispatch(
           {
             path: url2.pathname + url2.search,
             origin: url2.origin,
@@ -14273,7 +14273,7 @@ var require_fetch = __commonJS({
                 }
               }
               const onError = this.onError.bind(this);
-              resolve2({
+              resolve3({
                 status,
                 statusText,
                 headersList,
@@ -14319,7 +14319,7 @@ var require_fetch = __commonJS({
               for (let i = 0; i < rawHeaders.length; i += 2) {
                 headersList.append(bufferToLowerCasedHeaderName(rawHeaders[i]), rawHeaders[i + 1].toString("latin1"), true);
               }
-              resolve2({
+              resolve3({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -17995,8 +17995,8 @@ var require_util8 = __commonJS({
       return true;
     }
     function delay(ms) {
-      return new Promise((resolve2) => {
-        setTimeout(resolve2, ms).unref();
+      return new Promise((resolve3) => {
+        setTimeout(resolve3, ms).unref();
       });
     }
     module2.exports = {
@@ -21288,7 +21288,7 @@ var require_transport = __commonJS({
     var { existsSync: existsSync2 } = __require("node:fs");
     var getCallers = require_caller();
     var { join, isAbsolute, sep: sep2 } = __require("node:path");
-    var { fileURLToPath } = __require("node:url");
+    var { fileURLToPath: fileURLToPath2 } = __require("node:url");
     var sleep = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
@@ -21354,7 +21354,7 @@ var require_transport = __commonJS({
       let path2 = unquoted;
       if (path2.startsWith("file://")) {
         try {
-          path2 = fileURLToPath(path2);
+          path2 = fileURLToPath2(path2);
         } catch {
           return false;
         }
@@ -23785,13 +23785,13 @@ var require_pino_abstract_transport = __commonJS({
     var { Duplex } = __require("stream");
     var { parentPort, workerData } = __require("worker_threads");
     function createDeferred() {
-      let resolve2;
+      let resolve3;
       let reject;
       const promise2 = new Promise((_resolve2, _reject) => {
-        resolve2 = _resolve2;
+        resolve3 = _resolve2;
         reject = _reject;
       });
-      promise2.resolve = resolve2;
+      promise2.resolve = resolve3;
       promise2.reject = reject;
       return promise2;
     }
@@ -26420,8 +26420,8 @@ var require_light = __commonJS({
           return this.Promise.resolve();
         }
         yieldLoop(t = 0) {
-          return new this.Promise(function(resolve2, reject) {
-            return setTimeout(resolve2, t);
+          return new this.Promise(function(resolve3, reject) {
+            return setTimeout(resolve3, t);
           });
         }
         computePenalty() {
@@ -26632,15 +26632,15 @@ var require_light = __commonJS({
           return this._queue.length === 0;
         }
         async _tryToRun() {
-          var args, cb, error52, reject, resolve2, returned, task;
+          var args, cb, error52, reject, resolve3, returned, task;
           if (this._running < 1 && this._queue.length > 0) {
             this._running++;
-            ({ task, args, resolve: resolve2, reject } = this._queue.shift());
+            ({ task, args, resolve: resolve3, reject } = this._queue.shift());
             cb = await (async function() {
               try {
                 returned = await task(...args);
                 return function() {
-                  return resolve2(returned);
+                  return resolve3(returned);
                 };
               } catch (error1) {
                 error52 = error1;
@@ -26655,13 +26655,13 @@ var require_light = __commonJS({
           }
         }
         schedule(task, ...args) {
-          var promise2, reject, resolve2;
-          resolve2 = reject = null;
+          var promise2, reject, resolve3;
+          resolve3 = reject = null;
           promise2 = new this.Promise(function(_resolve2, _reject) {
-            resolve2 = _resolve2;
+            resolve3 = _resolve2;
             return reject = _reject;
           });
-          this._queue.push({ task, args, resolve: resolve2, reject });
+          this._queue.push({ task, args, resolve: resolve3, reject });
           this._tryToRun();
           return promise2;
         }
@@ -27062,14 +27062,14 @@ var require_light = __commonJS({
                 counts = this._states.counts;
                 return counts[0] + counts[1] + counts[2] + counts[3] === at;
               };
-              return new this.Promise((resolve2, reject) => {
+              return new this.Promise((resolve3, reject) => {
                 if (finished()) {
-                  return resolve2();
+                  return resolve3();
                 } else {
                   return this.on("done", () => {
                     if (finished()) {
                       this.removeAllListeners("done");
-                      return resolve2();
+                      return resolve3();
                     }
                   });
                 }
@@ -27162,9 +27162,9 @@ var require_light = __commonJS({
               options2 = parser$5.load(options2, this.jobDefaults);
             }
             task = (...args2) => {
-              return new this.Promise(function(resolve2, reject) {
+              return new this.Promise(function(resolve3, reject) {
                 return fn(...args2, function(...args3) {
-                  return (args3[0] != null ? reject : resolve2)(args3);
+                  return (args3[0] != null ? reject : resolve3)(args3);
                 });
               });
             };
@@ -34732,7 +34732,7 @@ var require_DLList = __commonJS({
 var require_Events = __commonJS({
   "node_modules/bottleneck/lib/Events.js"(exports2, module2) {
     "use strict";
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -34741,7 +34741,7 @@ var require_Events = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -34749,13 +34749,13 @@ var require_Events = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -34947,7 +34947,7 @@ var require_BottleneckError = __commonJS({
 var require_Job = __commonJS({
   "node_modules/bottleneck/lib/Job.js"(exports2, module2) {
     "use strict";
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -34956,7 +34956,7 @@ var require_Job = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -34964,13 +34964,13 @@ var require_Job = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -35151,7 +35151,7 @@ var require_Job = __commonJS({
 var require_LocalDatastore = __commonJS({
   "node_modules/bottleneck/lib/LocalDatastore.js"(exports2, module2) {
     "use strict";
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -35160,7 +35160,7 @@ var require_LocalDatastore = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -35168,13 +35168,13 @@ var require_LocalDatastore = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -35243,8 +35243,8 @@ var require_LocalDatastore = __commonJS({
         })();
       }
       yieldLoop(t = 0) {
-        return new this.Promise(function(resolve2, reject) {
-          return setTimeout(resolve2, t);
+        return new this.Promise(function(resolve3, reject) {
+          return setTimeout(resolve3, t);
         });
       }
       computePenalty() {
@@ -35714,7 +35714,7 @@ var require_Scripts = __commonJS({
 var require_RedisConnection = __commonJS({
   "node_modules/bottleneck/lib/RedisConnection.js"(exports, module) {
     "use strict";
-    function asyncGeneratorStep(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -35723,7 +35723,7 @@ var require_RedisConnection = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -35731,13 +35731,13 @@ var require_RedisConnection = __commonJS({
     function _asyncToGenerator(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -35778,7 +35778,7 @@ var require_RedisConnection = __commonJS({
         }
         _setup(client, sub) {
           client.setMaxListeners(0);
-          return new this.Promise((resolve2, reject) => {
+          return new this.Promise((resolve3, reject) => {
             client.on("error", (e) => {
               return this.Events.trigger("error", e);
             });
@@ -35789,14 +35789,14 @@ var require_RedisConnection = __commonJS({
               });
             }
             if (client.ready) {
-              return resolve2();
+              return resolve3();
             } else {
-              return client.once("ready", resolve2);
+              return client.once("ready", resolve3);
             }
           });
         }
         _loadScript(name) {
-          return new this.Promise((resolve2, reject) => {
+          return new this.Promise((resolve3, reject) => {
             var payload;
             payload = Scripts.payload(name);
             return this.client.multi([["script", "load", payload]]).exec((err, replies) => {
@@ -35804,7 +35804,7 @@ var require_RedisConnection = __commonJS({
                 return reject(err);
               }
               this.shas[name] = replies[0];
-              return resolve2(replies[0]);
+              return resolve3(replies[0]);
             });
           });
         }
@@ -35817,12 +35817,12 @@ var require_RedisConnection = __commonJS({
           var _this = this;
           return _asyncToGenerator(function* () {
             yield _this.ready;
-            return new _this.Promise((resolve2, reject) => {
+            return new _this.Promise((resolve3, reject) => {
               return _this.client.multi([cmd]).exec_atomic(function(err, replies) {
                 if (err != null) {
                   return reject(err);
                 } else {
-                  return resolve2(replies[0]);
+                  return resolve3(replies[0]);
                 }
               });
             });
@@ -35830,13 +35830,13 @@ var require_RedisConnection = __commonJS({
         }
         __addLimiter__(instance) {
           return this.Promise.all([instance.channel(), instance.channel_client()].map((channel) => {
-            return new this.Promise((resolve2, reject) => {
+            return new this.Promise((resolve3, reject) => {
               var handler2;
               handler2 = (chan) => {
                 if (chan === channel) {
                   this.subscriber.removeListener("subscribe", handler2);
                   this.limiters[channel] = instance;
-                  return resolve2();
+                  return resolve3();
                 }
               };
               this.subscriber.on("subscribe", handler2);
@@ -35850,13 +35850,13 @@ var require_RedisConnection = __commonJS({
             /* @__PURE__ */ (function() {
               var _ref = _asyncToGenerator(function* (channel) {
                 if (!_this2.terminated) {
-                  yield new _this2.Promise((resolve2, reject) => {
+                  yield new _this2.Promise((resolve3, reject) => {
                     return _this2.subscriber.unsubscribe(channel, function(err, chan) {
                       if (err != null) {
                         return reject(err);
                       }
                       if (chan === channel) {
-                        return resolve2();
+                        return resolve3();
                       }
                     });
                   });
@@ -35941,7 +35941,7 @@ var require_IORedisConnection = __commonJS({
     function _arrayWithHoles(arr) {
       if (Array.isArray(arr)) return arr;
     }
-    function asyncGeneratorStep(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -35950,7 +35950,7 @@ var require_IORedisConnection = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -35958,13 +35958,13 @@ var require_IORedisConnection = __commonJS({
     function _asyncToGenerator(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -36010,7 +36010,7 @@ var require_IORedisConnection = __commonJS({
         }
         _setup(client, sub) {
           client.setMaxListeners(0);
-          return new this.Promise((resolve2, reject) => {
+          return new this.Promise((resolve3, reject) => {
             client.on("error", (e) => {
               return this.Events.trigger("error", e);
             });
@@ -36021,9 +36021,9 @@ var require_IORedisConnection = __commonJS({
               });
             }
             if (client.status === "ready") {
-              return resolve2();
+              return resolve3();
             } else {
-              return client.once("ready", resolve2);
+              return client.once("ready", resolve3);
             }
           });
         }
@@ -36049,10 +36049,10 @@ var require_IORedisConnection = __commonJS({
         }
         __addLimiter__(instance) {
           return this.Promise.all([instance.channel(), instance.channel_client()].map((channel) => {
-            return new this.Promise((resolve2, reject) => {
+            return new this.Promise((resolve3, reject) => {
               return this.subscriber.subscribe(channel, () => {
                 this.limiters[channel] = instance;
-                return resolve2();
+                return resolve3();
               });
             });
           }));
@@ -36150,7 +36150,7 @@ var require_RedisDatastore = __commonJS({
     function _arrayWithHoles2(arr) {
       if (Array.isArray(arr)) return arr;
     }
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -36159,7 +36159,7 @@ var require_RedisDatastore = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -36167,13 +36167,13 @@ var require_RedisDatastore = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -36309,7 +36309,7 @@ var require_RedisDatastore = __commonJS({
           if (!(name === "init" || name === "register_client")) {
             yield _this3.ready;
           }
-          return new _this3.Promise((resolve2, reject) => {
+          return new _this3.Promise((resolve3, reject) => {
             var all_args, arr;
             all_args = [Date.now(), _this3.clientId].concat(args);
             _this3.instance.Events.trigger("debug", `Calling Redis script: ${name}.lua`, all_args);
@@ -36317,7 +36317,7 @@ var require_RedisDatastore = __commonJS({
               if (err != null) {
                 return reject(err);
               }
-              return resolve2(replies);
+              return resolve3(replies);
             });
             return _this3.connection.__scriptFn__(name)(...arr);
           }).catch((e) => {
@@ -36548,7 +36548,7 @@ var require_States = __commonJS({
 var require_Sync = __commonJS({
   "node_modules/bottleneck/lib/Sync.js"(exports2, module2) {
     "use strict";
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -36557,7 +36557,7 @@ var require_Sync = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -36565,13 +36565,13 @@ var require_Sync = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -36594,19 +36594,19 @@ var require_Sync = __commonJS({
       _tryToRun() {
         var _this = this;
         return _asyncToGenerator2(function* () {
-          var args, cb, error52, reject, resolve2, returned, task;
+          var args, cb, error52, reject, resolve3, returned, task;
           if (_this._running < 1 && _this._queue.length > 0) {
             _this._running++;
             var _this$_queue$shift = _this._queue.shift();
             task = _this$_queue$shift.task;
             args = _this$_queue$shift.args;
-            resolve2 = _this$_queue$shift.resolve;
+            resolve3 = _this$_queue$shift.resolve;
             reject = _this$_queue$shift.reject;
             cb = yield _asyncToGenerator2(function* () {
               try {
                 returned = yield task(...args);
                 return function() {
-                  return resolve2(returned);
+                  return resolve3(returned);
                 };
               } catch (error1) {
                 error52 = error1;
@@ -36622,16 +36622,16 @@ var require_Sync = __commonJS({
         })();
       }
       schedule(task, ...args) {
-        var promise2, reject, resolve2;
-        resolve2 = reject = null;
+        var promise2, reject, resolve3;
+        resolve3 = reject = null;
         promise2 = new this.Promise(function(_resolve2, _reject) {
-          resolve2 = _resolve2;
+          resolve3 = _resolve2;
           return reject = _reject;
         });
         this._queue.push({
           task,
           args,
-          resolve: resolve2,
+          resolve: resolve3,
           reject
         });
         this._tryToRun();
@@ -36684,7 +36684,7 @@ var require_Group = __commonJS({
     function _arrayWithHoles2(arr) {
       if (Array.isArray(arr)) return arr;
     }
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -36693,7 +36693,7 @@ var require_Group = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -36701,13 +36701,13 @@ var require_Group = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -36970,7 +36970,7 @@ var require_Bottleneck = __commonJS({
     function _arrayWithHoles2(arr) {
       if (Array.isArray(arr)) return arr;
     }
-    function asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, key, arg) {
+    function asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, key, arg) {
       try {
         var info = gen[key](arg);
         var value = info.value;
@@ -36979,7 +36979,7 @@ var require_Bottleneck = __commonJS({
         return;
       }
       if (info.done) {
-        resolve2(value);
+        resolve3(value);
       } else {
         Promise.resolve(value).then(_next, _throw);
       }
@@ -36987,13 +36987,13 @@ var require_Bottleneck = __commonJS({
     function _asyncToGenerator2(fn) {
       return function() {
         var self2 = this, args = arguments;
-        return new Promise(function(resolve2, reject) {
+        return new Promise(function(resolve3, reject) {
           var gen = fn.apply(self2, args);
           function _next(value) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "next", value);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "next", value);
           }
           function _throw(err) {
-            asyncGeneratorStep2(gen, resolve2, reject, _next, _throw, "throw", err);
+            asyncGeneratorStep2(gen, resolve3, reject, _next, _throw, "throw", err);
           }
           _next(void 0);
         });
@@ -37231,14 +37231,14 @@ var require_Bottleneck = __commonJS({
               counts = this._states.counts;
               return counts[0] + counts[1] + counts[2] + counts[3] === at;
             };
-            return new this.Promise((resolve2, reject) => {
+            return new this.Promise((resolve3, reject) => {
               if (finished()) {
-                return resolve2();
+                return resolve3();
               } else {
                 return this.on("done", () => {
                   if (finished()) {
                     this.removeAllListeners("done");
-                    return resolve2();
+                    return resolve3();
                   }
                 });
               }
@@ -37346,9 +37346,9 @@ var require_Bottleneck = __commonJS({
             options2 = parser2.load(options2, this.jobDefaults);
           }
           task = (...args2) => {
-            return new this.Promise(function(resolve2, reject) {
+            return new this.Promise(function(resolve3, reject) {
               return fn(...args2, function(...args3) {
-                return (args3[0] != null ? reject : resolve2)(args3);
+                return (args3[0] != null ? reject : resolve3)(args3);
               });
             });
           };
@@ -37865,11 +37865,11 @@ import { EOL as EOL2 } from "os";
 import { constants, promises } from "fs";
 var __awaiter = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve2) {
-      resolve2(value);
+    return value instanceof P ? value : new P(function(resolve3) {
+      resolve3(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve2, reject) {
+  return new (P || (P = Promise))(function(resolve3, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -37885,7 +37885,7 @@ var __awaiter = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve2(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -38186,6 +38186,9 @@ function error(message, properties = {}) {
 function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+
+// src/carson.ts
+import { dirname, resolve } from "node:path";
 
 // src/app-identity.ts
 var AppIdentity = class {
@@ -52749,6 +52752,24 @@ var subscriberSettings = (config3, subscriberId, schema, log) => {
   return parsed.data;
 };
 
+// src/logger.ts
+var Logger = class {
+  #root = null;
+  init(root) {
+    this.#root = root;
+  }
+  reset() {
+    this.#root = null;
+  }
+  for(name) {
+    if (this.#root === null) {
+      throw new Error("Logger has not been initialized. Call logger.init(probot.log) first.");
+    }
+    return this.#root.child({ name });
+  }
+};
+var logger = new Logger();
+
 // src/configuration/cache.ts
 var CONFIG_FILE = "carson.yml";
 var CONFIG_PATH2 = `.github/${CONFIG_FILE}`;
@@ -52771,15 +52792,16 @@ var fetchAndParse = async (context, knownIds) => {
     return null;
   }
   const parsed = CarsonConfigSchema.safeParse(raw);
+  const log = logger.for("config");
   if (!parsed.success) {
-    context.log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
+    log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
     return null;
   }
   if (knownIds !== void 0) {
     for (const id of parsed.data.subscribers) {
       if (!knownIds.includes(id)) {
-        const message = `${CONFIG_FILE} lists unknown subscriber "${id}"`;
-        context.log.warn(message);
+        const message = `Unknown subscriber "${id}" listed in ${CONFIG_FILE}`;
+        log.warn(message);
         warning(message, { file: CONFIG_PATH2 });
       }
     }
@@ -52842,24 +52864,6 @@ var Subscriber = class {
   }
 };
 
-// src/logger.ts
-var Logger = class {
-  #root = null;
-  init(root) {
-    this.#root = root;
-  }
-  reset() {
-    this.#root = null;
-  }
-  for(name) {
-    if (this.#root === null) {
-      throw new Error("Logger has not been initialized. Call logger.init(probot.log) first.");
-    }
-    return this.#root.child({ name });
-  }
-};
-var logger = new Logger();
-
 // src/preflight.ts
 var BASE_PERMISSIONS = { contents: "read" };
 var LEVEL_RANK = {
@@ -52905,7 +52909,7 @@ var runPreflight = async (probot, carson2, repository) => {
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
   if (app === null) {
-    log.warn("apps.getAuthenticated returned no app, skipping");
+    log.warn("App lookup returned no data, skipping");
     return true;
   }
   appIdentity.set({ name: app.name, slug: app.slug });
@@ -52916,28 +52920,32 @@ var runPreflight = async (probot, carson2, repository) => {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
     installationPermissions = installation.permissions ?? {};
-    log.debug({ installationId, permissions: installationPermissions }, "installation resolved");
+    log.debug({ installationId, permissions: installationPermissions }, "Installation resolved");
   } catch (error52) {
-    log.warn({ err: error52 }, "could not resolve installation, skipping");
+    log.warn({ err: error52 }, "Could not resolve installation, skipping");
     return true;
   }
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config3 = await loadConfig(loadable, carson2.knownIds);
   if (config3 === null) {
-    log.debug("no carson.yml on default branch, skipping");
+    log.debug("No carson.yml on default branch, skipping");
     return true;
   }
-  log.debug({ subscribers: config3.subscribers }, "config loaded");
+  log.debug({ subscribers: config3.subscribers }, "Config loaded");
   const appPermissions = app.permissions ?? {};
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
     setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
     return false;
   }
-  log.debug("all required permissions satisfied");
+  log.debug("All required permissions satisfied");
   return true;
 };
+
+// src/carson.ts
+import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
 // src/scheduled.ts
 var ScheduledRegistrar = class {
@@ -52969,7 +52977,7 @@ var dispatchScheduled = async (probot, registrar, repository, payload) => {
     try {
       await handler2(context);
     } catch (error52) {
-      probot.log.error(error52);
+      logger.for("carson").error(error52);
       failed = true;
     }
   }
@@ -52977,6 +52985,11 @@ var dispatchScheduled = async (probot, registrar, repository, payload) => {
 };
 
 // src/carson.ts
+var carsonPackage = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8")
+);
+var carsonVersion = carsonPackage.version;
+var probotVersion = carsonPackage.dependencies.probot.replace(/^[\^~]/, "");
 var Carson = class _Carson {
   static DISPLAY_NAME = "Carson";
   #subscribers;
@@ -52987,7 +53000,7 @@ var Carson = class _Carson {
   run(probot) {
     logger.init(probot.log);
     const log = logger.for("carson");
-    log.info(`${_Carson.DISPLAY_NAME} starting`);
+    log.info(`${_Carson.DISPLAY_NAME} v${carsonVersion} starting (Probot v${probotVersion}, Node ${process.version})`);
     for (const subscriber of this.#subscribers) {
       log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
@@ -53142,7 +53155,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       pull_number: prNumber
     });
     if (pr.mergeable === null) {
-      this.log(context).debug(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      this.log(context).debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
       return;
     }
     if (pr.user === null) {
@@ -53176,26 +53189,26 @@ ${COMMENT_MARKER}`;
         issue_number: pr.number,
         body
       });
-      this.log(context).info(`posted conflict notice on PR #${pr.number}`);
+      this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
     if (existing.isMinimized) {
       await unminimizeComment(context.octokit, existing.id);
-      this.log(context).info(`reopened conflict notice on PR #${pr.number}`);
+      this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
   async #handleNoConflict(context, prNumber, existing) {
     const log = this.log(context);
     if (existing === null) {
-      log.debug(`PR #${prNumber}: no conflict, no prior notice, nothing to do`);
+      log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);
       return;
     }
     if (existing.isMinimized) {
-      log.debug(`PR #${prNumber}: no conflict, prior notice already minimized`);
+      log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
       return;
     }
     await minimizeComment(context.octokit, existing.id, "RESOLVED");
-    log.info(`resolved conflict notice on PR #${prNumber}`);
+    log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
     const { owner, repo } = context.repo();
@@ -53260,26 +53273,26 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
     let locked = 0;
     const log = this.log(scheduled);
-    log.debug(`scanning ${issues.length} closed issue(s) and PR(s)`);
+    log.debug(`Scanning ${issues.length} closed issue(s) and PR(s)`);
     await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
       if (issue3.pull_request !== void 0) {
-        log.debug(`#${issue3.number}: pull request, skipping`);
+        log.debug(`#${issue3.number}: Pull request, skipping`);
         return;
       }
       if (issue3.locked) {
-        log.debug(`#${issue3.number}: already locked, skipping`);
+        log.debug(`#${issue3.number}: Already locked, skipping`);
         return;
       }
       if (issue3.closed_at === null) {
-        log.debug(`#${issue3.number}: no closed_at, skipping`);
+        log.debug(`#${issue3.number}: No closed_at, skipping`);
         return;
       }
       if (new Date(issue3.closed_at).getTime() > cutoff) {
-        log.debug(`#${issue3.number}: closed too recently, skipping`);
+        log.debug(`#${issue3.number}: Closed too recently, skipping`);
         return;
       }
       if (labelNames(issue3.labels).some((name) => exemptLabels.has(name))) {
-        log.debug(`#${issue3.number}: exempt label, skipping`);
+        log.debug(`#${issue3.number}: Exempt label, skipping`);
         return;
       }
       if (settings.comment !== void 0) {
@@ -53304,10 +53317,10 @@ var LockOldIssuesSubscriber = class extends Subscriber {
         issue_number: issue3.number,
         lock_reason: reason
       });
-      log.debug(`#${issue3.number}: locked`);
+      log.debug(`#${issue3.number}: Locked`);
       locked += 1;
     });
-    log.info(`locked ${locked} issue(s) older than ${days} day(s)`);
+    log.info(`Locked ${locked} issue(s) older than ${days} day(s)`);
   }
 };
 
@@ -53375,7 +53388,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
       conclusion,
       output
     });
-    this.log(context).info(`check ${conclusion} for PR #${pr.number}`);
+    this.log(context).info(`Check ${conclusion} for PR #${pr.number}`);
   }
 };
 
@@ -53447,9 +53460,9 @@ var StaleSubscriber = class extends Subscriber {
     const log = this.log(context);
     if (stalePost !== void 0) {
       await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
-      log.info(`minimized stale notice on #${issueNumber}`);
+      log.info(`Minimized stale notice on #${issueNumber}`);
     }
-    log.info(`removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`Removed "${staleLabel}" from #${issueNumber} after activity`);
   }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
@@ -53480,11 +53493,11 @@ var StaleSubscriber = class extends Subscriber {
     let staled = 0;
     let closed = 0;
     const log = this.log(scheduled);
-    log.debug(`scanning ${items.length} open item(s)`);
+    log.debug(`Scanning ${items.length} open item(s)`);
     await forEachConcurrent(items, CONCURRENCY3, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
-        log.debug(`#${item.number}: exempt label, skipping`);
+        log.debug(`#${item.number}: Exempt label, skipping`);
         return;
       }
       const updatedAt = new Date(item.updated_at).getTime();
@@ -53515,10 +53528,10 @@ var StaleSubscriber = class extends Subscriber {
             issue_number: item.number,
             state: "closed"
           });
-          log.debug(`#${item.number}: closed (stale and past close cutoff)`);
+          log.debug(`#${item.number}: Closed (stale and past close cutoff)`);
           closed += 1;
         } else {
-          log.debug(`#${item.number}: stale but within grace period`);
+          log.debug(`#${item.number}: Stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -53535,13 +53548,13 @@ var StaleSubscriber = class extends Subscriber {
 
 ${COMMENT_MARKER2}`
         });
-        log.debug(`#${item.number}: marked stale`);
+        log.debug(`#${item.number}: Marked stale`);
         staled += 1;
       } else {
-        log.debug(`#${item.number}: not yet stale`);
+        log.debug(`#${item.number}: Not yet stale`);
       }
     });
-    log.info(`marked ${staled} stale, closed ${closed}`);
+    log.info(`Marked ${staled} stale, closed ${closed}`);
   }
 };
 
@@ -53606,10 +53619,10 @@ var WelcomeSubscriber = class extends Subscriber {
       const association = context.payload.pull_request.author_association;
       const bucket = bucketFor(settings, association);
       if (bucket === null) {
-        log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
+        log.debug(`PR #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
-      log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" \u2192 bucket "${bucket}"`);
+      log.debug(`PR #${context.payload.pull_request.number}: association "${association}" resolved to bucket "${bucket}"`);
       const body = interpolate(messageFor(settings, bucket, "pull_request"), {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -53617,13 +53630,13 @@ var WelcomeSubscriber = class extends Subscriber {
         title: context.payload.pull_request.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      log.info(`commented on pull_request #${context.payload.pull_request.number}`);
+      log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
       const log = this.log(context);
       const issue3 = context.payload.issue;
       if (issue3.user === null) {
-        log.debug(`issue #${issue3.number}: no user (ghost), skipping`);
+        log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
       const enabled = await this.loadEnabledSettings(context, Settings5);
@@ -53634,10 +53647,10 @@ var WelcomeSubscriber = class extends Subscriber {
       const association = issue3.author_association;
       const bucket = bucketFor(settings, association);
       if (bucket === null) {
-        log.debug(`issue #${issue3.number}: association "${association}" not in any bucket, skipping`);
+        log.debug(`Issue #${issue3.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
-      log.debug(`issue #${issue3.number}: association "${association}" \u2192 bucket "${bucket}"`);
+      log.debug(`Issue #${issue3.number}: association "${association}" resolved to bucket "${bucket}"`);
       const body = interpolate(messageFor(settings, bucket, "issue"), {
         user: issue3.user.login,
         repo: context.payload.repository.name,
@@ -53645,7 +53658,7 @@ var WelcomeSubscriber = class extends Subscriber {
         title: issue3.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      log.info(`commented on issue #${context.payload.issue.number}`);
+      log.info(`Commented on issue #${context.payload.issue.number}`);
     });
   }
 };
@@ -54505,10 +54518,10 @@ function createMiddleware(options2) {
       options22.log.debug(`${eventName} event received (id: ${id})`);
       let didTimeout = false;
       let timeout;
-      const timeoutPromise = new Promise((resolve2) => {
+      const timeoutPromise = new Promise((resolve3) => {
         timeout = setTimeout(() => {
           didTimeout = true;
-          resolve2(
+          resolve3(
             handleResponse3(
               "still processing\n",
               202,
@@ -54607,7 +54620,7 @@ async function getPayload(request7) {
   return decode3(payload);
 }
 function getPayloadFromRequestStream(request7) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     let data = [];
     request7.on(
       "error",
@@ -54616,7 +54629,7 @@ function getPayloadFromRequestStream(request7) {
     request7.on("data", data.push.bind(data));
     request7.on("end", () => {
       const result = concatUint8Array(data);
-      queueMicrotask(() => resolve2(result));
+      queueMicrotask(() => resolve3(result));
     });
   });
 }
@@ -54804,13 +54817,13 @@ var LruObject = class {
 
 // node_modules/probot/lib/helpers/create-deferred-promise.js
 function createDeferredPromise() {
-  let resolve2;
+  let resolve3;
   let reject;
   const promise2 = new Promise((res, rej) => {
-    resolve2 = res;
+    resolve3 = res;
     reject = rej;
   });
-  return { promise: promise2, resolve: resolve2, reject };
+  return { promise: promise2, resolve: resolve3, reject };
 }
 
 // node_modules/probot/lib/octokit/get-authenticated-octokit.js
@@ -54854,9 +54867,9 @@ import { platform as osPlatform } from "node:os";
 import { resolve as pathResolve } from "node:path";
 import { pathToFileURL } from "node:url";
 function wrapExec(exec2) {
-  return (cmd, options2) => new Promise((resolve2, reject) => {
+  return (cmd, options2) => new Promise((resolve3, reject) => {
     exec2(cmd, { windowsHide: true, ...options2 }, (err, stdout, stderr) => {
-      err ? reject(new Error(`Failed executing '${cmd}': ${stderr || err.message}`)) : resolve2(stdout.trim());
+      err ? reject(new Error(`Failed executing '${cmd}': ${stderr || err.message}`)) : resolve3(stdout.trim());
     });
   });
 }
@@ -62348,7 +62361,7 @@ function getCachedAuthentication(state, auth22) {
   return newScope === currentScope ? authentication : false;
 }
 async function wait(seconds) {
-  await new Promise((resolve2) => setTimeout(resolve2, seconds * 1e3));
+  await new Promise((resolve3) => setTimeout(resolve3, seconds * 1e3));
 }
 async function waitForAccessToken(request7, clientId, clientType, verification) {
   try {
@@ -63216,7 +63229,7 @@ async function sendRequestWithRetries(state, request7, options2, createdAt, retr
     state.log.warn(
       `[@octokit/auth-app] Retrying after 401 response to account for token replication delay (retry: ${retries}, wait: ${awaitTime / 1e3}s)`
     );
-    await new Promise((resolve2) => setTimeout(resolve2, awaitTime));
+    await new Promise((resolve3) => setTimeout(resolve3, awaitTime));
     return sendRequestWithRetries(state, request7, options2, createdAt, retries);
   }
 }
@@ -63758,8 +63771,8 @@ var textDecoder2 = new TextDecoder("utf-8", { fatal: false });
 var decode4 = textDecoder2.decode.bind(textDecoder2);
 
 // node_modules/@probot/get-private-key/dist-bundle/index.js
-import { resolve } from "node:path";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { resolve as resolve2 } from "node:path";
+import { existsSync, readdirSync, readFileSync as readFileSync2 } from "node:fs";
 var VERSION28 = "0.0.0-development";
 var pkcs1Begin = "-----BEGIN RSA PRIVATE KEY-----";
 var pkcs1End = "-----END RSA PRIVATE KEY-----";
@@ -63775,7 +63788,7 @@ function getPrivateKey(options2 = {}) {
   const env = options2.env || process.env;
   const cwd = options2.cwd || process.cwd();
   if (options2.filepath) {
-    return readFileSync(resolve(cwd, options2.filepath), "utf-8");
+    return readFileSync2(resolve2(cwd, options2.filepath), "utf-8");
   }
   if (env.PRIVATE_KEY) {
     let privateKey = env.PRIVATE_KEY;
@@ -63810,9 +63823,9 @@ function getPrivateKey(options2 = {}) {
     );
   }
   if (env.PRIVATE_KEY_PATH) {
-    const filepath = resolve(cwd, env.PRIVATE_KEY_PATH);
+    const filepath = resolve2(cwd, env.PRIVATE_KEY_PATH);
     if (existsSync(filepath)) {
-      return readFileSync(filepath, "utf-8");
+      return readFileSync2(filepath, "utf-8");
     } else {
       throw new Error(
         `[@probot/get-private-key] Private key does not exists at path: "${env.PRIVATE_KEY_PATH}". Please check to ensure that "env.PRIVATE_KEY_PATH" is correct.`
@@ -63928,7 +63941,7 @@ var main = async () => {
   });
   let handlerFailed = false;
   probot.onError((error52) => {
-    probot.log.error(error52);
+    logger.for("carson").error(error52);
     handlerFailed = true;
   });
   await probot.load(app_default);

@@ -1,8 +1,19 @@
 import type { ApplicationFunction, Probot } from 'probot';
+import { dirname, resolve } from 'node:path';
 import { findMissingPermissions, type MissingPermission } from './preflight.js';
 import type { PermissionLevel, Subscriber } from './subscriber.js';
+import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
+import { readFileSync } from 'node:fs';
 import { ScheduledRegistrar } from './scheduled.js';
+
+// Probot's exports field blocks `probot/package.json`, so read the declared
+// spec from Carson's own package.json (always shipped alongside dist/).
+const carsonPackage = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
+) as { version: string; dependencies: { probot: string } };
+const carsonVersion = carsonPackage.version;
+const probotVersion = carsonPackage.dependencies.probot.replace(/^[\^~]/, '');
 
 export class Carson {
   public static readonly DISPLAY_NAME: string = 'Carson';
@@ -16,7 +27,7 @@ export class Carson {
   public run(probot: Probot): void {
     logger.init(probot.log);
     const log = logger.for('carson');
-    log.info(`${Carson.DISPLAY_NAME} starting`);
+    log.info(`${Carson.DISPLAY_NAME} v${carsonVersion} starting (Probot v${probotVersion}, Node ${process.version})`);
 
     for (const subscriber of this.#subscribers) {
       log.info(`Registering subscriber: ${subscriber.id}`);

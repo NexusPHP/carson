@@ -91,10 +91,10 @@ export class StaleSubscriber extends Subscriber {
 
     if (stalePost !== undefined) {
       await minimizeComment(context.octokit, stalePost.node_id, 'OUTDATED');
-      log.info(`minimized stale notice on #${issueNumber}`);
+      log.info(`Minimized stale notice on #${issueNumber}`);
     }
 
-    log.info(`removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`Removed "${staleLabel}" from #${issueNumber} after activity`);
   }
 
   public override registerScheduled(registrar: ScheduledRegistrar): void {
@@ -132,13 +132,13 @@ export class StaleSubscriber extends Subscriber {
     let closed = 0;
     const log = this.log(scheduled);
 
-    log.debug(`scanning ${items.length} open item(s)`);
+    log.debug(`Scanning ${items.length} open item(s)`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);
 
       if (names.some((name) => exemptLabels.has(name))) {
-        log.debug(`#${item.number}: exempt label, skipping`);
+        log.debug(`#${item.number}: Exempt label, skipping`);
         return;
       }
 
@@ -173,10 +173,10 @@ export class StaleSubscriber extends Subscriber {
             issue_number: item.number,
             state: 'closed',
           });
-          log.debug(`#${item.number}: closed (stale and past close cutoff)`);
+          log.debug(`#${item.number}: Closed (stale and past close cutoff)`);
           closed += 1;
         } else {
-          log.debug(`#${item.number}: stale but within grace period`);
+          log.debug(`#${item.number}: Stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -191,13 +191,13 @@ export class StaleSubscriber extends Subscriber {
           issue_number: item.number,
           body: `${interpolate(staleMessage, context)}\n\n${COMMENT_MARKER}`,
         });
-        log.debug(`#${item.number}: marked stale`);
+        log.debug(`#${item.number}: Marked stale`);
         staled += 1;
       } else {
-        log.debug(`#${item.number}: not yet stale`);
+        log.debug(`#${item.number}: Not yet stale`);
       }
     });
 
-    log.info(`marked ${staled} stale, closed ${closed}`);
+    log.info(`Marked ${staled} stale, closed ${closed}`);
   }
 }

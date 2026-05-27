@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
 import { LockOldIssuesSubscriber } from '../../src/subscribers/lock-old-issues.js';
+import { logger } from '../../src/logger.js';
 import { resetConfigCache } from '../../src/configuration/cache.js';
 
 interface IssueShape {
@@ -75,10 +76,12 @@ describe('lock-old-issues subscriber', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    logger.init(makeStubLog() as never);
   });
 
   afterEach(() => {
     resetConfigCache();
+    logger.reset();
     vi.useRealTimers();
   });
 

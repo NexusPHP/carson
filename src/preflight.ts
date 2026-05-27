@@ -99,7 +99,7 @@ export const runPreflight = async (
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
 
   if (app === null) {
-    log.warn('apps.getAuthenticated returned no app, skipping');
+    log.warn('App lookup returned no data, skipping');
     return true;
   }
 
@@ -113,9 +113,9 @@ export const runPreflight = async (
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
     installationPermissions = (installation.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
-    log.debug({ installationId, permissions: installationPermissions }, 'installation resolved');
+    log.debug({ installationId, permissions: installationPermissions }, 'Installation resolved');
   } catch (error) {
-    log.warn({ err: error }, 'could not resolve installation, skipping');
+    log.warn({ err: error }, 'Could not resolve installation, skipping');
     return true;
   }
 
@@ -124,11 +124,11 @@ export const runPreflight = async (
   const config = await loadConfig(loadable, carson.knownIds);
 
   if (config === null) {
-    log.debug('no carson.yml on default branch, skipping');
+    log.debug('No carson.yml on default branch, skipping');
     return true;
   }
 
-  log.debug({ subscribers: config.subscribers }, 'config loaded');
+  log.debug({ subscribers: config.subscribers }, 'Config loaded');
 
   const appPermissions = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
@@ -138,7 +138,7 @@ export const runPreflight = async (
     return false;
   }
 
-  log.debug('all required permissions satisfied');
+  log.debug('All required permissions satisfied');
 
   return true;
 };

@@ -53,7 +53,7 @@ const main = async (): Promise<void> => {
   let handlerFailed = false;
 
   probot.onError((error) => {
-    probot.log.error(error);
+    logger.for('carson').error(error);
     handlerFailed = true;
   });
 

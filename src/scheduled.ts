@@ -1,6 +1,7 @@
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import type { Probot, ProbotOctokit } from 'probot';
 import { createConfigLoadable } from './configuration/cache.js';
+import { logger } from './logger.js';
 import type { Logger } from 'pino';
 
 export interface SchedulePayload {
@@ -71,7 +72,7 @@ export const dispatchScheduled = async (
     try {
       await handler(context);
     } catch (error) {
-      probot.log.error(error);
+      logger.for('carson').error(error);
       failed = true;
     }
   }

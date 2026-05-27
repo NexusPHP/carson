@@ -1,30 +1,47 @@
 import * as core from '@actions/core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig, resetConfigCache } from '../../src/configuration/cache.js';
 import type { Context } from 'probot';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
+import { logger } from '../../src/logger.js';
 
 interface ContextHarness {
   context: Context<EmitterWebhookEventName>;
   configMock: ReturnType<typeof vi.fn>;
-  errorMock: ReturnType<typeof vi.fn>;
-  warnMock: ReturnType<typeof vi.fn>;
 }
+
+interface LoggerStub {
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+}
+
+const installLoggerStub = (): LoggerStub => {
+  const stub: Record<string, unknown> = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+  stub['child'] = vi.fn().mockReturnValue(stub);
+  logger.init(stub as never);
+
+  return stub as unknown as LoggerStub;
+};
 
 const makeContext = (raw: unknown, repo = { owner: 'acme', repo: 'widgets' }): ContextHarness => {
   const configMock = vi.fn().mockResolvedValue(raw);
-  const errorMock = vi.fn();
-  const warnMock = vi.fn();
   const context = {
     repo: () => repo,
     config: configMock,
-    log: { error: errorMock, warn: warnMock },
+    log: { error: vi.fn(), warn: vi.fn() },
   } as unknown as Context<EmitterWebhookEventName>;
 
-  return { context, configMock, errorMock, warnMock };
+  return { context, configMock };
 };
 
 describe('config cache', () => {
+  let logStub: LoggerStub;
+
+  beforeEach(() => {
+    logger.reset();
+    logStub = installLoggerStub();
+  });
+
   afterEach(() => {
     resetConfigCache();
   });
@@ -35,15 +52,15 @@ describe('config cache', () => {
   });
 
   it('returns null when the config file is missing', async () => {
-    const { context, errorMock } = makeContext(null);
+    const { context } = makeContext(null);
     expect(await loadConfig(context)).toBe(null);
-    expect(errorMock).not.toHaveBeenCalled();
+    expect(logStub.error).not.toHaveBeenCalled();
   });
 
   it('returns null and logs when the config fails validation', async () => {
-    const { context, errorMock } = makeContext({ version: 99 });
+    const { context } = makeContext({ version: 99 });
     expect(await loadConfig(context)).toBe(null);
-    expect(errorMock).toHaveBeenCalledOnce();
+    expect(logStub.error).toHaveBeenCalledOnce();
   });
 
   it('dedupes concurrent calls for the same repo', async () => {
@@ -78,28 +95,28 @@ describe('config cache', () => {
   });
 
   it('warns when carson.yml lists a subscriber id not in the knownIds list', async () => {
-    const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome', 'welcomee'] });
+    const { context } = makeContext({ version: 1, subscribers: ['welcome', 'welcomee'] });
     await loadConfig(context, ['welcome']);
-    expect(warnMock).toHaveBeenCalledOnce();
-    expect(warnMock).toHaveBeenCalledWith('carson.yml lists unknown subscriber "welcomee"');
+    expect(logStub.warn).toHaveBeenCalledOnce();
+    expect(logStub.warn).toHaveBeenCalledWith('Unknown subscriber "welcomee" listed in carson.yml');
     expect(core.warning).toHaveBeenCalledOnce();
     expect(core.warning).toHaveBeenCalledWith(
-      'carson.yml lists unknown subscriber "welcomee"',
+      'Unknown subscriber "welcomee" listed in carson.yml',
       { file: '.github/carson.yml' },
     );
   });
 
   it('does not warn when all subscriber ids are in the knownIds list', async () => {
-    const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome'] });
+    const { context } = makeContext({ version: 1, subscribers: ['welcome'] });
     await loadConfig(context, ['welcome']);
-    expect(warnMock).not.toHaveBeenCalled();
+    expect(logStub.warn).not.toHaveBeenCalled();
     expect(core.warning).not.toHaveBeenCalled();
   });
 
   it('does not warn when knownIds is omitted', async () => {
-    const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome', 'whatever'] });
+    const { context } = makeContext({ version: 1, subscribers: ['welcome', 'whatever'] });
     await loadConfig(context);
-    expect(warnMock).not.toHaveBeenCalled();
+    expect(logStub.warn).not.toHaveBeenCalled();
     expect(core.warning).not.toHaveBeenCalled();
   });
 });

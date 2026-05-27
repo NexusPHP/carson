@@ -81,11 +81,11 @@ export class WelcomeSubscriber extends Subscriber {
       const bucket = bucketFor(settings, association);
 
       if (bucket === null) {
-        log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
+        log.debug(`PR #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
 
-      log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" → bucket "${bucket}"`);
+      log.debug(`PR #${context.payload.pull_request.number}: association "${association}" resolved to bucket "${bucket}"`);
 
       const body = interpolate(messageFor(settings, bucket, 'pull_request'), {
         user: context.payload.pull_request.user.login,
@@ -96,7 +96,7 @@ export class WelcomeSubscriber extends Subscriber {
 
       await context.octokit.rest.issues.createComment(context.issue({ body }));
 
-      log.info(`commented on pull_request #${context.payload.pull_request.number}`);
+      log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
 
     probot.on('issues.opened', async (context: Context<'issues.opened'>): Promise<void> => {
@@ -104,7 +104,7 @@ export class WelcomeSubscriber extends Subscriber {
       const issue = context.payload.issue;
 
       if (issue.user === null) {
-        log.debug(`issue #${issue.number}: no user (ghost), skipping`);
+        log.debug(`Issue #${issue.number}: no user (ghost), skipping`);
         return;
       }
 
@@ -119,11 +119,11 @@ export class WelcomeSubscriber extends Subscriber {
       const bucket = bucketFor(settings, association);
 
       if (bucket === null) {
-        log.debug(`issue #${issue.number}: association "${association}" not in any bucket, skipping`);
+        log.debug(`Issue #${issue.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
 
-      log.debug(`issue #${issue.number}: association "${association}" → bucket "${bucket}"`);
+      log.debug(`Issue #${issue.number}: association "${association}" resolved to bucket "${bucket}"`);
 
       const body = interpolate(messageFor(settings, bucket, 'issue'), {
         user: issue.user.login,
@@ -134,7 +134,7 @@ export class WelcomeSubscriber extends Subscriber {
 
       await context.octokit.rest.issues.createComment(context.issue({ body }));
 
-      log.info(`commented on issue #${context.payload.issue.number}`);
+      log.info(`Commented on issue #${context.payload.issue.number}`);
     });
   }
 }

@@ -54,31 +54,31 @@ export class LockOldIssuesSubscriber extends Subscriber {
     let locked = 0;
     const log = this.log(scheduled);
 
-    log.debug(`scanning ${issues.length} closed issue(s) and PR(s)`);
+    log.debug(`Scanning ${issues.length} closed issue(s) and PR(s)`);
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.pull_request !== undefined) {
-        log.debug(`#${issue.number}: pull request, skipping`);
+        log.debug(`#${issue.number}: Pull request, skipping`);
         return;
       }
 
       if (issue.locked) {
-        log.debug(`#${issue.number}: already locked, skipping`);
+        log.debug(`#${issue.number}: Already locked, skipping`);
         return;
       }
 
       if (issue.closed_at === null) {
-        log.debug(`#${issue.number}: no closed_at, skipping`);
+        log.debug(`#${issue.number}: No closed_at, skipping`);
         return;
       }
 
       if (new Date(issue.closed_at).getTime() > cutoff) {
-        log.debug(`#${issue.number}: closed too recently, skipping`);
+        log.debug(`#${issue.number}: Closed too recently, skipping`);
         return;
       }
 
       if (labelNames(issue.labels).some((name) => exemptLabels.has(name))) {
-        log.debug(`#${issue.number}: exempt label, skipping`);
+        log.debug(`#${issue.number}: Exempt label, skipping`);
         return;
       }
 
@@ -107,10 +107,10 @@ export class LockOldIssuesSubscriber extends Subscriber {
         issue_number: issue.number,
         lock_reason: reason,
       });
-      log.debug(`#${issue.number}: locked`);
+      log.debug(`#${issue.number}: Locked`);
       locked += 1;
     });
 
-    log.info(`locked ${locked} issue(s) older than ${days} day(s)`);
+    log.info(`Locked ${locked} issue(s) older than ${days} day(s)`);
   }
 }

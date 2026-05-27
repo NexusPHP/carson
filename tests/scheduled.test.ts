@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchScheduled, type ScheduledHandler, ScheduledRegistrar } from '../src/scheduled.js';
+import { logger } from '../src/logger.js';
 import type { Probot } from 'probot';
 
 interface ProbotHarness {
@@ -14,7 +15,9 @@ const makeProbot = (installationId = 99): ProbotHarness => {
   const installationOctokit = { tag: 'installation', config: { get: configGet } };
   const getRepoInstallation = vi.fn().mockResolvedValue({ data: { id: installationId } });
   const appOctokit = { rest: { apps: { getRepoInstallation } } };
-  const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+  const log: Record<string, unknown> = { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+  log['child'] = vi.fn().mockReturnValue(log);
+  logger.init(log as never);
 
   const auth = vi.fn(async (id?: number) => {
     await Promise.resolve();
@@ -44,6 +47,10 @@ describe('ScheduledRegistrar', () => {
 
 describe('dispatchScheduled', () => {
   const payload = { schedule: '0 * * * *', workflow: '.github/workflows/cron.yml' };
+
+  beforeEach(() => {
+    logger.reset();
+  });
 
   it('resolves the installation and invokes each handler with a built context', async () => {
     const { probot, getRepoInstallation, installationOctokit } = makeProbot(42);
