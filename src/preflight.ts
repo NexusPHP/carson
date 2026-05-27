@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { type AppIdentity, setAppIdentity } from './app-identity.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
+import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { type PermissionLevel, type RequiredPermissions, type Subscriber } from './subscriber.js';
 import type { Carson } from './carson.js';
 import type { Probot } from 'probot';
@@ -68,15 +69,14 @@ export const runPreflight = async (
   carson: Carson,
   repository: string,
 ): Promise<boolean> => {
-  const slash = repository.indexOf('/');
+  const parsed = parseRepository(repository);
 
-  if (slash === -1) {
-    core.setFailed('GITHUB_REPOSITORY must be in owner/repo format');
+  if (parsed === null) {
+    core.setFailed(INVALID_REPOSITORY_MESSAGE);
     return false;
   }
 
-  const owner = repository.slice(0, slash);
-  const repo = repository.slice(slash + 1);
+  const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
 

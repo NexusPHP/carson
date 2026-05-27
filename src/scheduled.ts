@@ -1,3 +1,4 @@
+import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import type { Probot, ProbotOctokit } from 'probot';
 import type { Logger } from 'pino';
 
@@ -59,15 +60,13 @@ export const dispatchScheduled = async (
   repository: string,
   payload: SchedulePayload,
 ): Promise<ScheduledDispatchResult> => {
-  const slash = repository.indexOf('/');
+  const parsed = parseRepository(repository);
 
-  if (slash === -1) {
-    throw new Error('GITHUB_REPOSITORY must be in owner/repo format');
+  if (parsed === null) {
+    throw new Error(INVALID_REPOSITORY_MESSAGE);
   }
 
-  const owner = repository.slice(0, slash);
-  const repo = repository.slice(slash + 1);
-
+  const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
   const octokit = await probot.auth(installation.id);

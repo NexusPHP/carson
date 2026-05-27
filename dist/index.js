@@ -38187,6 +38187,19 @@ function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 
+// src/github/repository.ts
+var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
+var parseRepository = (input) => {
+  const slash = input.indexOf("/");
+  if (slash === -1) {
+    return null;
+  }
+  return {
+    owner: input.slice(0, slash),
+    repo: input.slice(slash + 1)
+  };
+};
+
 // src/scheduled.ts
 var ScheduledRegistrar = class {
   #handlers = [];
@@ -38212,12 +38225,11 @@ var buildContext = (octokit, log, owner, repo, payload) => ({
   }
 });
 var dispatchScheduled = async (probot, registrar, repository, payload) => {
-  const slash = repository.indexOf("/");
-  if (slash === -1) {
-    throw new Error("GITHUB_REPOSITORY must be in owner/repo format");
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    throw new Error(INVALID_REPOSITORY_MESSAGE);
   }
-  const owner = repository.slice(0, slash);
-  const repo = repository.slice(slash + 1);
+  const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
   const octokit = await probot.auth(installation.id);
@@ -63748,13 +63760,12 @@ var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
   return [header, ...body, footer].join("\n");
 };
 var runPreflight = async (probot, carson2, repository) => {
-  const slash = repository.indexOf("/");
-  if (slash === -1) {
-    setFailed("GITHUB_REPOSITORY must be in owner/repo format");
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    setFailed(INVALID_REPOSITORY_MESSAGE);
     return false;
   }
-  const owner = repository.slice(0, slash);
-  const repo = repository.slice(slash + 1);
+  const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
   if (app === null) {
