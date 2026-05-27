@@ -15,13 +15,17 @@ let manifest = null;
 let lastOrgAppNameSuggestion = '';
 
 const showError = (msg) => {
-  errorHost.innerHTML = '<div class="error">' + msg + '</div>';
+  const div = document.createElement('div');
+  div.className = 'error';
+  div.textContent = msg;
+  errorHost.replaceChildren(div);
 };
 
 const manifestUrl = (() => {
   if (location.hostname.endsWith('.github.io')) {
     const owner = location.hostname.replace(/\.github\.io$/, '');
     const project = location.pathname.split('/').filter(Boolean)[0];
+
     if (project) {
       return 'https://raw.githubusercontent.com/' + owner + '/' + project + '/HEAD/.github/app-manifest.json';
     }
@@ -36,6 +40,7 @@ fetch(manifestUrl)
     if (!response.ok) {
       throw new Error('Failed to load app-manifest.json (' + response.status + ')');
     }
+
     return response.json();
   })
   .then((loaded) => {
@@ -55,9 +60,11 @@ fetch(manifestUrl)
 orgName.addEventListener('input', () => {
   const org = orgName.value.trim();
   const suggestion = org ? 'Carson @ ' + org : '';
+
   if (orgAppName.value === '' || orgAppName.value === lastOrgAppNameSuggestion) {
     orgAppName.value = suggestion;
   }
+
   lastOrgAppNameSuggestion = suggestion;
 });
 
@@ -69,6 +76,7 @@ const injectName = (event, manifestInput, name) => {
     event.preventDefault();
     return false;
   }
+
   manifest.name = name;
   manifestInput.value = JSON.stringify(manifest);
   return true;
@@ -80,10 +88,12 @@ personalForm.addEventListener('submit', (event) => {
 
 orgForm.addEventListener('submit', (event) => {
   const org = orgName.value.trim();
+
   if (!org) {
     event.preventDefault();
     return;
   }
+
   if (injectName(event, orgManifest, orgAppName.value.trim())) {
     orgForm.action = 'https://github.com/organizations/' + encodeURIComponent(org) + '/settings/apps/new';
   }
