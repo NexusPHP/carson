@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://api.github.com; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://raw.githubusercontent.com; connect-src https://api.github.com; form-action 'none'; base-uri 'none'">
   <meta name="color-scheme" content="light dark">
   <title>Carson App Created</title>
   <link rel="stylesheet" href="../assets/callback.css">
@@ -53,6 +53,15 @@
       <h2>Open the App settings</h2>
       <p class="status">From the App settings page you can install Carson on repositories, regenerate the private key, or review the App's permissions.</p>
       <a id="app-settings-link" class="button" target="_blank" rel="noopener">Open App settings on GitHub</a>
+    </section>
+
+    <section>
+      <h2>Optional: set the App icon</h2>
+      <p class="status">Carson ships with a butler icon you can use as your App's avatar. Save the image, then upload it under <strong>Display information &rarr; Logo</strong> on the App settings page above. GitHub does not expose an API for App avatars, so this is the only way to set it.</p>
+      <div class="icon-preview">
+        <img src="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" alt="Carson butler icon" width="96" height="96">
+        <a href="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" download="butler-logo.png" class="button secondary" target="_blank" rel="noopener">Download butler icon</a>
+      </div>
     </section>
 
     <section>

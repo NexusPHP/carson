@@ -1,4 +1,7 @@
-# Carson
+<h1>
+  <img src="butler-logo.png" alt="Butler" height="36" align="left">
+  Carson
+</h1>
 
 [![Build](https://github.com/NexusPHP/carson/actions/workflows/build.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/build.yml)
 [![Lint](https://github.com/NexusPHP/carson/actions/workflows/lint.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/lint.yml)
