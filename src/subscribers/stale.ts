@@ -130,11 +130,15 @@ export class StaleSubscriber extends Subscriber {
 
     let staled = 0;
     let closed = 0;
+    const log = this.log(scheduled);
+
+    log.debug(`scanning ${items.length} open item(s)`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);
 
       if (names.some((name) => exemptLabels.has(name))) {
+        log.debug(`#${item.number}: exempt label, skipping`);
         return;
       }
 
@@ -169,7 +173,10 @@ export class StaleSubscriber extends Subscriber {
             issue_number: item.number,
             state: 'closed',
           });
+          log.debug(`#${item.number}: closed (stale and past close cutoff)`);
           closed += 1;
+        } else {
+          log.debug(`#${item.number}: stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -184,10 +191,13 @@ export class StaleSubscriber extends Subscriber {
           issue_number: item.number,
           body: `${interpolate(staleMessage, context)}\n\n${COMMENT_MARKER}`,
         });
+        log.debug(`#${item.number}: marked stale`);
         staled += 1;
+      } else {
+        log.debug(`#${item.number}: not yet stale`);
       }
     });
 
-    this.log(scheduled).info(`marked ${staled} stale, closed ${closed}`);
+    log.info(`marked ${staled} stale, closed ${closed}`);
   }
 }

@@ -52842,6 +52842,24 @@ var Subscriber = class {
   }
 };
 
+// src/logger.ts
+var Logger = class {
+  #root = null;
+  init(root) {
+    this.#root = root;
+  }
+  reset() {
+    this.#root = null;
+  }
+  for(name) {
+    if (this.#root === null) {
+      throw new Error("Logger has not been initialized. Call logger.init(probot.log) first.");
+    }
+    return this.#root.child({ name });
+  }
+};
+var logger = new Logger();
+
 // src/preflight.ts
 var BASE_PERMISSIONS = { contents: "read" };
 var LEVEL_RANK = {
@@ -52877,6 +52895,7 @@ var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
   return lines.join("\n");
 };
 var runPreflight = async (probot, carson2, repository) => {
+  const log = logger.for("preflight");
   const parsed = parseRepository(repository);
   if (parsed === null) {
     setFailed(INVALID_REPOSITORY_MESSAGE);
@@ -52886,52 +52905,39 @@ var runPreflight = async (probot, carson2, repository) => {
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
   if (app === null) {
-    probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
+    log.warn("apps.getAuthenticated returned no app, skipping");
     return true;
   }
   appIdentity.set({ name: app.name, slug: app.slug });
+  log.debug(`App authenticated: ${appIdentity.login}`);
   let installationId;
   let installationPermissions;
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
     installationPermissions = installation.permissions ?? {};
+    log.debug({ installationId, permissions: installationPermissions }, "installation resolved");
   } catch (error52) {
-    probot.log.warn({ err: error52 }, "preflight: could not resolve installation, skipping");
+    log.warn({ err: error52 }, "could not resolve installation, skipping");
     return true;
   }
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config3 = await loadConfig(loadable, carson2.knownIds);
   if (config3 === null) {
+    log.debug("no carson.yml on default branch, skipping");
     return true;
   }
+  log.debug({ subscribers: config3.subscribers }, "config loaded");
   const appPermissions = app.permissions ?? {};
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
     setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
     return false;
   }
+  log.debug("all required permissions satisfied");
   return true;
 };
-
-// src/logger.ts
-var Logger = class {
-  #root = null;
-  init(root) {
-    this.#root = root;
-  }
-  reset() {
-    this.#root = null;
-  }
-  for(name) {
-    if (this.#root === null) {
-      throw new Error("Logger has not been initialized. Call logger.init(probot.log) first.");
-    }
-    return this.#root.child({ name });
-  }
-};
-var logger = new Logger();
 
 // src/scheduled.ts
 var ScheduledRegistrar = class {
@@ -53136,7 +53142,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       pull_number: prNumber
     });
     if (pr.mergeable === null) {
-      this.log(context).info(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      this.log(context).debug(`mergeable not yet computed for PR #${prNumber}, skipping`);
       return;
     }
     if (pr.user === null) {
@@ -53179,11 +53185,17 @@ ${COMMENT_MARKER}`;
     }
   }
   async #handleNoConflict(context, prNumber, existing) {
-    if (existing === null || existing.isMinimized) {
+    const log = this.log(context);
+    if (existing === null) {
+      log.debug(`PR #${prNumber}: no conflict, no prior notice, nothing to do`);
+      return;
+    }
+    if (existing.isMinimized) {
+      log.debug(`PR #${prNumber}: no conflict, prior notice already minimized`);
       return;
     }
     await minimizeComment(context.octokit, existing.id, "RESOLVED");
-    this.log(context).info(`resolved conflict notice on PR #${prNumber}`);
+    log.info(`resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
     const { owner, repo } = context.repo();
@@ -53247,20 +53259,27 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       per_page: 100
     });
     let locked = 0;
+    const log = this.log(scheduled);
+    log.debug(`scanning ${issues.length} closed issue(s) and PR(s)`);
     await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
       if (issue3.pull_request !== void 0) {
+        log.debug(`#${issue3.number}: pull request, skipping`);
         return;
       }
       if (issue3.locked) {
+        log.debug(`#${issue3.number}: already locked, skipping`);
         return;
       }
       if (issue3.closed_at === null) {
+        log.debug(`#${issue3.number}: no closed_at, skipping`);
         return;
       }
       if (new Date(issue3.closed_at).getTime() > cutoff) {
+        log.debug(`#${issue3.number}: closed too recently, skipping`);
         return;
       }
       if (labelNames(issue3.labels).some((name) => exemptLabels.has(name))) {
+        log.debug(`#${issue3.number}: exempt label, skipping`);
         return;
       }
       if (settings.comment !== void 0) {
@@ -53285,9 +53304,10 @@ var LockOldIssuesSubscriber = class extends Subscriber {
         issue_number: issue3.number,
         lock_reason: reason
       });
+      log.debug(`#${issue3.number}: locked`);
       locked += 1;
     });
-    this.log(scheduled).info(`locked ${locked} issue(s) older than ${days} day(s)`);
+    log.info(`locked ${locked} issue(s) older than ${days} day(s)`);
   }
 };
 
@@ -53459,9 +53479,12 @@ var StaleSubscriber = class extends Subscriber {
     });
     let staled = 0;
     let closed = 0;
+    const log = this.log(scheduled);
+    log.debug(`scanning ${items.length} open item(s)`);
     await forEachConcurrent(items, CONCURRENCY3, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
+        log.debug(`#${item.number}: exempt label, skipping`);
         return;
       }
       const updatedAt = new Date(item.updated_at).getTime();
@@ -53492,7 +53515,10 @@ var StaleSubscriber = class extends Subscriber {
             issue_number: item.number,
             state: "closed"
           });
+          log.debug(`#${item.number}: closed (stale and past close cutoff)`);
           closed += 1;
+        } else {
+          log.debug(`#${item.number}: stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -53509,10 +53535,13 @@ var StaleSubscriber = class extends Subscriber {
 
 ${COMMENT_MARKER2}`
         });
+        log.debug(`#${item.number}: marked stale`);
         staled += 1;
+      } else {
+        log.debug(`#${item.number}: not yet stale`);
       }
     });
-    this.log(scheduled).info(`marked ${staled} stale, closed ${closed}`);
+    log.info(`marked ${staled} stale, closed ${closed}`);
   }
 };
 
@@ -53568,15 +53597,19 @@ var WelcomeSubscriber = class extends Subscriber {
   requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
+      const log = this.log(context);
       const enabled = await this.loadEnabledSettings(context, Settings5);
       if (enabled === null) {
         return;
       }
       const { settings } = enabled;
-      const bucket = bucketFor(settings, context.payload.pull_request.author_association);
+      const association = context.payload.pull_request.author_association;
+      const bucket = bucketFor(settings, association);
       if (bucket === null) {
+        log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
+      log.debug(`pull_request #${context.payload.pull_request.number}: association "${association}" \u2192 bucket "${bucket}"`);
       const body = interpolate(messageFor(settings, bucket, "pull_request"), {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
@@ -53584,11 +53617,13 @@ var WelcomeSubscriber = class extends Subscriber {
         title: context.payload.pull_request.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      this.log(context).info(`commented on pull_request #${context.payload.pull_request.number}`);
+      log.info(`commented on pull_request #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
+      const log = this.log(context);
       const issue3 = context.payload.issue;
       if (issue3.user === null) {
+        log.debug(`issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
       const enabled = await this.loadEnabledSettings(context, Settings5);
@@ -53596,10 +53631,13 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const { settings } = enabled;
-      const bucket = bucketFor(settings, issue3.author_association);
+      const association = issue3.author_association;
+      const bucket = bucketFor(settings, association);
       if (bucket === null) {
+        log.debug(`issue #${issue3.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
+      log.debug(`issue #${issue3.number}: association "${association}" \u2192 bucket "${bucket}"`);
       const body = interpolate(messageFor(settings, bucket, "issue"), {
         user: issue3.user.login,
         repo: context.payload.repository.name,
@@ -53607,7 +53645,7 @@ var WelcomeSubscriber = class extends Subscriber {
         title: issue3.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      this.log(context).info(`commented on issue #${context.payload.issue.number}`);
+      log.info(`commented on issue #${context.payload.issue.number}`);
     });
   }
 };

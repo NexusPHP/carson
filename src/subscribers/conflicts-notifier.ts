@@ -138,7 +138,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
 
     if (pr.mergeable === null) {
-      this.log(context).info(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      this.log(context).debug(`mergeable not yet computed for PR #${prNumber}, skipping`);
       return;
     }
 
@@ -201,12 +201,20 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     prNumber: number,
     existing: ExistingComment | null,
   ): Promise<void> {
-    if (existing === null || existing.isMinimized) {
+    const log = this.log(context);
+
+    if (existing === null) {
+      log.debug(`PR #${prNumber}: no conflict, no prior notice, nothing to do`);
+      return;
+    }
+
+    if (existing.isMinimized) {
+      log.debug(`PR #${prNumber}: no conflict, prior notice already minimized`);
       return;
     }
 
     await minimizeComment(context.octokit, existing.id, 'RESOLVED');
-    this.log(context).info(`resolved conflict notice on PR #${prNumber}`);
+    log.info(`resolved conflict notice on PR #${prNumber}`);
   }
 
   async #findExistingComment(context: SubscriberContext, prNumber: number): Promise<ExistingComment | null> {

@@ -4,6 +4,7 @@ import { findMissingPermissions, formatMissingPermissionsError, runPreflight } f
 import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
 import { appIdentity } from '../src/app-identity.js';
 import { Carson } from '../src/carson.js';
+import { logger } from '../src/logger.js';
 import type { Probot } from 'probot';
 import { resetConfigCache } from '../src/configuration/cache.js';
 
@@ -154,10 +155,11 @@ const makeProbot = (overrides: HarnessOverrides = {}): Probot => {
     return id === undefined ? appOctokit : installationOctokit;
   });
 
-  return {
-    auth,
-    log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-  } as unknown as Probot;
+  const log: Record<string, unknown> = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+  log['child'] = vi.fn().mockReturnValue(log);
+  logger.init(log as never);
+
+  return { auth, log } as unknown as Probot;
 };
 
 describe('runPreflight', () => {
@@ -166,6 +168,7 @@ describe('runPreflight', () => {
   beforeEach(() => {
     resetConfigCache();
     appIdentity.reset();
+    logger.reset();
     setFailed.mockClear();
   });
 

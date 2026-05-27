@@ -4,6 +4,7 @@ import { createConfigLoadable, loadConfig } from './configuration/cache.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { type PermissionLevel, type RequiredPermissions, type Subscriber } from './subscriber.js';
 import type { Carson } from './carson.js';
+import { logger } from './logger.js';
 import type { Probot } from 'probot';
 
 // Every subscriber loads .github/carson.yml via the contents API.
@@ -85,6 +86,7 @@ export const runPreflight = async (
   carson: Carson,
   repository: string,
 ): Promise<boolean> => {
+  const log = logger.for('preflight');
   const parsed = parseRepository(repository);
 
   if (parsed === null) {
@@ -97,11 +99,12 @@ export const runPreflight = async (
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
 
   if (app === null) {
-    probot.log.warn('preflight: apps.getAuthenticated returned no app, skipping');
+    log.warn('apps.getAuthenticated returned no app, skipping');
     return true;
   }
 
   appIdentity.set({ name: app.name, slug: app.slug });
+  log.debug(`App authenticated: ${appIdentity.login}`);
 
   let installationId: number;
   let installationPermissions: Readonly<Record<string, PermissionLevel>>;
@@ -110,8 +113,9 @@ export const runPreflight = async (
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
     installationPermissions = (installation.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
+    log.debug({ installationId, permissions: installationPermissions }, 'installation resolved');
   } catch (error) {
-    probot.log.warn({ err: error }, 'preflight: could not resolve installation, skipping');
+    log.warn({ err: error }, 'could not resolve installation, skipping');
     return true;
   }
 
@@ -120,8 +124,11 @@ export const runPreflight = async (
   const config = await loadConfig(loadable, carson.knownIds);
 
   if (config === null) {
+    log.debug('no carson.yml on default branch, skipping');
     return true;
   }
+
+  log.debug({ subscribers: config.subscribers }, 'config loaded');
 
   const appPermissions = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
@@ -130,6 +137,8 @@ export const runPreflight = async (
     core.setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
     return false;
   }
+
+  log.debug('all required permissions satisfied');
 
   return true;
 };
