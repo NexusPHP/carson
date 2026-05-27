@@ -35,8 +35,8 @@ Fill in:
 - **Repository permissions**:
   - **Checks**: Read and write (for the `signed-commits` check run).
   - **Contents**: Read-only (to read `.github/carson.yml`).
-  - **Issues**: Read and write (to comment on, label, lock, and close issues and pull requests).
-  - **Pull requests**: Read-only (to read PR metadata and commit lists).
+  - **Issues**: Read and write (to label, lock, and close issues and pull requests, and to comment on issues).
+  - **Pull requests**: Read and write (to comment on pull requests, and to read PR metadata and commit lists).
 - **Subscribe to events**: none.
 
 These match the permissions captured in [`.github/app-manifest.json`](.github/app-manifest.json), which the click-through installer uses. New subscribers may request additional permissions, which their documentation will list.
