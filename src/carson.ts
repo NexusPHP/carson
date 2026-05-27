@@ -1,6 +1,7 @@
 import type { ApplicationFunction, Probot } from 'probot';
 import { findMissingPermissions, type MissingPermission } from './preflight.js';
 import type { PermissionLevel, Subscriber } from './subscriber.js';
+import { logger } from './logger.js';
 import { ScheduledRegistrar } from './scheduled.js';
 
 export class Carson {
@@ -13,10 +14,12 @@ export class Carson {
   }
 
   public run(probot: Probot): void {
-    probot.log.info(`${Carson.DISPLAY_NAME} starting`);
+    logger.init(probot.log);
+    const log = logger.for('carson');
+    log.info(`${Carson.DISPLAY_NAME} starting`);
 
     for (const subscriber of this.#subscribers) {
-      probot.log.info(`Registering subscriber: ${subscriber.id}`);
+      log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);
     }

@@ -5,6 +5,7 @@ import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository
 import { appIdentity } from './app-identity.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
+import { logger } from './logger.js';
 import { readFile } from 'node:fs/promises';
 import { runPreflight } from './preflight.js';
 
@@ -57,16 +58,18 @@ const main = async (): Promise<void> => {
   });
 
   await probot.load(app);
+  const log = logger.for('carson');
 
   if (!await runPreflight(probot, carson, repository)) {
     return;
   }
 
   if (appIdentity.current !== null) {
-    probot.log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
+    log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
 
   if (eventName === 'schedule') {
+    log.info('Received schedule');
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
 
     if (result.failed) {
@@ -88,6 +91,10 @@ const main = async (): Promise<void> => {
     const { owner, repo } = parsed;
     const appOctokit = await probot.auth();
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    const action = (payload as { action?: unknown }).action;
+    const eventLabel = typeof action === 'string' ? `${name}.${action}` : name;
+    log.info(`Received ${eventLabel}`);
+    log.debug(`Resolved installation ${installation.id}`);
     const enrichedPayload = {
       ...(payload as Record<string, unknown>),
       installation: { id: installation.id },

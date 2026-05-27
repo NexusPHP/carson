@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
 import { Carson } from '../src/carson.js';
+import { logger } from '../src/logger.js';
 import type { Probot } from 'probot';
 import { ScheduledRegistrar } from '../src/scheduled.js';
 
@@ -20,11 +21,18 @@ class FakeSubscriber extends Subscriber {
   }
 }
 
-const makeProbot = (): Probot => ({
-  log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-} as unknown as Probot);
+const makeProbot = (): Probot => {
+  const log: Record<string, unknown> = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+  log['child'] = vi.fn().mockReturnValue(log);
+
+  return { log } as unknown as Probot;
+};
 
 describe('Carson', () => {
+  beforeEach(() => {
+    logger.reset();
+  });
+
   it('exposes a ScheduledRegistrar via the scheduled getter', () => {
     const carson = new Carson([]);
     expect(carson.scheduled).toBeInstanceOf(ScheduledRegistrar);

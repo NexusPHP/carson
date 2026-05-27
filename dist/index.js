@@ -37576,18 +37576,18 @@ var require_logger = __commonJS({
       delete opts.customErroredMessage;
       const quietReqLogger = !!opts.quietReqLogger;
       const quietResLogger = !!opts.quietResLogger;
-      const logger = wrapChild(opts, theStream);
-      const validLogLevels = Object.keys(logger.levels.values).concat("silent");
+      const logger2 = wrapChild(opts, theStream);
+      const validLogLevels = Object.keys(logger2.levels.values).concat("silent");
       const useLevel = getValidLogLevel(opts.useLevel);
       delete opts.useLevel;
       const genReqId = reqIdGenFactory(opts.genReqId);
       const result = (req, res, next) => {
-        return loggingMiddleware(logger, req, res, next);
+        return loggingMiddleware(logger2, req, res, next);
       };
-      result.logger = logger;
+      result.logger = logger2;
       return result;
-      function onResFinished(res, logger2, err) {
-        let log = logger2;
+      function onResFinished(res, logger3, err) {
+        let log = logger3;
         const responseTime = Date.now() - res[startTime2];
         const req = res[reqObject];
         const level = getLogLevelFromCustomLogLevel(customLogLevel, useLevel, res, err, req);
@@ -37596,10 +37596,10 @@ var require_logger = __commonJS({
         }
         const customPropBindings = typeof customProps === "function" ? customProps(req, res) : customProps;
         if (customPropBindings) {
-          const customPropBindingStr = logger2[stringifySym](customPropBindings).replace(/[{}]/g, "");
-          const customPropBindingsStr = logger2[chindingsSym];
+          const customPropBindingStr = logger3[stringifySym](customPropBindings).replace(/[{}]/g, "");
+          const customPropBindingsStr = logger3[chindingsSym];
           if (!customPropBindingsStr.includes(customPropBindingStr)) {
-            log = logger2.child(customPropBindings);
+            log = logger3.child(customPropBindings);
           }
         }
         if (err || res.err || res.statusCode >= 500) {
@@ -37622,10 +37622,10 @@ var require_logger = __commonJS({
           successMessage(req, res, responseTime)
         );
       }
-      function loggingMiddleware(logger2, req, res, next) {
+      function loggingMiddleware(logger3, req, res, next) {
         let shouldLogSuccess = true;
         req.id = req.id || genReqId(req, res);
-        const log = quietReqLogger ? logger2.child({ [requestIdKey]: req.id }) : logger2;
+        const log = quietReqLogger ? logger3.child({ [requestIdKey]: req.id }) : logger3;
         let fullReqLogger = log.child({ [reqKey]: req });
         const customPropBindings = typeof customProps === "function" ? customProps(req, res) : customProps;
         if (customPropBindings) {
@@ -37681,20 +37681,20 @@ var require_logger = __commonJS({
     function wrapChild(opts, stream) {
       const prevLogger = opts.logger;
       const prevGenReqId = opts.genReqId;
-      let logger = null;
+      let logger2 = null;
       if (prevLogger) {
         opts.logger = void 0;
         opts.genReqId = void 0;
-        logger = prevLogger.child({}, opts);
+        logger2 = prevLogger.child({}, opts);
         opts.logger = prevLogger;
         opts.genReqId = prevGenReqId;
       } else {
         if (opts.transport && !opts.transport.caller) {
           opts.transport.caller = getCallerFile();
         }
-        logger = pino2(opts, stream);
+        logger2 = pino2(opts, stream);
       }
-      return logger;
+      return logger2;
     }
     function reqIdGenFactory(func) {
       if (typeof func === "function") return func;
@@ -52912,6 +52912,24 @@ var runPreflight = async (probot, carson2, repository) => {
   return true;
 };
 
+// src/logger.ts
+var Logger = class {
+  #root = null;
+  init(root) {
+    this.#root = root;
+  }
+  reset() {
+    this.#root = null;
+  }
+  for(name) {
+    if (this.#root === null) {
+      throw new Error("Logger has not been initialized. Call logger.init(probot.log) first.");
+    }
+    return this.#root.child({ name });
+  }
+};
+var logger = new Logger();
+
 // src/scheduled.ts
 var ScheduledRegistrar = class {
   #handlers = [];
@@ -52958,9 +52976,11 @@ var Carson = class _Carson {
     this.#subscribers = subscribers;
   }
   run(probot) {
-    probot.log.info(`${_Carson.DISPLAY_NAME} starting`);
+    logger.init(probot.log);
+    const log = logger.for("carson");
+    log.info(`${_Carson.DISPLAY_NAME} starting`);
     for (const subscriber of this.#subscribers) {
-      probot.log.info(`Registering subscriber: ${subscriber.id}`);
+      log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);
     }
@@ -53815,22 +53835,22 @@ async function verifyWithFallback(secret, payload, signature, additionalSecrets)
 }
 
 // node_modules/@octokit/webhooks/dist-bundle/index.js
-var createLogger = (logger = {}) => {
-  if (typeof logger.debug !== "function") {
-    logger.debug = () => {
+var createLogger = (logger2 = {}) => {
+  if (typeof logger2.debug !== "function") {
+    logger2.debug = () => {
     };
   }
-  if (typeof logger.info !== "function") {
-    logger.info = () => {
+  if (typeof logger2.info !== "function") {
+    logger2.info = () => {
     };
   }
-  if (typeof logger.warn !== "function") {
-    logger.warn = console.warn.bind(console);
+  if (typeof logger2.warn !== "function") {
+    logger2.warn = console.warn.bind(console);
   }
-  if (typeof logger.error !== "function") {
-    logger.error = console.error.bind(console);
+  if (typeof logger2.error !== "function") {
+    logger2.error = console.error.bind(console);
   }
-  return logger;
+  return logger2;
 };
 var emitterEventNames = [
   "branch_protection_configuration",
@@ -56059,20 +56079,20 @@ var noop2 = () => {
 };
 var consoleWarn = console.warn.bind(console);
 var consoleError = console.error.bind(console);
-function createLogger2(logger = {}) {
-  if (typeof logger.debug !== "function") {
-    logger.debug = noop2;
+function createLogger2(logger2 = {}) {
+  if (typeof logger2.debug !== "function") {
+    logger2.debug = noop2;
   }
-  if (typeof logger.info !== "function") {
-    logger.info = noop2;
+  if (typeof logger2.info !== "function") {
+    logger2.info = noop2;
   }
-  if (typeof logger.warn !== "function") {
-    logger.warn = consoleWarn;
+  if (typeof logger2.warn !== "function") {
+    logger2.warn = consoleWarn;
   }
-  if (typeof logger.error !== "function") {
-    logger.error = consoleError;
+  if (typeof logger2.error !== "function") {
+    logger2.error = consoleError;
   }
-  return logger;
+  return logger2;
 }
 var userAgentTrail = `octokit-core.js/${VERSION5} ${getUserAgent()}`;
 var Octokit = class {
@@ -63870,13 +63890,15 @@ var main = async () => {
     handlerFailed = true;
   });
   await probot.load(app_default);
+  const log = logger.for("carson");
   if (!await runPreflight(probot, carson, repository)) {
     return;
   }
   if (appIdentity.current !== null) {
-    probot.log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
+    log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
   if (eventName === "schedule") {
+    log.info("Received schedule");
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
     if (result.failed) {
       handlerFailed = true;
@@ -63891,6 +63913,10 @@ var main = async () => {
     const { owner, repo } = parsed;
     const appOctokit = await probot.auth();
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    const action = payload.action;
+    const eventLabel = typeof action === "string" ? `${name}.${action}` : name;
+    log.info(`Received ${eventLabel}`);
+    log.debug(`Resolved installation ${installation.id}`);
     const enrichedPayload = {
       ...payload,
       installation: { id: installation.id }
