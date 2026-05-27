@@ -299,7 +299,7 @@ describe('runPreflight', () => {
     });
     const carson = new Carson([
       new StubSubscriber('s1', { issues: 'read' }),
-      new StubSubscriber('s2', { admin_huge: 'write' }),
+      new StubSubscriber('s2', { actions: 'write' }),
     ]);
     const ok = await runPreflight(probot, carson, 'acme/widgets');
 

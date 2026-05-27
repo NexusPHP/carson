@@ -1,11 +1,13 @@
 import { type CarsonConfig, subscriberSettings } from './configuration/schema.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
+import type { components } from '@octokit/openapi-types';
 import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
 import type { z } from 'zod';
 
 export type PermissionLevel = 'read' | 'write' | 'admin';
-export type RequiredPermissions = Readonly<Record<string, PermissionLevel>>;
+export type PermissionKey = keyof NonNullable<components['schemas']['app-permissions']>;
+export type RequiredPermissions = Readonly<Partial<Record<PermissionKey, PermissionLevel>>>;
 
 export interface EnabledSettings<T> {
   config: CarsonConfig;
