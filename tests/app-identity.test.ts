@@ -1,43 +1,43 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getAppIdentity, getAppLogin, getAppName, getAppSlug, resetAppIdentity, setAppIdentity } from '../src/app-identity.js';
+import { appIdentity } from '../src/app-identity.js';
 
 describe('app-identity', () => {
   afterEach(() => {
-    resetAppIdentity();
+    appIdentity.reset();
   });
 
   it('returns null when no identity has been set', () => {
-    expect(getAppIdentity()).toBeNull();
+    expect(appIdentity.current).toBeNull();
   });
 
   it('returns "Carson" as the default app name when no identity has been set', () => {
-    expect(getAppName()).toBe('Carson');
+    expect(appIdentity.name).toBe('Carson');
   });
 
   it('returns "carson" as the default app slug when no identity has been set', () => {
-    expect(getAppSlug()).toBe('carson');
+    expect(appIdentity.slug).toBe('carson');
   });
 
   it('returns "carson[bot]" as the default app login when no identity has been set', () => {
-    expect(getAppLogin()).toBe('carson[bot]');
+    expect(appIdentity.login).toBe('carson[bot]');
   });
 
-  it('exposes the configured identity after setAppIdentity', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
+  it('exposes the configured identity after set', () => {
+    appIdentity.set({ name: 'Carson @ acme', slug: 'carson-acme' });
 
-    expect(getAppIdentity()).toEqual({ name: 'Carson @ acme', slug: 'carson-acme' });
-    expect(getAppName()).toBe('Carson @ acme');
-    expect(getAppSlug()).toBe('carson-acme');
-    expect(getAppLogin()).toBe('carson-acme[bot]');
+    expect(appIdentity.current).toEqual({ name: 'Carson @ acme', slug: 'carson-acme' });
+    expect(appIdentity.name).toBe('Carson @ acme');
+    expect(appIdentity.slug).toBe('carson-acme');
+    expect(appIdentity.login).toBe('carson-acme[bot]');
   });
 
   it('clears the cached identity on reset', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
-    resetAppIdentity();
+    appIdentity.set({ name: 'Carson @ acme', slug: 'carson-acme' });
+    appIdentity.reset();
 
-    expect(getAppIdentity()).toBeNull();
-    expect(getAppName()).toBe('Carson');
-    expect(getAppSlug()).toBe('carson');
-    expect(getAppLogin()).toBe('carson[bot]');
+    expect(appIdentity.current).toBeNull();
+    expect(appIdentity.name).toBe('Carson');
+    expect(appIdentity.slug).toBe('carson');
+    expect(appIdentity.login).toBe('carson[bot]');
   });
 });

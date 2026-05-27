@@ -38188,14 +38188,28 @@ function warning(message, properties = {}) {
 }
 
 // src/app-identity.ts
-var cached = null;
-var setAppIdentity = (identity) => {
-  cached = identity;
+var AppIdentity = class {
+  #cached = null;
+  set(data) {
+    this.#cached = data;
+  }
+  reset() {
+    this.#cached = null;
+  }
+  get current() {
+    return this.#cached;
+  }
+  get name() {
+    return this.#cached?.name ?? "Carson";
+  }
+  get slug() {
+    return this.#cached?.slug ?? "carson";
+  }
+  get login() {
+    return `${this.slug}[bot]`;
+  }
 };
-var getAppIdentity = () => cached;
-var getAppName = () => cached?.name ?? "Carson";
-var getAppSlug = () => cached?.slug ?? "carson";
-var getAppLogin = () => `${getAppSlug()}[bot]`;
+var appIdentity = new AppIdentity();
 
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -38812,7 +38826,7 @@ __export(util_exports, {
   assignProp: () => assignProp,
   base64ToUint8Array: () => base64ToUint8Array,
   base64urlToUint8Array: () => base64urlToUint8Array,
-  cached: () => cached2,
+  cached: () => cached,
   captureStackTrace: () => captureStackTrace,
   cleanEnum: () => cleanEnum,
   cleanRegex: () => cleanRegex,
@@ -38889,7 +38903,7 @@ function jsonStringifyReplacer(_, value) {
     return value.toString();
   return value;
 }
-function cached2(getter) {
+function cached(getter) {
   const set3 = false;
   return {
     get value() {
@@ -38998,7 +39012,7 @@ var captureStackTrace = "captureStackTrace" in Error ? Error.captureStackTrace :
 function isObject(data) {
   return typeof data === "object" && data !== null && !Array.isArray(data);
 }
-var allowsEval = /* @__PURE__ */ cached2(() => {
+var allowsEval = /* @__PURE__ */ cached(() => {
   if (globalConfig.jitless) {
     return false;
   }
@@ -41221,7 +41235,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
       }
     });
   }
-  const _normalized = cached2(() => normalizeDef(def));
+  const _normalized = cached(() => normalizeDef(def));
   defineLazy(inst._zod, "propValues", () => {
     const shape = def.shape;
     const propValues = {};
@@ -41273,7 +41287,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
 var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) => {
   $ZodObject.init(inst, def);
   const superParse = inst._zod.parse;
-  const _normalized = cached2(() => normalizeDef(def));
+  const _normalized = cached(() => normalizeDef(def));
   const generateFastpass = (shape) => {
     const doc = new Doc(["shape", "payload", "ctx"]);
     const normalized = _normalized.value;
@@ -41535,7 +41549,7 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
     }
     return propValues;
   });
-  const disc = cached2(() => {
+  const disc = cached(() => {
     const opts = def.options;
     const map2 = /* @__PURE__ */ new Map();
     for (const o of opts) {
@@ -52872,11 +52886,7 @@ var runPreflight = async (probot, carson2, repository) => {
     probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
     return true;
   }
-  const identity = {
-    name: app.name ?? "Carson",
-    slug: app.slug ?? "carson"
-  };
-  setAppIdentity(identity);
+  appIdentity.set({ name: app.name, slug: app.slug });
   let installationId;
   let installationPermissions;
   try {
@@ -52896,7 +52906,7 @@ var runPreflight = async (probot, carson2, repository) => {
   const appPermissions = app.permissions ?? {};
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
-    setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
+    setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
     return false;
   }
   return true;
@@ -52998,9 +53008,9 @@ var findCarsonComment = (comments, options2) => {
 // src/template.ts
 var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
 var universalContext = () => ({
-  app_name: getAppName(),
-  app_slug: getAppSlug(),
-  app_login: getAppLogin()
+  app_name: appIdentity.name,
+  app_slug: appIdentity.slug,
+  app_login: appIdentity.login
 });
 var interpolate = (template, context) => {
   const merged = { ...universalContext(), ...context };
@@ -63853,9 +63863,8 @@ var main = async () => {
   if (!await runPreflight(probot, carson, repository)) {
     return;
   }
-  const identity = getAppIdentity();
-  if (identity !== null) {
-    probot.log.info(`Running as ${identity.slug}[bot] ("${identity.name}")`);
+  if (appIdentity.current !== null) {
+    probot.log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
   if (eventName === "schedule") {
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);

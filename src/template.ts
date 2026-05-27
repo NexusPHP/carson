@@ -1,4 +1,4 @@
-import { getAppLogin, getAppName, getAppSlug } from './app-identity.js';
+import { appIdentity } from './app-identity.js';
 
 export type TemplateContext = Readonly<Record<string, string | number>>;
 
@@ -10,9 +10,9 @@ const CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
 // Context entries available to every subscriber's templates. Per-call context
 // passed to interpolate() wins on key conflict, so a subscriber can override.
 const universalContext = (): TemplateContext => ({
-  app_name: getAppName(),
-  app_slug: getAppSlug(),
-  app_login: getAppLogin(),
+  app_name: appIdentity.name,
+  app_slug: appIdentity.slug,
+  app_login: appIdentity.login,
 });
 
 export const interpolate = (template: string, context: TemplateContext): string => {

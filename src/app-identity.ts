@@ -1,35 +1,38 @@
 // Cached identity of the GitHub App the action is currently running as.
-// Set once by the preflight after a successful `apps.getAuthenticated` call,
-// then read by subscribers that interpolate the App name into messages and
-// by the entrypoint for traceability logging. The numeric App ID is omitted
-// because it is sensitive when paired with the App PEM.
+// The numeric App ID is intentionally omitted because it is sensitive when
+// paired with the App PEM.
 
-export interface AppIdentity {
-  readonly name: string;
-  readonly slug: string;
+export interface AppIdentityData {
+  readonly name: string | null | undefined;
+  readonly slug: string | null | undefined;
 }
 
-let cached: AppIdentity | null = null;
+class AppIdentity {
+  #cached: AppIdentityData | null = null;
 
-export const setAppIdentity = (identity: AppIdentity): void => {
-  cached = identity;
-};
+  public set(data: AppIdentityData): void {
+    this.#cached = data;
+  }
 
-export const getAppIdentity = (): AppIdentity | null => cached;
+  public reset(): void {
+    this.#cached = null;
+  }
 
-// Returns the App's display name with a sensible default for environments
-// where the identity has not been resolved (preflight skipped, tests, etc.).
-export const getAppName = (): string => cached?.name ?? 'Carson';
+  public get current(): AppIdentityData | null {
+    return this.#cached;
+  }
 
-// Returns the App's URL-safe slug, used in the App settings URL
-// (`https://github.com/apps/<slug>`). Falls back to the manifest default.
-export const getAppSlug = (): string => cached?.slug ?? 'carson';
+  public get name(): string {
+    return this.#cached?.name ?? 'Carson';
+  }
 
-// Returns the bot user's GitHub login: `<slug>[bot]`. This is the author of
-// comments and check runs Carson posts, and is suffixed because GitHub
-// distinguishes bot accounts from human accounts that way.
-export const getAppLogin = (): string => `${getAppSlug()}[bot]`;
+  public get slug(): string {
+    return this.#cached?.slug ?? 'carson';
+  }
 
-export const resetAppIdentity = (): void => {
-  cached = null;
-};
+  public get login(): string {
+    return `${this.slug}[bot]`;
+  }
+}
+
+export const appIdentity = new AppIdentity();

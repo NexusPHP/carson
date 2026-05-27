@@ -2,9 +2,9 @@ import * as core from '@actions/core';
 import app, { carson } from './app.js';
 import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
+import { appIdentity } from './app-identity.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
-import { getAppIdentity } from './app-identity.js';
 import { readFile } from 'node:fs/promises';
 import { runPreflight } from './preflight.js';
 
@@ -62,10 +62,8 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  const identity = getAppIdentity();
-
-  if (identity !== null) {
-    probot.log.info(`Running as ${identity.slug}[bot] ("${identity.name}")`);
+  if (appIdentity.current !== null) {
+    probot.log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
 
   if (eventName === 'schedule') {

@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { type AppIdentity, setAppIdentity } from './app-identity.js';
+import { appIdentity, type AppIdentityData } from './app-identity.js';
 import { createConfigLoadable, loadConfig } from './configuration/cache.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { type PermissionLevel, type RequiredPermissions, type Subscriber } from './subscriber.js';
@@ -62,7 +62,7 @@ const remediationFor = (m: MissingPermission): string =>
 export const formatMissingPermissionsError = (
   missing: readonly MissingPermission[],
   appHtmlUrl: string | undefined,
-  app: AppIdentity | undefined,
+  app: AppIdentityData | null | undefined,
 ): string => {
   const header = `${app?.name ?? 'Carson'} is missing required GitHub App permissions:`;
   const body = missing.map((m) => {
@@ -101,11 +101,7 @@ export const runPreflight = async (
     return true;
   }
 
-  const identity: AppIdentity = {
-    name: app.name ?? 'Carson',
-    slug: app.slug ?? 'carson',
-  };
-  setAppIdentity(identity);
+  appIdentity.set({ name: app.name, slug: app.slug });
 
   let installationId: number;
   let installationPermissions: Readonly<Record<string, PermissionLevel>>;
@@ -131,7 +127,7 @@ export const runPreflight = async (
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
 
   if (missing.length > 0) {
-    core.setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
+    core.setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
     return false;
   }
 

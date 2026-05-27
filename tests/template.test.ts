@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetAppIdentity, setAppIdentity } from '../src/app-identity.js';
+import { appIdentity } from '../src/app-identity.js';
 import { interpolate } from '../src/template.js';
 
 describe('interpolate', () => {
   afterEach(() => {
-    resetAppIdentity();
+    appIdentity.reset();
   });
 
   it('substitutes a single placeholder from the context', () => {
@@ -48,7 +48,7 @@ describe('interpolate', () => {
   });
 
   it('injects {{app_name}}, {{app_slug}}, and {{app_login}} from the cached App identity', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
+    appIdentity.set({ name: 'Carson @ acme', slug: 'carson-acme' });
 
     expect(interpolate('{{app_name}} ({{app_slug}}, {{app_login}})', {}))
       .toBe('Carson @ acme (carson-acme, carson-acme[bot])');
@@ -60,7 +60,7 @@ describe('interpolate', () => {
   });
 
   it('lets per-call context override the injected universal context', () => {
-    setAppIdentity({ name: 'Carson @ acme', slug: 'carson-acme' });
+    appIdentity.set({ name: 'Carson @ acme', slug: 'carson-acme' });
 
     expect(interpolate(
       '{{app_name}} / {{app_slug}} / {{app_login}}',

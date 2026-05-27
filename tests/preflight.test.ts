@@ -1,8 +1,8 @@
 import * as core from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { findMissingPermissions, formatMissingPermissionsError, runPreflight } from '../src/preflight.js';
-import { getAppName, resetAppIdentity } from '../src/app-identity.js';
 import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
+import { appIdentity } from '../src/app-identity.js';
 import { Carson } from '../src/carson.js';
 import type { Probot } from 'probot';
 import { resetConfigCache } from '../src/configuration/cache.js';
@@ -165,7 +165,7 @@ describe('runPreflight', () => {
 
   beforeEach(() => {
     resetConfigCache();
-    resetAppIdentity();
+    appIdentity.reset();
     setFailed.mockClear();
   });
 
@@ -249,7 +249,7 @@ describe('runPreflight', () => {
     const ok = await runPreflight(probot, carson, 'acme/widgets');
 
     expect(ok).toBe(true);
-    expect(getAppName()).toBe('Carson');
+    expect(appIdentity.name).toBe('Carson');
   });
 
   it('treats a missing permissions field on the App or installation as no permissions', async () => {
