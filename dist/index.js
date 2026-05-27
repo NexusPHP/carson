@@ -63812,10 +63812,21 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
 
 // src/index.ts
 import { readFile } from "node:fs/promises";
+var LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
+var isLogLevel = (value) => LOG_LEVELS.includes(value);
 var main = async () => {
   const appId = getInput("app_id", { required: true });
   const privateKey = getInput("private_key", { required: true });
   const webhookSecret = getInput("webhook_secret");
+  const logLevelInput = getInput("log_level");
+  let logLevel;
+  if (logLevelInput.length > 0) {
+    if (!isLogLevel(logLevelInput)) {
+      setFailed(`log_level must be one of: ${LOG_LEVELS.join(", ")}. Got: "${logLevelInput}"`);
+      return;
+    }
+    logLevel = logLevelInput;
+  }
   const eventName = process.env["GITHUB_EVENT_NAME"];
   const eventPath = process.env["GITHUB_EVENT_PATH"];
   const runId = process.env["GITHUB_RUN_ID"];
@@ -63829,7 +63840,8 @@ var main = async () => {
     overrides: {
       appId,
       privateKey,
-      ...webhookSecret.length > 0 ? { secret: webhookSecret } : {}
+      ...webhookSecret.length > 0 ? { secret: webhookSecret } : {},
+      ...logLevel !== void 0 ? { logLevel } : {}
     }
   });
   let handlerFailed = false;

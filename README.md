@@ -126,6 +126,7 @@ Carson reads its configuration from the **default branch only**, so pull request
 | `app_id` | yes | The GitHub App ID. |
 | `private_key` | yes | The GitHub App private key (PEM contents). |
 | `webhook_secret` | no | The GitHub App webhook secret. |
+| `log_level` | no | One of `trace`, `debug`, `info`, `warn`, `error`, `fatal`. Defaults to `warn`. Set to `info` to see startup identity, subscriber action logs, and other normal-flow output. The `LOG_LEVEL` env var works as a fallback if this input is not set. |
 
 ## Available subscribers
 

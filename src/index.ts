@@ -8,10 +8,27 @@ import { getAppIdentity } from './app-identity.js';
 import { readFile } from 'node:fs/promises';
 import { runPreflight } from './preflight.js';
 
+type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+const LOG_LEVELS: readonly LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+
+const isLogLevel = (value: string): value is LogLevel =>
+  (LOG_LEVELS as readonly string[]).includes(value);
+
 const main = async (): Promise<void> => {
   const appId = core.getInput('app_id', { required: true });
   const privateKey = core.getInput('private_key', { required: true });
   const webhookSecret = core.getInput('webhook_secret');
+  const logLevelInput = core.getInput('log_level');
+  let logLevel: LogLevel | undefined;
+
+  if (logLevelInput.length > 0) {
+    if (!isLogLevel(logLevelInput)) {
+      core.setFailed(`log_level must be one of: ${LOG_LEVELS.join(', ')}. Got: "${logLevelInput}"`);
+      return;
+    }
+
+    logLevel = logLevelInput;
+  }
 
   const eventName = process.env['GITHUB_EVENT_NAME'];
   const eventPath = process.env['GITHUB_EVENT_PATH'];
@@ -29,6 +46,7 @@ const main = async (): Promise<void> => {
       appId,
       privateKey,
       ...(webhookSecret.length > 0 ? { secret: webhookSecret } : {}),
+      ...(logLevel !== undefined ? { logLevel } : {}),
     },
   });
   let handlerFailed = false;
