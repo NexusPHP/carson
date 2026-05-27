@@ -63844,10 +63844,22 @@ var main = async () => {
     }
   } else {
     const name = eventName === "pull_request_target" ? "pull_request" : eventName;
+    const parsed = parseRepository(repository);
+    if (parsed === null) {
+      setFailed(INVALID_REPOSITORY_MESSAGE);
+      return;
+    }
+    const { owner, repo } = parsed;
+    const appOctokit = await probot.auth();
+    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    const enrichedPayload = {
+      ...payload,
+      installation: { id: installation.id }
+    };
     await probot.receive({
       id: runId,
       name,
-      payload
+      payload: enrichedPayload
     });
   }
   if (handlerFailed) {

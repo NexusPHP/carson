@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import app, { carson } from './app.js';
 import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
+import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 import { getAppIdentity } from './app-identity.js';
@@ -59,10 +60,26 @@ const main = async (): Promise<void> => {
     // pull_request_target has the same payload as pull_request. Route both
     // to the same handlers so subscribers register one event name.
     const name = eventName === 'pull_request_target' ? 'pull_request' : eventName;
+    // GITHUB_EVENT_PATH payloads omit the installation key that Probot needs
+    // to mint a per-installation token, so resolve it from the repository.
+    const parsed = parseRepository(repository);
+
+    if (parsed === null) {
+      core.setFailed(INVALID_REPOSITORY_MESSAGE);
+      return;
+    }
+
+    const { owner, repo } = parsed;
+    const appOctokit = await probot.auth();
+    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    const enrichedPayload = {
+      ...(payload as Record<string, unknown>),
+      installation: { id: installation.id },
+    };
     await probot.receive({
       id: runId,
       name,
-      payload,
+      payload: enrichedPayload,
     } as EmitterWebhookEvent);
   }
 
