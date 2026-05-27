@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Probot, ProbotOctokit } from 'probot';
 import app from '../../src/app.js';
@@ -520,6 +521,39 @@ describe('welcome subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('falls back to defaults and emits a warning when settings.welcome is malformed', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    first_time:',
+      '      pull_request: 42', // invalid: not a string
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Thanks for opening your first pull request, @octocat!');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-malformed-settings',
+      name: 'pull_request',
+      payload: prOpenedPayload() as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid settings for subscriber "welcome"'),
+      { file: '.github/carson.yml' },
+    );
   });
 
   it('does nothing when carson.yml fails schema validation', async () => {

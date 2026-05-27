@@ -179,7 +179,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     const { owner, repo } = context.repo();
 
     if (existing === null) {
-      const settings = subscriberSettings(config, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,

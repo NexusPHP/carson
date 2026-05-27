@@ -39,7 +39,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings) ?? {};
+    const settings = subscriberSettings(config, this.id, Settings, scheduled.log) ?? {};
     const days = settings.days ?? DEFAULT_DAYS;
     const reason = settings.reason ?? DEFAULT_REASON;
     const exemptLabels = new Set(settings.exempt_labels ?? []);

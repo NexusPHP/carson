@@ -80,7 +80,7 @@ export class WelcomeSubscriber extends Subscriber {
         return;
       }
 
-      const settings = subscriberSettings(config, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
       const bucket = bucketFor(settings, context.payload.pull_request.author_association);
 
       if (bucket === null) {
@@ -116,7 +116,7 @@ export class WelcomeSubscriber extends Subscriber {
         return;
       }
 
-      const settings = subscriberSettings(config, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
       const bucket = bucketFor(settings, issue.author_association);
 
       if (bucket === null) {

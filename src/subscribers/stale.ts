@@ -68,7 +68,7 @@ export class StaleSubscriber extends Subscriber {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings) ?? {};
+    const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
     const labelNames = (rawLabels ?? [])
       .map((label) => label.name)
@@ -120,7 +120,7 @@ export class StaleSubscriber extends Subscriber {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings) ?? {};
+    const settings = subscriberSettings(config, this.id, Settings, scheduled.log) ?? {};
     const daysUntilStale = settings.days_until_stale ?? DEFAULT_DAYS_STALE;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;

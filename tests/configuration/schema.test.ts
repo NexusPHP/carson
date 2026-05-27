@@ -1,5 +1,6 @@
+import * as core from '@actions/core';
 import { CarsonConfigSchema, subscriberSettings } from '../../src/configuration/schema.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 describe('CarsonConfigSchema', () => {
@@ -65,12 +66,34 @@ describe('subscriberSettings', () => {
     expect(result).toBeUndefined();
   });
 
-  it('throws when the subscriber slice fails validation', () => {
+  it('returns undefined and emits a warning when the subscriber slice fails validation', () => {
     const bad = {
       version: 1 as const,
       subscribers: ['welcome'],
       settings: { welcome: { pull_request: 42 } },
     };
-    expect(() => subscriberSettings(bad, 'welcome', schema)).toThrow();
+
+    const result = subscriberSettings(bad, 'welcome', schema);
+
+    expect(result).toBeUndefined();
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid settings for subscriber "welcome"'),
+      { file: '.github/carson.yml' },
+    );
+  });
+
+  it('also forwards the validation error to the provided logger', () => {
+    const bad = {
+      version: 1 as const,
+      subscribers: ['welcome'],
+      settings: { welcome: { pull_request: 42 } },
+    };
+    const warn = vi.fn();
+    const log = { warn } as never;
+
+    const result = subscriberSettings(bad, 'welcome', schema, log);
+
+    expect(result).toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
   });
 });

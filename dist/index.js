@@ -52749,22 +52749,32 @@ function date4(params) {
 config(en_default());
 
 // src/configuration/schema.ts
+var CONFIG_PATH = ".github/carson.yml";
 var CarsonConfigSchema = external_exports.object({
   version: external_exports.literal(1),
   subscribers: external_exports.array(external_exports.string()),
   settings: external_exports.record(external_exports.string(), external_exports.unknown()).optional()
 });
-var subscriberSettings = (config3, subscriberId, schema) => {
+var subscriberSettings = (config3, subscriberId, schema, log) => {
   const raw = config3.settings?.[subscriberId];
   if (raw === void 0) {
     return void 0;
   }
-  return schema.parse(raw);
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    const message = `Invalid settings for subscriber "${subscriberId}" in carson.yml. Falling back to defaults.`;
+    if (log !== void 0) {
+      log.warn({ issues: parsed.error.issues }, message);
+    }
+    warning(message, { file: CONFIG_PATH });
+    return void 0;
+  }
+  return parsed.data;
 };
 
 // src/configuration/cache.ts
 var CONFIG_FILE = "carson.yml";
-var CONFIG_PATH = `.github/${CONFIG_FILE}`;
+var CONFIG_PATH2 = `.github/${CONFIG_FILE}`;
 var cache = /* @__PURE__ */ new Map();
 var registeredIds = [];
 var setRegisteredSubscribers = (ids) => {
@@ -52784,7 +52794,7 @@ var fetchAndParse = async (context) => {
     if (!registeredIds.includes(id)) {
       const message = `${CONFIG_FILE} lists unknown subscriber "${id}"`;
       context.log.warn(message);
-      warning(message, { file: CONFIG_PATH });
+      warning(message, { file: CONFIG_PATH2 });
     }
   }
   return parsed.data;
@@ -52984,7 +52994,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
   async #handleConflict(context, pr, config3, existing) {
     const { owner, repo } = context.repo();
     if (existing === null) {
-      const settings = subscriberSettings(config3, this.id, Settings) ?? {};
+      const settings = subscriberSettings(config3, this.id, Settings, context.log) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,
@@ -53061,7 +53071,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings2) ?? {};
+    const settings = subscriberSettings(config3, this.id, Settings2, scheduled.log) ?? {};
     const days = settings.days ?? DEFAULT_DAYS;
     const reason = settings.reason ?? DEFAULT_REASON;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
@@ -53152,7 +53162,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings3) ?? {};
+    const settings = subscriberSettings(config3, this.id, Settings3, context.log) ?? {};
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
     const pr = context.payload.pull_request;
@@ -53240,7 +53250,7 @@ var StaleSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings4) ?? {};
+    const settings = subscriberSettings(config3, this.id, Settings4, context.log) ?? {};
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
     const labelNames = (rawLabels ?? []).map((label) => label.name).filter((name) => name !== void 0);
     if (!labelNames.includes(staleLabel)) {
@@ -53278,7 +53288,7 @@ var StaleSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings4) ?? {};
+    const settings = subscriberSettings(config3, this.id, Settings4, scheduled.log) ?? {};
     const daysUntilStale = settings.days_until_stale ?? DEFAULT_DAYS_STALE;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
@@ -53412,7 +53422,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config3 === null) {
         return;
       }
-      const settings = subscriberSettings(config3, this.id, Settings5) ?? {};
+      const settings = subscriberSettings(config3, this.id, Settings5, context.log) ?? {};
       const bucket = bucketFor(settings, context.payload.pull_request.author_association);
       if (bucket === null) {
         return;
@@ -53438,7 +53448,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (config3 === null) {
         return;
       }
-      const settings = subscriberSettings(config3, this.id, Settings5) ?? {};
+      const settings = subscriberSettings(config3, this.id, Settings5, context.log) ?? {};
       const bucket = bucketFor(settings, issue3.author_association);
       if (bucket === null) {
         return;

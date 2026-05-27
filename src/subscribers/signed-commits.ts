@@ -56,7 +56,7 @@ export class SignedCommitsSubscriber extends Subscriber {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings) ?? {};
+    const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
 

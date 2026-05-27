@@ -5,6 +5,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/fixtures/**/*'],
     setupFiles: ['tests/setup.ts'],
+    clearMocks: true,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
