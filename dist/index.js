@@ -53084,6 +53084,11 @@ ${COMMENT_MARKER}`;
   }
 };
 
+// src/github/labels.ts
+var labelNames = (labels) => {
+  return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
+};
+
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
 var Settings2 = external_exports.object({
@@ -53135,8 +53140,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       if (new Date(issue3.closed_at).getTime() > cutoff) {
         continue;
       }
-      const labelNames = issue3.labels.map((label) => typeof label === "string" ? label : label.name);
-      if (labelNames.some((name) => name !== void 0 && exemptLabels.has(name))) {
+      if (labelNames(issue3.labels).some((name) => exemptLabels.has(name))) {
         continue;
       }
       if (settings.comment !== void 0) {
@@ -53279,8 +53283,7 @@ var StaleSubscriber = class extends Subscriber {
     }
     const { settings } = enabled;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
-    const labelNames = (rawLabels ?? []).map((label) => label.name).filter((name) => name !== void 0);
-    if (!labelNames.includes(staleLabel)) {
+    if (!labelNames(rawLabels).includes(staleLabel)) {
       return;
     }
     const { owner, repo } = context.repo();
@@ -53335,12 +53338,12 @@ var StaleSubscriber = class extends Subscriber {
     let staled = 0;
     let closed = 0;
     for (const item of items) {
-      const labelNames = item.labels.map((label) => typeof label === "string" ? label : label.name).filter((name) => name !== void 0);
-      if (labelNames.some((name) => exemptLabels.has(name))) {
+      const names = labelNames(item.labels);
+      if (names.some((name) => exemptLabels.has(name))) {
         continue;
       }
       const updatedAt = new Date(item.updated_at).getTime();
-      const isStale = labelNames.includes(staleLabel);
+      const isStale = names.includes(staleLabel);
       const kind = item.pull_request === void 0 ? "issue" : "pull request";
       const context = {
         number: item.number,

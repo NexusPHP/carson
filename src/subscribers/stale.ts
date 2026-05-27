@@ -3,6 +3,7 @@ import { findCarsonComment, minimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
+import { labelNames } from '../github/labels.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -60,11 +61,8 @@ export class StaleSubscriber extends Subscriber {
 
     const { settings } = enabled;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
-    const labelNames = (rawLabels ?? [])
-      .map((label) => label.name)
-      .filter((name): name is string => name !== undefined);
 
-    if (!labelNames.includes(staleLabel)) {
+    if (!labelNames(rawLabels).includes(staleLabel)) {
       return;
     }
 
@@ -130,16 +128,14 @@ export class StaleSubscriber extends Subscriber {
     let closed = 0;
 
     for (const item of items) {
-      const labelNames = item.labels
-        .map((label) => (typeof label === 'string' ? label : label.name))
-        .filter((name): name is string => name !== undefined);
+      const names = labelNames(item.labels);
 
-      if (labelNames.some((name) => exemptLabels.has(name))) {
+      if (names.some((name) => exemptLabels.has(name))) {
         continue;
       }
 
       const updatedAt = new Date(item.updated_at).getTime();
-      const isStale = labelNames.includes(staleLabel);
+      const isStale = names.includes(staleLabel);
       const kind = item.pull_request === undefined ? 'issue' : 'pull request';
 
       const context: Record<string, string | number> = {

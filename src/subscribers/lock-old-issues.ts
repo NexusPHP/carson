@@ -1,6 +1,7 @@
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
+import { labelNames } from '../github/labels.js';
 import { z } from 'zod';
 
 const LOCK_REASONS = ['off-topic', 'too heated', 'resolved', 'spam'] as const;
@@ -67,9 +68,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
         continue;
       }
 
-      const labelNames = issue.labels.map((label) => (typeof label === 'string' ? label : label.name));
-
-      if (labelNames.some((name) => name !== undefined && exemptLabels.has(name))) {
+      if (labelNames(issue.labels).some((name) => exemptLabels.has(name))) {
         continue;
       }
 
