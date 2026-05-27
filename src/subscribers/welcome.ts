@@ -65,7 +65,7 @@ const messageFor = (settings: ParsedSettings, bucket: BucketKey, event: 'pull_re
 export class WelcomeSubscriber extends Subscriber {
   public readonly id = 'welcome';
   public readonly description = 'Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.';
-  public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
+  public readonly requiredPermissions: RequiredPermissions = { issues: 'write', pull_requests: 'write' };
 
   public override register(probot: Probot): void {
     probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {

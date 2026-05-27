@@ -53034,7 +53034,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
   description = "Comments on PRs with merge conflicts and marks the comment resolved when fixed.";
   requiredPermissions = {
     issues: "write",
-    pull_requests: "read"
+    pull_requests: "write"
   };
   register(probot) {
     probot.on(PR_EVENTS, async (context) => {
@@ -53328,7 +53328,7 @@ var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
-  requiredPermissions = { issues: "write" };
+  requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
     probot.on(["issue_comment.created", "issues.edited"], async (context) => {
       const ctx = context;
@@ -53513,7 +53513,7 @@ var messageFor = (settings, bucket, event) => {
 var WelcomeSubscriber = class extends Subscriber {
   id = "welcome";
   description = "Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.";
-  requiredPermissions = { issues: "write" };
+  requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const enabled = await this.loadEnabledSettings(context, Settings5);

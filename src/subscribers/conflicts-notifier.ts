@@ -68,7 +68,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   public readonly description = 'Comments on PRs with merge conflicts and marks the comment resolved when fixed.';
   public readonly requiredPermissions: RequiredPermissions = {
     issues: 'write',
-    pull_requests: 'read',
+    pull_requests: 'write',
   };
 
   public override register(probot: Probot): void {

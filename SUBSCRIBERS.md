@@ -58,7 +58,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 Posts a comment on a pull request that has merge conflicts with its base branch, and marks the comment as resolved when the conflict is fixed.
 
 **Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `push`
-**Permissions**: `issues: write`, `pull_requests: read`
+**Permissions**: `issues: write`, `pull_requests: write`
 
 On `push` to a branch (e.g. `main` after a merge), Carson lists all open PRs targeting that branch and runs the per-PR check on each one. This catches the "PR was clean, base advanced, PR is now stale" case that pure `pull_request.*` triggers miss. Tag pushes (`refs/tags/*`) are ignored. For Carson to receive push events, your `.github/workflows/carson.yml` needs `on: push:` in its triggers.
 
@@ -199,7 +199,7 @@ settings:
 Marks inactive issues and pull requests as stale, then closes them after a further grace period.
 
 **Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
-**Permissions**: `issues: write`
+**Permissions**: `issues: write`, `pull_requests: write`
 
 On each scheduled run, the subscriber walks every open issue and PR. For each:
 
@@ -281,7 +281,7 @@ settings:
 Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.
 
 **Triggers**: `pull_request.opened`, `issues.opened`
-**Permissions**: `issues: write`
+**Permissions**: `issues: write`, `pull_requests: write`
 
 Carson resolves the author's `author_association` to one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
 

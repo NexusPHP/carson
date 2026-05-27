@@ -26,7 +26,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';
   public readonly description = 'Marks inactive issues and pull requests as stale, then closes them after a further grace period.';
-  public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
+  public readonly requiredPermissions: RequiredPermissions = { issues: 'write', pull_requests: 'write' };
 
   public override register(probot: Probot): void {
     probot.on(['issue_comment.created', 'issues.edited'], async (context): Promise<void> => {
