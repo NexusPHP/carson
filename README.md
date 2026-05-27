@@ -106,8 +106,12 @@ subscribers:
   - welcome
 settings:
   welcome:
-    pull_request: "Thanks for the PR! A reviewer will be with you shortly."
-    issue: "Thanks for reporting this. We'll look into it."
+    first_time:
+      pull_request: "Thanks for your first PR, @{{user}}! A reviewer will be with you shortly."
+      issue: "Thanks for your first issue, @{{user}}! We'll look into it."
+    returning:
+      pull_request: "Thanks for the PR, @{{user}}!"
+      # `issue:` left unset, so returning contributors fall back to the default issue message.
 ```
 
 Carson reads its configuration from the **default branch only**, so pull requests cannot alter the bot's behavior by changing `carson.yml`.
@@ -128,7 +132,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
-- [**welcome**](SUBSCRIBERS.md#welcome): greets first-time contributors on their first pull request or issue.
+- [**welcome**](SUBSCRIBERS.md#welcome): greets contributors on pull requests and issues, with separate, configurable messages for first-time and returning contributors.
 
 ## Development
 

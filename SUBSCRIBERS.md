@@ -278,19 +278,26 @@ settings:
 
 ## welcome
 
-Greets first-time contributors on their first pull request or issue.
+Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.
 
 **Triggers**: `pull_request.opened`, `issues.opened`
 **Permissions**: `issues: write`
 
-Comments on a PR or issue when the author's `author_association` is `FIRST_TIMER` or `FIRST_TIME_CONTRIBUTOR`. Skips bots, repeat contributors, and ghost-user payloads.
+Carson resolves the author's `author_association` to one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
 
 ### Settings
 
-| Key | Type | Default |
-| --- | --- | --- |
-| `pull_request` | string | `Thanks for opening your first pull request, @{{user}}!` |
-| `issue` | string | `Thanks for opening your first issue, @{{user}}!` |
+`settings.welcome` has two parallel sub-objects, `first_time` and `returning`, each with the same shape:
+
+| Key | Type | `first_time` default | `returning` default |
+| --- | --- | --- | --- |
+| `pull_request` | string | `Thanks for opening your first pull request, @{{user}}!` | `Thanks for the pull request, @{{user}}!` |
+| `issue` | string | `Thanks for opening your first issue, @{{user}}!` | `Thanks for filing this, @{{user}}!` |
+| `author_association` | array | `[FIRST_TIMER, FIRST_TIME_CONTRIBUTOR]` | `[CONTRIBUTOR, MEMBER, COLLABORATOR, OWNER]` |
+
+`author_association` lets you narrow the set of [associations](https://docs.github.com/en/graphql/reference/enums#commentauthorassociation) each bucket reacts to. The values allowed in each bucket are constrained to its default list. The `first_time` bucket only accepts `FIRST_TIMER` and `FIRST_TIME_CONTRIBUTOR`. The `returning` bucket only accepts `CONTRIBUTOR`, `MEMBER`, `COLLABORATOR`, and `OWNER`. Listing a value outside the allowed set fails schema validation.
+
+Use an empty list (`author_association: []`) to disable a whole bucket. Associations that fall outside both bucket lists (notably `NONE` and `MANNEQUIN`, also any value you exclude via a narrowed list) get no greeting.
 
 ### Context
 
@@ -309,6 +316,10 @@ subscribers:
   - welcome
 settings:
   welcome:
-    pull_request: "Welcome @{{user}}! Thanks for opening {{title}} on {{repo}}."
-    issue: "Hi @{{user}}, thanks for filing your first issue."
+    first_time:
+      pull_request: "Welcome @{{user}}! Thanks for opening {{title}} on {{repo}}."
+      issue: "Hi @{{user}}, thanks for filing your first issue."
+    returning:
+      pull_request: "Thanks for the PR, @{{user}}!"
+      author_association: [CONTRIBUTOR, COLLABORATOR]
 ```

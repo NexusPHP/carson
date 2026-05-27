@@ -53354,24 +53354,58 @@ ${COMMENT_MARKER2}`
 };
 
 // src/subscribers/welcome.ts
-var Settings5 = external_exports.object({
+var FIRST_TIME_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
+var RETURNING_ASSOCIATIONS = ["CONTRIBUTOR", "MEMBER", "COLLABORATOR", "OWNER"];
+var FirstTimeBucket = external_exports.object({
   pull_request: external_exports.string().optional(),
-  issue: external_exports.string().optional()
+  issue: external_exports.string().optional(),
+  author_association: external_exports.array(external_exports.enum(FIRST_TIME_ASSOCIATIONS)).optional()
 });
-var DEFAULT_PR_MESSAGE = "Thanks for opening your first pull request, @{{user}}!";
-var DEFAULT_ISSUE_MESSAGE = "Thanks for opening your first issue, @{{user}}!";
-var FIRST_TIMER_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
-var isFirstTimer = (association) => FIRST_TIMER_ASSOCIATIONS.includes(association);
+var ReturningBucket = external_exports.object({
+  pull_request: external_exports.string().optional(),
+  issue: external_exports.string().optional(),
+  author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
+});
+var Settings5 = external_exports.object({
+  first_time: FirstTimeBucket.optional(),
+  returning: ReturningBucket.optional()
+});
+var DEFAULT_MESSAGES = {
+  first_time: {
+    pull_request: "Thanks for opening your first pull request, @{{user}}!",
+    issue: "Thanks for opening your first issue, @{{user}}!"
+  },
+  returning: {
+    pull_request: "Thanks for the pull request, @{{user}}!",
+    issue: "Thanks for filing this, @{{user}}!"
+  }
+};
+var DEFAULT_ASSOCIATIONS = {
+  first_time: FIRST_TIME_ASSOCIATIONS,
+  returning: RETURNING_ASSOCIATIONS
+};
+var associationsFor = (settings, bucket) => {
+  return settings[bucket]?.author_association ?? DEFAULT_ASSOCIATIONS[bucket];
+};
+var bucketFor = (settings, association) => {
+  if (associationsFor(settings, "first_time").includes(association)) {
+    return "first_time";
+  }
+  if (associationsFor(settings, "returning").includes(association)) {
+    return "returning";
+  }
+  return null;
+};
+var messageFor = (settings, bucket, event) => {
+  return settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+};
 var WelcomeSubscriber = class extends Subscriber {
   id = "welcome";
-  description = "Greets first-time contributors on their first pull request or issue.";
+  description = "Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.";
   requiredPermissions = { issues: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       if (context.isBot) {
-        return;
-      }
-      if (!isFirstTimer(context.payload.pull_request.author_association)) {
         return;
       }
       const config3 = await this.loadEnabledConfig(context);
@@ -53379,7 +53413,11 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const settings = subscriberSettings(config3, this.id, Settings5) ?? {};
-      const body = interpolate(settings.pull_request ?? DEFAULT_PR_MESSAGE, {
+      const bucket = bucketFor(settings, context.payload.pull_request.author_association);
+      if (bucket === null) {
+        return;
+      }
+      const body = interpolate(messageFor(settings, bucket, "pull_request"), {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
         number: context.payload.pull_request.number,
@@ -53396,15 +53434,16 @@ var WelcomeSubscriber = class extends Subscriber {
       if (issue3.user === null) {
         return;
       }
-      if (!isFirstTimer(issue3.author_association)) {
-        return;
-      }
       const config3 = await this.loadEnabledConfig(context);
       if (config3 === null) {
         return;
       }
       const settings = subscriberSettings(config3, this.id, Settings5) ?? {};
-      const body = interpolate(settings.issue ?? DEFAULT_ISSUE_MESSAGE, {
+      const bucket = bucketFor(settings, issue3.author_association);
+      if (bucket === null) {
+        return;
+      }
+      const body = interpolate(messageFor(settings, bucket, "issue"), {
         user: issue3.user.login,
         repo: context.payload.repository.name,
         number: issue3.number,

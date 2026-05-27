@@ -75,6 +75,8 @@ const issuesOpenedPayload = (overrides: PayloadOverrides = {}): Record<string, u
   sender: { type: overrides.senderType ?? 'User' },
 });
 
+const enabledOnlyYaml = 'version: 1\nsubscribers:\n  - welcome\n';
+
 describe('welcome subscriber (via app)', () => {
   let probot: Probot;
 
@@ -104,9 +106,9 @@ describe('welcome subscriber (via app)', () => {
     nock.cleanAll();
   });
 
-  it('comments on pull_request.opened with the default message', async () => {
+  it('greets a first-time PR contributor with the default first_time message', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig(enabledOnlyYaml);
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
@@ -116,7 +118,7 @@ describe('welcome subscriber (via app)', () => {
       .reply(201, {});
 
     await probot.receive({
-      id: 'evt-1',
+      id: 'evt-ft-pr-default',
       name: 'pull_request',
       payload: prOpenedPayload() as never,
     });
@@ -124,9 +126,9 @@ describe('welcome subscriber (via app)', () => {
     expect(commentScope.isDone()).toBe(true);
   });
 
-  it('comments on issues.opened with the default message', async () => {
+  it('greets a first-time issue opener with the default first_time message', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig(enabledOnlyYaml);
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
@@ -136,7 +138,7 @@ describe('welcome subscriber (via app)', () => {
       .reply(201, {});
 
     await probot.receive({
-      id: 'evt-2',
+      id: 'evt-ft-issue-default',
       name: 'issues',
       payload: issuesOpenedPayload() as never,
     });
@@ -144,15 +146,15 @@ describe('welcome subscriber (via app)', () => {
     expect(commentScope.isDone()).toBe(true);
   });
 
-  it('also greets a FIRST_TIMER (never contributed anywhere on GitHub)', async () => {
+  it('also greets FIRST_TIMER with the default first_time message', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig(enabledOnlyYaml);
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments').reply(201, {});
 
     await probot.receive({
-      id: 'evt-first-timer',
+      id: 'evt-first-timer-default',
       name: 'pull_request',
       payload: prOpenedPayload({ association: 'FIRST_TIMER' }) as never,
     });
@@ -160,12 +162,226 @@ describe('welcome subscriber (via app)', () => {
     expect(commentScope.isDone()).toBe(true);
   });
 
-  it('does nothing on pull_request.opened when the author is not a first-time contributor', async () => {
+  it('greets a returning PR contributor with the default returning message', async () => {
     mockInstallationToken();
-    mockConfig(null);
+    mockConfig(enabledOnlyYaml);
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Thanks for the pull request, @octocat!');
+        return true;
+      })
+      .reply(201, {});
 
     await probot.receive({
-      id: 'evt-non-first',
+      id: 'evt-ret-pr-default',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'CONTRIBUTOR' }) as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('greets a returning issue opener with the default returning message', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Thanks for filing this, @octocat!');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-ret-issue-default',
+      name: 'issues',
+      payload: issuesOpenedPayload({ association: 'MEMBER' }) as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('uses a custom first_time.pull_request message when configured', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    first_time:',
+      '      pull_request: "Hi @{{user}}, first PR!"',
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Hi @octocat, first PR!');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-ft-pr-custom',
+      name: 'pull_request',
+      payload: prOpenedPayload() as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('uses a custom first_time.issue message when configured', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    first_time:',
+      '      issue: "Hi @{{user}}, first issue!"',
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Hi @octocat, first issue!');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-ft-issue-custom',
+      name: 'issues',
+      payload: issuesOpenedPayload() as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('uses a custom returning.pull_request message when configured', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      pull_request: "Welcome back, @{{user}}!"',
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Welcome back, @octocat!');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-ret-pr-custom',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'CONTRIBUTOR' }) as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('uses a custom returning.issue message when configured', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      issue: "Thanks @{{user}}, we will take a look."',
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Thanks @octocat, we will take a look.');
+        return true;
+      })
+      .reply(201, {});
+
+    await probot.receive({
+      id: 'evt-ret-issue-custom',
+      name: 'issues',
+      payload: issuesOpenedPayload({ association: 'COLLABORATOR' }) as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('narrows the first_time bucket via author_association to a subset', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    first_time:',
+      '      author_association: [FIRST_TIME_CONTRIBUTOR]',
+      '',
+    ].join('\n'));
+
+    // FIRST_TIMER is excluded from the narrowed first_time list, and
+    // first-timer associations are not allowed in the returning bucket, so
+    // no comment fires for FIRST_TIMER.
+    await probot.receive({
+      id: 'evt-ft-narrowed-excludes',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'FIRST_TIMER' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('narrows the returning bucket via author_association to a subset', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      author_association: [CONTRIBUTOR]',
+      '',
+    ].join('\n'));
+
+    // MEMBER is excluded from the narrowed returning list, and returning
+    // associations are not allowed in the first_time bucket.
+    await probot.receive({
+      id: 'evt-ret-narrowed-excludes',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'MEMBER' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('disables the returning bucket entirely via an empty author_association list', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      author_association: []',
+      '',
+    ].join('\n'));
+
+    await probot.receive({
+      id: 'evt-ret-disabled',
       name: 'pull_request',
       payload: prOpenedPayload({ association: 'CONTRIBUTOR' }) as never,
     });
@@ -173,11 +389,65 @@ describe('welcome subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing on issues.opened when the author is not a first-time contributor', async () => {
+  it('still greets first-timers even when returning bucket is disabled', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      author_association: []',
+      '',
+    ].join('\n'));
+
+    const commentScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments').reply(201, {});
+
     await probot.receive({
-      id: 'evt-non-first-issue',
+      id: 'evt-ft-still-fires',
+      name: 'pull_request',
+      payload: prOpenedPayload() as never,
+    });
+
+    expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('does nothing for NONE association on pull_request.opened', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
+    await probot.receive({
+      id: 'evt-none-pr',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'NONE' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing for NONE association on issues.opened', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
+    await probot.receive({
+      id: 'evt-none-issue',
       name: 'issues',
-      payload: issuesOpenedPayload({ association: 'MEMBER' }) as never,
+      payload: issuesOpenedPayload({ association: 'NONE' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing for MANNEQUIN association', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
+    await probot.receive({
+      id: 'evt-mannequin',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'MANNEQUIN' }) as never,
     });
 
     expect(nock.pendingMocks()).toEqual([]);
@@ -203,60 +473,14 @@ describe('welcome subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('uses configured pull_request message when settings.welcome.pull_request is set', async () => {
-    mockInstallationToken();
-    mockConfig([
-      'version: 1',
-      'subscribers:',
-      '  - welcome',
-      'settings:',
-      '  welcome:',
-      '    pull_request: "Hello from carson.yml!"',
-      '',
-    ].join('\n'));
-
-    const commentScope = nock('https://api.github.com')
-      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Hello from carson.yml!');
-        return true;
-      })
-      .reply(201, {});
-
+  it('does nothing on issues.opened when the issue has no user (ghost)', async () => {
     await probot.receive({
-      id: 'evt-3',
-      name: 'pull_request',
-      payload: prOpenedPayload() as never,
-    });
-
-    expect(commentScope.isDone()).toBe(true);
-  });
-
-  it('uses configured issue message when settings.welcome.issue is set', async () => {
-    mockInstallationToken();
-    mockConfig([
-      'version: 1',
-      'subscribers:',
-      '  - welcome',
-      'settings:',
-      '  welcome:',
-      '    issue: "Hi from carson.yml!"',
-      '',
-    ].join('\n'));
-
-    const commentScope = nock('https://api.github.com')
-      .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Hi from carson.yml!');
-        return true;
-      })
-      .reply(201, {});
-
-    await probot.receive({
-      id: 'evt-4',
+      id: 'evt-ghost',
       name: 'issues',
-      payload: issuesOpenedPayload() as never,
+      payload: issuesOpenedPayload({ user: null }) as never,
     });
 
-    expect(commentScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing on pull_request.opened when carson.yml is missing', async () => {
@@ -264,7 +488,7 @@ describe('welcome subscriber (via app)', () => {
     mockConfig(null);
 
     await probot.receive({
-      id: 'evt-5',
+      id: 'evt-missing-pr',
       name: 'pull_request',
       payload: prOpenedPayload() as never,
     });
@@ -277,7 +501,7 @@ describe('welcome subscriber (via app)', () => {
     mockConfig(null);
 
     await probot.receive({
-      id: 'evt-5b',
+      id: 'evt-missing-issue',
       name: 'issues',
       payload: issuesOpenedPayload() as never,
     });
@@ -285,12 +509,12 @@ describe('welcome subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when welcome is not enabled in carson.yml', async () => {
+  it('does nothing when welcome is not listed in subscribers', async () => {
     mockInstallationToken();
     mockConfig('version: 1\nsubscribers:\n  - something_else\n');
 
     await probot.receive({
-      id: 'evt-6',
+      id: 'evt-not-enabled',
       name: 'pull_request',
       payload: prOpenedPayload() as never,
     });
@@ -303,7 +527,7 @@ describe('welcome subscriber (via app)', () => {
     mockConfig('version: 99\nsubscribers:\n  - welcome\n');
 
     await probot.receive({
-      id: 'evt-7',
+      id: 'evt-invalid-schema',
       name: 'pull_request',
       payload: prOpenedPayload() as never,
     });
@@ -311,7 +535,7 @@ describe('welcome subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('interpolates {{user}}, {{repo}}, {{number}} and {{title}} in a custom pull_request message', async () => {
+  it('interpolates {{user}}, {{repo}}, {{number}} and {{title}} in a first_time PR message', async () => {
     mockInstallationToken();
     mockConfig([
       'version: 1',
@@ -319,7 +543,8 @@ describe('welcome subscriber (via app)', () => {
       '  - welcome',
       'settings:',
       '  welcome:',
-      '    pull_request: "Hi @{{user}}, thanks for PR #{{number}} ({{ title }}) on {{repo}}"',
+      '    first_time:',
+      '      pull_request: "Hi @{{user}}, thanks for PR #{{number}} ({{ title }}) on {{repo}}"',
       '',
     ].join('\n'));
 
@@ -339,7 +564,7 @@ describe('welcome subscriber (via app)', () => {
     expect(commentScope.isDone()).toBe(true);
   });
 
-  it('interpolates context keys in a custom issue message', async () => {
+  it('interpolates context keys in a returning issue message', async () => {
     mockInstallationToken();
     mockConfig([
       'version: 1',
@@ -347,7 +572,8 @@ describe('welcome subscriber (via app)', () => {
       '  - welcome',
       'settings:',
       '  welcome:',
-      '    issue: "@{{user}} opened issue #{{number}}: {{title}}"',
+      '    returning:',
+      '      issue: "@{{user}} opened issue #{{number}}: {{title}}"',
       '',
     ].join('\n'));
 
@@ -359,21 +585,11 @@ describe('welcome subscriber (via app)', () => {
       .reply(201, {});
 
     await probot.receive({
-      id: 'evt-interp-issue',
+      id: 'evt-interp-ret-issue',
       name: 'issues',
-      payload: issuesOpenedPayload() as never,
+      payload: issuesOpenedPayload({ association: 'COLLABORATOR' }) as never,
     });
 
     expect(commentScope.isDone()).toBe(true);
-  });
-
-  it('does nothing on issues.opened when the issue has no user (ghost)', async () => {
-    await probot.receive({
-      id: 'evt-ghost',
-      name: 'issues',
-      payload: issuesOpenedPayload({ user: null }) as never,
-    });
-
-    expect(nock.pendingMocks()).toEqual([]);
   });
 });
