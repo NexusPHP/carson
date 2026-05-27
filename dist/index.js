@@ -52754,11 +52754,7 @@ var createConfigLoadable = (octokit, owner, repo, log) => ({
   log
 });
 var cache = /* @__PURE__ */ new Map();
-var registeredIds = [];
-var setRegisteredSubscribers = (ids) => {
-  registeredIds = ids;
-};
-var fetchAndParse = async (context) => {
+var fetchAndParse = async (context, knownIds) => {
   const raw = await context.config(CONFIG_FILE);
   if (raw === null) {
     return null;
@@ -52768,21 +52764,23 @@ var fetchAndParse = async (context) => {
     context.log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
     return null;
   }
-  for (const id of parsed.data.subscribers) {
-    if (!registeredIds.includes(id)) {
-      const message = `${CONFIG_FILE} lists unknown subscriber "${id}"`;
-      context.log.warn(message);
-      warning(message, { file: CONFIG_PATH2 });
+  if (knownIds !== void 0) {
+    for (const id of parsed.data.subscribers) {
+      if (!knownIds.includes(id)) {
+        const message = `${CONFIG_FILE} lists unknown subscriber "${id}"`;
+        context.log.warn(message);
+        warning(message, { file: CONFIG_PATH2 });
+      }
     }
   }
   return parsed.data;
 };
-var loadConfig = async (context) => {
+var loadConfig = async (context, knownIds) => {
   const { owner, repo } = context.repo();
   const key = `${owner}/${repo}`;
   let pending = cache.get(key);
   if (pending === void 0) {
-    pending = fetchAndParse(context);
+    pending = fetchAndParse(context, knownIds);
     cache.set(key, pending);
   }
   return await pending;
@@ -52835,7 +52833,6 @@ var Carson = class _Carson {
   }
   run(probot) {
     probot.log.info(`${_Carson.DISPLAY_NAME} starting`);
-    setRegisteredSubscribers(this.#subscribers.map((s) => s.id));
     for (const subscriber of this.#subscribers) {
       probot.log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
@@ -63791,7 +63788,7 @@ var runPreflight = async (probot, carson2, repository) => {
   }
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
-  const config3 = await loadConfig(loadable);
+  const config3 = await loadConfig(loadable, carson2.subscribers.map((s) => s.id));
   if (config3 === null) {
     return true;
   }

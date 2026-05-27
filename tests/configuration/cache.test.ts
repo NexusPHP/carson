@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadConfig, resetConfigCache, setRegisteredSubscribers } from '../../src/configuration/cache.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadConfig, resetConfigCache } from '../../src/configuration/cache.js';
 import type { Context } from 'probot';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 
@@ -25,14 +25,8 @@ const makeContext = (raw: unknown, repo = { owner: 'acme', repo: 'widgets' }): C
 };
 
 describe('config cache', () => {
-  beforeEach(() => {
-    setRegisteredSubscribers(['welcome']);
-    vi.mocked(core.warning).mockClear();
-  });
-
   afterEach(() => {
     resetConfigCache();
-    setRegisteredSubscribers([]);
   });
 
   it('returns the parsed config for a valid file', async () => {
@@ -83,9 +77,9 @@ describe('config cache', () => {
     expect(configMock).toHaveBeenCalledTimes(2);
   });
 
-  it('warns when carson.yml lists a subscriber id that is not registered', async () => {
+  it('warns when carson.yml lists a subscriber id not in the knownIds list', async () => {
     const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome', 'welcomee'] });
-    await loadConfig(context);
+    await loadConfig(context, ['welcome']);
     expect(warnMock).toHaveBeenCalledOnce();
     expect(warnMock).toHaveBeenCalledWith('carson.yml lists unknown subscriber "welcomee"');
     expect(core.warning).toHaveBeenCalledOnce();
@@ -95,8 +89,15 @@ describe('config cache', () => {
     );
   });
 
-  it('does not warn when all subscriber ids are registered', async () => {
+  it('does not warn when all subscriber ids are in the knownIds list', async () => {
     const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome'] });
+    await loadConfig(context, ['welcome']);
+    expect(warnMock).not.toHaveBeenCalled();
+    expect(core.warning).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when knownIds is omitted', async () => {
+    const { context, warnMock } = makeContext({ version: 1, subscribers: ['welcome', 'whatever'] });
     await loadConfig(context);
     expect(warnMock).not.toHaveBeenCalled();
     expect(core.warning).not.toHaveBeenCalled();

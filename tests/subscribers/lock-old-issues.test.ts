@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetConfigCache, setRegisteredSubscribers } from '../../src/configuration/cache.js';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
 import { LockOldIssuesSubscriber } from '../../src/subscribers/lock-old-issues.js';
+import { resetConfigCache } from '../../src/configuration/cache.js';
 
 interface IssueShape {
   number: number;
@@ -66,14 +66,12 @@ const runScheduled = async (context: ScheduledContext): Promise<void> => {
 
 describe('lock-old-issues subscriber', () => {
   beforeEach(() => {
-    setRegisteredSubscribers(['lock-old-issues']);
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
   });
 
   afterEach(() => {
     resetConfigCache();
-    setRegisteredSubscribers([]);
     vi.useRealTimers();
   });
 

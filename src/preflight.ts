@@ -104,7 +104,7 @@ export const runPreflight = async (
 
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
-  const config = await loadConfig(loadable);
+  const config = await loadConfig(loadable, carson.subscribers.map((s) => s.id));
 
   if (config === null) {
     return true;

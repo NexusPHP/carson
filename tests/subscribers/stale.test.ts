@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Probot, ProbotOctokit } from 'probot';
-import { resetConfigCache, setRegisteredSubscribers } from '../../src/configuration/cache.js';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
 import app from '../../src/app.js';
 import { generateKeyPairSync } from 'node:crypto';
 import nock from 'nock';
+import { resetConfigCache } from '../../src/configuration/cache.js';
 import { StaleSubscriber } from '../../src/subscribers/stale.js';
 
 interface ItemShape {
@@ -75,14 +75,12 @@ const ENABLED = { version: 1, subscribers: ['stale'] };
 
 describe('stale subscriber', () => {
   beforeEach(() => {
-    setRegisteredSubscribers(['stale']);
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
   });
 
   afterEach(() => {
     resetConfigCache();
-    setRegisteredSubscribers([]);
     vi.useRealTimers();
   });
 

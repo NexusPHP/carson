@@ -1,6 +1,5 @@
 import type { ApplicationFunction, Probot } from 'probot';
 import { ScheduledRegistrar } from './scheduled.js';
-import { setRegisteredSubscribers } from './configuration/cache.js';
 import type { Subscriber } from './subscriber.js';
 
 export class Carson {
@@ -14,7 +13,6 @@ export class Carson {
 
   public run(probot: Probot): void {
     probot.log.info(`${Carson.DISPLAY_NAME} starting`);
-    setRegisteredSubscribers(this.#subscribers.map((s) => s.id));
 
     for (const subscriber of this.#subscribers) {
       probot.log.info(`Registering subscriber: ${subscriber.id}`);
