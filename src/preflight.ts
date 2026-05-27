@@ -104,15 +104,14 @@ export const runPreflight = async (
 
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
-  const config = await loadConfig(loadable, carson.subscribers.map((s) => s.id));
+  const config = await loadConfig(loadable, carson.knownIds);
 
   if (config === null) {
     return true;
   }
 
-  const enabled = carson.subscribers.filter((s) => config.subscribers.includes(s.id));
   const granted = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
-  const missing = findMissingPermissions(enabled, granted);
+  const missing = carson.missingPermissions(granted, config.subscribers);
 
   if (missing.length > 0) {
     core.setFailed(formatMissingPermissionsError(missing, app.html_url, identity));

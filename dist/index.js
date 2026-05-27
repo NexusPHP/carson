@@ -38187,18 +38187,15 @@ function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 
-// src/github/repository.ts
-var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
-var parseRepository = (input) => {
-  const slash = input.indexOf("/");
-  if (slash === -1) {
-    return null;
-  }
-  return {
-    owner: input.slice(0, slash),
-    repo: input.slice(slash + 1)
-  };
+// src/app-identity.ts
+var cached = null;
+var setAppIdentity = (identity) => {
+  cached = identity;
 };
+var getAppIdentity = () => cached;
+var getAppName = () => cached?.name ?? "Carson";
+var getAppSlug = () => cached?.slug ?? "carson";
+var getAppLogin = () => `${getAppSlug()}[bot]`;
 
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -38815,7 +38812,7 @@ __export(util_exports, {
   assignProp: () => assignProp,
   base64ToUint8Array: () => base64ToUint8Array,
   base64urlToUint8Array: () => base64urlToUint8Array,
-  cached: () => cached,
+  cached: () => cached2,
   captureStackTrace: () => captureStackTrace,
   cleanEnum: () => cleanEnum,
   cleanRegex: () => cleanRegex,
@@ -38892,7 +38889,7 @@ function jsonStringifyReplacer(_, value) {
     return value.toString();
   return value;
 }
-function cached(getter) {
+function cached2(getter) {
   const set3 = false;
   return {
     get value() {
@@ -39001,7 +38998,7 @@ var captureStackTrace = "captureStackTrace" in Error ? Error.captureStackTrace :
 function isObject(data) {
   return typeof data === "object" && data !== null && !Array.isArray(data);
 }
-var allowsEval = /* @__PURE__ */ cached(() => {
+var allowsEval = /* @__PURE__ */ cached2(() => {
   if (globalConfig.jitless) {
     return false;
   }
@@ -41224,7 +41221,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
       }
     });
   }
-  const _normalized = cached(() => normalizeDef(def));
+  const _normalized = cached2(() => normalizeDef(def));
   defineLazy(inst._zod, "propValues", () => {
     const shape = def.shape;
     const propValues = {};
@@ -41276,7 +41273,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
 var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) => {
   $ZodObject.init(inst, def);
   const superParse = inst._zod.parse;
-  const _normalized = cached(() => normalizeDef(def));
+  const _normalized = cached2(() => normalizeDef(def));
   const generateFastpass = (shape) => {
     const doc = new Doc(["shape", "payload", "ctx"]);
     const normalized = _normalized.value;
@@ -41538,7 +41535,7 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
     }
     return propValues;
   });
-  const disc = cached(() => {
+  const disc = cached2(() => {
     const opts = def.options;
     const map2 = /* @__PURE__ */ new Map();
     for (const o of opts) {
@@ -52786,6 +52783,117 @@ var loadConfig = async (context, knownIds) => {
   return await pending;
 };
 
+// src/github/repository.ts
+var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
+var parseRepository = (input) => {
+  const slash = input.indexOf("/");
+  if (slash === -1) {
+    return null;
+  }
+  return {
+    owner: input.slice(0, slash),
+    repo: input.slice(slash + 1)
+  };
+};
+
+// src/subscriber.ts
+var Subscriber = class {
+  register(_probot) {
+  }
+  registerScheduled(_registrar) {
+  }
+  async loadEnabledConfig(context) {
+    const config3 = await loadConfig(context);
+    if (config3 === null) {
+      return null;
+    }
+    if (!config3.subscribers.includes(this.id)) {
+      return null;
+    }
+    return config3;
+  }
+  async loadEnabledSettings(context, schema) {
+    if (context.isBot === true) {
+      return null;
+    }
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return null;
+    }
+    const settings = subscriberSettings(config3, this.id, schema, context.log) ?? {};
+    return { config: config3, settings };
+  }
+};
+
+// src/preflight.ts
+var BASE_PERMISSIONS = { contents: "read" };
+var LEVEL_RANK = {
+  read: 1,
+  write: 2,
+  admin: 3
+};
+var isSufficient = (granted, required2) => granted !== void 0 && LEVEL_RANK[granted] >= LEVEL_RANK[required2];
+var collectMissing = (subscriberId, required2, granted) => Object.entries(required2).filter(([perm, level]) => !isSufficient(granted[perm], level)).map(([perm, level]) => ({
+  subscriberId,
+  permission: perm,
+  required: level,
+  granted: granted[perm]
+}));
+var findMissingPermissions = (enabled, granted) => [
+  ...collectMissing("<base>", BASE_PERMISSIONS, granted),
+  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted))
+];
+var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
+  const header = `${app?.name ?? "Carson"} is missing required GitHub App permissions:`;
+  const body = missing.map((m) => {
+    const grantedText = m.granted === void 0 ? "not granted" : `granted "${m.granted}"`;
+    return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
+  });
+  const footer = appHtmlUrl === void 0 ? "Update permissions in your GitHub App settings." : `Update permissions in your GitHub App settings: ${appHtmlUrl}`;
+  return [header, ...body, footer].join("\n");
+};
+var runPreflight = async (probot, carson2, repository) => {
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    setFailed(INVALID_REPOSITORY_MESSAGE);
+    return false;
+  }
+  const { owner, repo } = parsed;
+  const appOctokit = await probot.auth();
+  const { data: app } = await appOctokit.rest.apps.getAuthenticated();
+  if (app === null) {
+    probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
+    return true;
+  }
+  const identity = {
+    name: app.name ?? "Carson",
+    slug: app.slug ?? "carson",
+    id: app.id
+  };
+  setAppIdentity(identity);
+  let installationId;
+  try {
+    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+    installationId = installation.id;
+  } catch (error52) {
+    probot.log.warn({ err: error52 }, "preflight: could not resolve installation, skipping");
+    return true;
+  }
+  const installationOctokit = await probot.auth(installationId);
+  const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
+  const config3 = await loadConfig(loadable, carson2.knownIds);
+  if (config3 === null) {
+    return true;
+  }
+  const granted = app.permissions ?? {};
+  const missing = carson2.missingPermissions(granted, config3.subscribers);
+  if (missing.length > 0) {
+    setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
+    return false;
+  }
+  return true;
+};
+
 // src/scheduled.ts
 var ScheduledRegistrar = class {
   #handlers = [];
@@ -52847,8 +52955,12 @@ var Carson = class _Carson {
   get scheduled() {
     return this.#scheduled;
   }
-  get subscribers() {
-    return this.#subscribers;
+  get knownIds() {
+    return this.#subscribers.map((s) => s.id);
+  }
+  missingPermissions(granted, enabledIds) {
+    const enabled = this.#subscribers.filter((s) => enabledIds.includes(s.id));
+    return findMissingPermissions(enabled, granted);
   }
 };
 
@@ -52874,45 +52986,6 @@ var findCarsonComment = (comments, options2) => {
     (comment) => options2.isBotAuthored(comment) && comment.body?.endsWith(options2.marker) === true
   );
 };
-
-// src/subscriber.ts
-var Subscriber = class {
-  register(_probot) {
-  }
-  registerScheduled(_registrar) {
-  }
-  async loadEnabledConfig(context) {
-    const config3 = await loadConfig(context);
-    if (config3 === null) {
-      return null;
-    }
-    if (!config3.subscribers.includes(this.id)) {
-      return null;
-    }
-    return config3;
-  }
-  async loadEnabledSettings(context, schema) {
-    if (context.isBot === true) {
-      return null;
-    }
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
-      return null;
-    }
-    const settings = subscriberSettings(config3, this.id, schema, context.log) ?? {};
-    return { config: config3, settings };
-  }
-};
-
-// src/app-identity.ts
-var cached2 = null;
-var setAppIdentity = (identity) => {
-  cached2 = identity;
-};
-var getAppIdentity = () => cached2;
-var getAppName = () => cached2?.name ?? "Carson";
-var getAppSlug = () => cached2?.slug ?? "carson";
-var getAppLogin = () => `${getAppSlug()}[bot]`;
 
 // src/template.ts
 var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
@@ -63731,78 +63804,6 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
 
 // src/index.ts
 import { readFile } from "node:fs/promises";
-
-// src/preflight.ts
-var BASE_PERMISSIONS = { contents: "read" };
-var LEVEL_RANK = {
-  read: 1,
-  write: 2,
-  admin: 3
-};
-var isSufficient = (granted, required2) => granted !== void 0 && LEVEL_RANK[granted] >= LEVEL_RANK[required2];
-var collectMissing = (subscriberId, required2, granted) => Object.entries(required2).filter(([perm, level]) => !isSufficient(granted[perm], level)).map(([perm, level]) => ({
-  subscriberId,
-  permission: perm,
-  required: level,
-  granted: granted[perm]
-}));
-var findMissingPermissions = (enabled, granted) => [
-  ...collectMissing("<base>", BASE_PERMISSIONS, granted),
-  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted))
-];
-var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
-  const header = `${app?.name ?? "Carson"} is missing required GitHub App permissions:`;
-  const body = missing.map((m) => {
-    const grantedText = m.granted === void 0 ? "not granted" : `granted "${m.granted}"`;
-    return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
-  });
-  const footer = appHtmlUrl === void 0 ? "Update permissions in your GitHub App settings." : `Update permissions in your GitHub App settings: ${appHtmlUrl}`;
-  return [header, ...body, footer].join("\n");
-};
-var runPreflight = async (probot, carson2, repository) => {
-  const parsed = parseRepository(repository);
-  if (parsed === null) {
-    setFailed(INVALID_REPOSITORY_MESSAGE);
-    return false;
-  }
-  const { owner, repo } = parsed;
-  const appOctokit = await probot.auth();
-  const { data: app } = await appOctokit.rest.apps.getAuthenticated();
-  if (app === null) {
-    probot.log.warn("preflight: apps.getAuthenticated returned no app, skipping");
-    return true;
-  }
-  const identity = {
-    name: app.name ?? "Carson",
-    slug: app.slug ?? "carson",
-    id: app.id
-  };
-  setAppIdentity(identity);
-  let installationId;
-  try {
-    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-    installationId = installation.id;
-  } catch (error52) {
-    probot.log.warn({ err: error52 }, "preflight: could not resolve installation, skipping");
-    return true;
-  }
-  const installationOctokit = await probot.auth(installationId);
-  const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
-  const config3 = await loadConfig(loadable, carson2.subscribers.map((s) => s.id));
-  if (config3 === null) {
-    return true;
-  }
-  const enabled = carson2.subscribers.filter((s) => config3.subscribers.includes(s.id));
-  const granted = app.permissions ?? {};
-  const missing = findMissingPermissions(enabled, granted);
-  if (missing.length > 0) {
-    setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
-    return false;
-  }
-  return true;
-};
-
-// src/index.ts
 var main = async () => {
   const appId = getInput("app_id", { required: true });
   const privateKey = getInput("private_key", { required: true });

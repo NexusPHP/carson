@@ -1,6 +1,7 @@
 import type { ApplicationFunction, Probot } from 'probot';
+import { findMissingPermissions, type MissingPermission } from './preflight.js';
+import type { PermissionLevel, Subscriber } from './subscriber.js';
 import { ScheduledRegistrar } from './scheduled.js';
-import type { Subscriber } from './subscriber.js';
 
 export class Carson {
   public static readonly DISPLAY_NAME: string = 'Carson';
@@ -31,7 +32,16 @@ export class Carson {
     return this.#scheduled;
   }
 
-  public get subscribers(): readonly Subscriber[] {
-    return this.#subscribers;
+  public get knownIds(): readonly string[] {
+    return this.#subscribers.map((s) => s.id);
+  }
+
+  public missingPermissions(
+    granted: Readonly<Record<string, PermissionLevel>>,
+    enabledIds: readonly string[],
+  ): MissingPermission[] {
+    const enabled = this.#subscribers.filter((s) => enabledIds.includes(s.id));
+
+    return findMissingPermissions(enabled, granted);
   }
 }

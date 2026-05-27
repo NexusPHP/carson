@@ -56,4 +56,44 @@ describe('Carson', () => {
 
     expect(sub.registerCalls).toEqual([probot]);
   });
+
+  it('knownIds returns the ids of all registered subscribers', () => {
+    class NamedSub extends Subscriber {
+      public constructor(public readonly id: string) {
+        super();
+      }
+
+      public readonly description = 'named stub';
+      public readonly requiredPermissions: RequiredPermissions = {};
+    }
+
+    const carson = new Carson([new NamedSub('alpha'), new NamedSub('beta')]);
+
+    expect(carson.knownIds).toEqual(['alpha', 'beta']);
+  });
+
+  it('missingPermissions filters by enabledIds and includes base + enabled requirements', () => {
+    class NamedSub extends Subscriber {
+      public constructor(
+        public readonly id: string,
+        public readonly requiredPermissions: RequiredPermissions,
+      ) {
+        super();
+      }
+
+      public readonly description = 'named stub';
+    }
+
+    const carson = new Carson([
+      new NamedSub('alpha', { issues: 'write' }),
+      new NamedSub('beta', { checks: 'write' }),
+    ]);
+
+    // Only alpha is enabled. Beta's permissions are skipped.
+    const missing = carson.missingPermissions({ contents: 'read' }, ['alpha']);
+
+    expect(missing).toEqual([
+      { subscriberId: 'alpha', permission: 'issues', required: 'write', granted: undefined },
+    ]);
+  });
 });
