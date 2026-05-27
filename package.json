@@ -20,6 +20,7 @@
   "scripts": {
     "all": "npm run lint && npm run typecheck && npm test",
     "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\"",
+    "dev": "tsx watch src/dev.ts",
     "lint": "eslint --color src tests docs \"*.config.ts\"",
     "lint:fix": "eslint --color --fix src tests docs \"*.config.ts\"",
     "typecheck": "tsc --noEmit",
@@ -41,6 +42,8 @@
     "eslint": "^10.4.0",
     "jiti": "^2.4.2",
     "nock": "^14.0.0",
+    "smee-client": "^5.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.7"

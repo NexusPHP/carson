@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { findMissingPermissions, formatMissingPermissionsError, runPreflight } from '../src/preflight.js';
 import { type RequiredPermissions, Subscriber } from '../src/subscriber.js';
@@ -163,40 +162,34 @@ const makeProbot = (overrides: HarnessOverrides = {}): Probot => {
 };
 
 describe('runPreflight', () => {
-  const setFailed = vi.mocked(core.setFailed);
-
   beforeEach(() => {
     resetConfigCache();
     appIdentity.reset();
     logger.reset();
-    setFailed.mockClear();
   });
 
-  it('returns true when every enabled subscriber has its permissions satisfied', async () => {
+  it('returns null when every enabled subscriber has its permissions satisfied', async () => {
     const probot = makeProbot();
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
-    expect(setFailed).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
-  it('fails and reports each missing permission when the App is under-permissioned', async () => {
+  it('returns an error message listing each missing permission when the App is under-permissioned', async () => {
     const probot = makeProbot({
       appData: { ...DEFAULT_APP_DATA, permissions: { contents: 'read' } },
       installation: { permissions: { contents: 'read' } },
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(false);
-    expect(setFailed).toHaveBeenCalledOnce();
-    const message = setFailed.mock.calls[0]?.[0] as string;
-    expect(message).toContain('Carson @ test is missing required GitHub App permissions:');
-    expect(message).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-    expect(message).toContain('App settings: https://github.com/apps/test');
+    expect(result).not.toBeNull();
+    expect(result).toContain('Carson @ test is missing required GitHub App permissions:');
+    expect(result).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result).toContain('App settings: https://github.com/apps/test');
   });
 
   it('reports "Re-approve the installation" when the App declares the permission but the install has not accepted it', async () => {
@@ -206,41 +199,36 @@ describe('runPreflight', () => {
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(false);
-    const message = setFailed.mock.calls[0]?.[0] as string;
-    expect(message).toContain('issues (s1): required "write", App declares "write", install accepted "read". Re-approve the installation.');
+    expect(result).toContain('issues (s1): required "write", App declares "write", install accepted "read". Re-approve the installation.');
   });
 
-  it('returns true and skips the check when the App is not installed on the repo', async () => {
+  it('returns null and skips the check when the App is not installed on the repo', async () => {
     const probot = makeProbot({ installFails: true });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
-    expect(setFailed).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
-  it('returns true when carson.yml is missing (no subscribers to preflight)', async () => {
+  it('returns null when carson.yml is missing (no subscribers to preflight)', async () => {
     const probot = makeProbot({ config: null });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
-    expect(setFailed).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
-  it('returns true when apps.getAuthenticated returns no app', async () => {
+  it('returns null when apps.getAuthenticated returns no app', async () => {
     const probot = makeProbot({ appData: null });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
-    expect(setFailed).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
   it('falls back to the default name and slug when the App response omits them', async () => {
@@ -249,9 +237,9 @@ describe('runPreflight', () => {
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
+    expect(result).toBeNull();
     expect(appIdentity.name).toBe('Carson');
   });
 
@@ -262,22 +250,19 @@ describe('runPreflight', () => {
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(false);
-    const message = setFailed.mock.calls[0]?.[0] as string;
-    expect(message).toContain('contents (<base>): required "read", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-    expect(message).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result).toContain('contents (<base>): required "read", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
   });
 
-  it('fails when GITHUB_REPOSITORY is not in owner/repo format', async () => {
+  it('returns the invalid-repository message when the repository is not in owner/repo format', async () => {
     const probot = makeProbot();
     const carson = new Carson([]);
 
-    const ok = await runPreflight(probot, carson, 'not-a-slash-pair');
+    const result = await runPreflight(probot, carson, 'not-a-slash-pair');
 
-    expect(ok).toBe(false);
-    expect(setFailed).toHaveBeenCalledWith('GITHUB_REPOSITORY must be in owner/repo format');
+    expect(result).toBe('GITHUB_REPOSITORY must be in owner/repo format');
   });
 
   it('omits the App settings line when the App data has no html_url', async () => {
@@ -287,11 +272,11 @@ describe('runPreflight', () => {
     });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
-    await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    const message = setFailed.mock.calls[0]?.[0] as string;
-    expect(message).not.toContain('App settings:');
-    expect(message).not.toContain('http');
+    expect(result).not.toBeNull();
+    expect(result).not.toContain('App settings:');
+    expect(result).not.toContain('http');
   });
 
   it('ignores subscribers that are bundled but not enabled in carson.yml', async () => {
@@ -304,9 +289,8 @@ describe('runPreflight', () => {
       new StubSubscriber('s1', { issues: 'read' }),
       new StubSubscriber('s2', { actions: 'write' }),
     ]);
-    const ok = await runPreflight(probot, carson, 'acme/widgets');
+    const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(ok).toBe(true);
-    expect(setFailed).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 });

@@ -150,6 +150,20 @@ npm run build
 
 The `dist/index.js` bundle is committed to the repository so consumers can run the action directly from a tag or SHA. CI will fail if `dist/` is out of date relative to `src/`.
 
+### Running Carson locally
+
+`npm run dev` boots Carson as a long-running Probot server with smee.io webhook forwarding, so subscribers can be iterated on against a sandbox GitHub App without a CI round-trip.
+
+1. Register a separate "Carson Dev" GitHub App (same permissions as production) and install it on a throwaway repo. Pointing your production App at smee would break consumers' CI runs.
+2. Open <https://smee.io/new> for a webhook proxy URL.
+3. In the App's settings, set **Webhook URL** to the smee URL and check **Active**. Under **Permissions & events → Subscribe to events**, tick at least **Issues**, **Issue comment**, **Pull request**, **Pull request review**, and **Push** to mirror the production workflow triggers. Carson's production App leaves both the webhook and event subscriptions off because it is driven by Actions, but the dev App receives events only through webhooks.
+4. Copy `.env.example` to `.env` and fill in `APP_ID`, `WEBHOOK_SECRET`, `WEBHOOK_PROXY_URL` (the smee URL), and the private key. Set either `PRIVATE_KEY` (inline PEM contents) or `PRIVATE_KEY_PATH` (path to the downloaded `.pem`, which is gitignored).
+5. `npm run dev`. The server listens on `:3000` and dispatches each inbound webhook through the bundled subscribers.
+
+Set `DEV_REPOSITORY=owner/repo` in `.env` to run the same preflight permission check that CI runs against that repo on boot. If the dev App is under-permissioned the server exits 1 before accepting webhooks. Leave it unset to skip preflight (under-permissioned subscribers will surface as runtime 403s in the logs instead).
+
+The `schedule` cron handler is not wired in dev mode (scheduled subscribers don't fire). `pull_request_target` events are mirrored to `pull_request` so subscribers behave the same as in CI.
+
 The `docs/` directory holds the click-through installer that's served at <https://nexusphp.github.io/carson/>. It is plain HTML and JavaScript with no build step. The [`pages.yml`](.github/workflows/pages.yml) workflow deploys it via GitHub Actions, running only when files under `docs/` (or the workflow itself) change on `1.x`.
 
 ## License

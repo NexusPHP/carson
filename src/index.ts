@@ -59,8 +59,10 @@ const main = async (): Promise<void> => {
 
   await probot.load(app);
   const log = logger.for('carson');
+  const preflightError = await runPreflight(probot, carson, repository);
 
-  if (!await runPreflight(probot, carson, repository)) {
+  if (preflightError !== null) {
+    core.setFailed(preflightError);
     return;
   }
 

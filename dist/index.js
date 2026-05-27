@@ -52902,15 +52902,14 @@ var runPreflight = async (probot, carson2, repository) => {
   const log = logger.for("preflight");
   const parsed = parseRepository(repository);
   if (parsed === null) {
-    setFailed(INVALID_REPOSITORY_MESSAGE);
-    return false;
+    return INVALID_REPOSITORY_MESSAGE;
   }
   const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
   if (app === null) {
     log.warn("App lookup returned no data, skipping");
-    return true;
+    return null;
   }
   appIdentity.set({ name: app.name, slug: app.slug });
   log.debug(`App authenticated: ${appIdentity.login}`);
@@ -52923,24 +52922,23 @@ var runPreflight = async (probot, carson2, repository) => {
     log.debug({ installationId, permissions: installationPermissions }, "Installation resolved");
   } catch (error52) {
     log.warn({ err: error52 }, "Could not resolve installation, skipping");
-    return true;
+    return null;
   }
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config3 = await loadConfig(loadable, carson2.knownIds);
   if (config3 === null) {
     log.debug("No carson.yml on default branch, skipping");
-    return true;
+    return null;
   }
   log.debug({ subscribers: config3.subscribers }, "Config loaded");
   const appPermissions = app.permissions ?? {};
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
-    setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
-    return false;
+    return formatMissingPermissionsError(missing, app.html_url, appIdentity.current);
   }
   log.debug("All required permissions satisfied");
-  return true;
+  return null;
 };
 
 // src/carson.ts
@@ -63946,7 +63944,9 @@ var main = async () => {
   });
   await probot.load(app_default);
   const log = logger.for("carson");
-  if (!await runPreflight(probot, carson, repository)) {
+  const preflightError = await runPreflight(probot, carson, repository);
+  if (preflightError !== null) {
+    setFailed(preflightError);
     return;
   }
   if (appIdentity.current !== null) {

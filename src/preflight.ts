@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import { appIdentity, type AppIdentityData } from './app-identity.js';
 import { createConfigLoadable, loadConfig } from './configuration/cache.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
@@ -85,13 +84,12 @@ export const runPreflight = async (
   probot: Probot,
   carson: Carson,
   repository: string,
-): Promise<boolean> => {
+): Promise<string | null> => {
   const log = logger.for('preflight');
   const parsed = parseRepository(repository);
 
   if (parsed === null) {
-    core.setFailed(INVALID_REPOSITORY_MESSAGE);
-    return false;
+    return INVALID_REPOSITORY_MESSAGE;
   }
 
   const { owner, repo } = parsed;
@@ -100,7 +98,7 @@ export const runPreflight = async (
 
   if (app === null) {
     log.warn('App lookup returned no data, skipping');
-    return true;
+    return null;
   }
 
   appIdentity.set({ name: app.name, slug: app.slug });
@@ -116,7 +114,7 @@ export const runPreflight = async (
     log.debug({ installationId, permissions: installationPermissions }, 'Installation resolved');
   } catch (error) {
     log.warn({ err: error }, 'Could not resolve installation, skipping');
-    return true;
+    return null;
   }
 
   const installationOctokit = await probot.auth(installationId);
@@ -125,7 +123,7 @@ export const runPreflight = async (
 
   if (config === null) {
     log.debug('No carson.yml on default branch, skipping');
-    return true;
+    return null;
   }
 
   log.debug({ subscribers: config.subscribers }, 'Config loaded');
@@ -134,11 +132,10 @@ export const runPreflight = async (
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
 
   if (missing.length > 0) {
-    core.setFailed(formatMissingPermissionsError(missing, app.html_url, appIdentity.current));
-    return false;
+    return formatMissingPermissionsError(missing, app.html_url, appIdentity.current);
   }
 
   log.debug('All required permissions satisfied');
 
-  return true;
+  return null;
 };
