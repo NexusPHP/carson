@@ -52894,6 +52894,17 @@ var Subscriber = class {
     }
     return config3;
   }
+  async loadEnabledSettings(context, schema) {
+    if (context.isBot === true) {
+      return null;
+    }
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return null;
+    }
+    const settings = subscriberSettings(config3, this.id, schema, context.log) ?? {};
+    return { config: config3, settings };
+  }
 };
 
 // src/app-identity.ts
@@ -53094,11 +53105,11 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const config3 = await this.loadEnabledConfig(scheduled);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings2);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings2, scheduled.log) ?? {};
+    const { settings } = enabled;
     const days = settings.days ?? DEFAULT_DAYS;
     const reason = settings.reason ?? DEFAULT_REASON;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
@@ -53182,14 +53193,11 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    if (context.isBot) {
+    const enabled = await this.loadEnabledSettings(context, Settings3);
+    if (enabled === null) {
       return;
     }
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
-      return;
-    }
-    const settings = subscriberSettings(config3, this.id, Settings3, context.log) ?? {};
+    const { settings } = enabled;
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
     const pr = context.payload.pull_request;
@@ -53265,14 +53273,11 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
-    if (context.isBot) {
+    const enabled = await this.loadEnabledSettings(context, Settings4);
+    if (enabled === null) {
       return;
     }
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
-      return;
-    }
-    const settings = subscriberSettings(config3, this.id, Settings4, context.log) ?? {};
+    const { settings } = enabled;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
     const labelNames = (rawLabels ?? []).map((label) => label.name).filter((name) => name !== void 0);
     if (!labelNames.includes(staleLabel)) {
@@ -53307,11 +53312,11 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const config3 = await this.loadEnabledConfig(scheduled);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings4, scheduled.log) ?? {};
+    const { settings } = enabled;
     const daysUntilStale = settings.days_until_stale ?? DEFAULT_DAYS_STALE;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
@@ -53438,14 +53443,11 @@ var WelcomeSubscriber = class extends Subscriber {
   requiredPermissions = { issues: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
-      if (context.isBot) {
+      const enabled = await this.loadEnabledSettings(context, Settings5);
+      if (enabled === null) {
         return;
       }
-      const config3 = await this.loadEnabledConfig(context);
-      if (config3 === null) {
-        return;
-      }
-      const settings = subscriberSettings(config3, this.id, Settings5, context.log) ?? {};
+      const { settings } = enabled;
       const bucket = bucketFor(settings, context.payload.pull_request.author_association);
       if (bucket === null) {
         return;
@@ -53460,18 +53462,15 @@ var WelcomeSubscriber = class extends Subscriber {
       context.log.info(`commented on pull_request #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
-      if (context.isBot) {
-        return;
-      }
       const issue3 = context.payload.issue;
       if (issue3.user === null) {
         return;
       }
-      const config3 = await this.loadEnabledConfig(context);
-      if (config3 === null) {
+      const enabled = await this.loadEnabledSettings(context, Settings5);
+      if (enabled === null) {
         return;
       }
-      const settings = subscriberSettings(config3, this.id, Settings5, context.log) ?? {};
+      const { settings } = enabled;
       const bucket = bucketFor(settings, issue3.author_association);
       if (bucket === null) {
         return;

@@ -1,7 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { interpolate } from '../template.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const FIRST_TIME_ASSOCIATIONS = ['FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR'] as const;
@@ -70,17 +69,13 @@ export class WelcomeSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {
-      if (context.isBot) {
+      const enabled = await this.loadEnabledSettings(context, Settings);
+
+      if (enabled === null) {
         return;
       }
 
-      const config = await this.loadEnabledConfig(context);
-
-      if (config === null) {
-        return;
-      }
-
-      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
+      const { settings } = enabled;
       const bucket = bucketFor(settings, context.payload.pull_request.author_association);
 
       if (bucket === null) {
@@ -100,23 +95,19 @@ export class WelcomeSubscriber extends Subscriber {
     });
 
     probot.on('issues.opened', async (context: Context<'issues.opened'>): Promise<void> => {
-      if (context.isBot) {
-        return;
-      }
-
       const issue = context.payload.issue;
 
       if (issue.user === null) {
         return;
       }
 
-      const config = await this.loadEnabledConfig(context);
+      const enabled = await this.loadEnabledSettings(context, Settings);
 
-      if (config === null) {
+      if (enabled === null) {
         return;
       }
 
-      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
+      const { settings } = enabled;
       const bucket = bucketFor(settings, issue.author_association);
 
       if (bucket === null) {

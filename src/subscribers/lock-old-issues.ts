@@ -1,7 +1,6 @@
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const LOCK_REASONS = ['off-topic', 'too heated', 'resolved', 'spam'] as const;
@@ -29,13 +28,13 @@ export class LockOldIssuesSubscriber extends Subscriber {
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {
-    const config = await this.loadEnabledConfig(scheduled);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings);
 
-    if (config === null) {
+    if (enabled === null) {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings, scheduled.log) ?? {};
+    const { settings } = enabled;
     const days = settings.days ?? DEFAULT_DAYS;
     const reason = settings.reason ?? DEFAULT_REASON;
     const exemptLabels = new Set(settings.exempt_labels ?? []);

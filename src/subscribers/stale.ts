@@ -3,7 +3,6 @@ import { findCarsonComment, minimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -53,17 +52,13 @@ export class StaleSubscriber extends Subscriber {
     issueNumber: number,
     rawLabels: { name?: string }[] | undefined,
   ): Promise<void> {
-    if (context.isBot) {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null) {
       return;
     }
 
-    const config = await this.loadEnabledConfig(context);
-
-    if (config === null) {
-      return;
-    }
-
-    const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
+    const { settings } = enabled;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
     const labelNames = (rawLabels ?? [])
       .map((label) => label.name)
@@ -107,13 +102,13 @@ export class StaleSubscriber extends Subscriber {
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {
-    const config = await this.loadEnabledConfig(scheduled);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings);
 
-    if (config === null) {
+    if (enabled === null) {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings, scheduled.log) ?? {};
+    const { settings } = enabled;
     const daysUntilStale = settings.days_until_stale ?? DEFAULT_DAYS_STALE;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;

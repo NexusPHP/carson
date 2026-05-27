@@ -1,6 +1,5 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -46,17 +45,13 @@ export class SignedCommitsSubscriber extends Subscriber {
   }
 
   async #handle(context: SignedCommitsContext): Promise<void> {
-    if (context.isBot) {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null) {
       return;
     }
 
-    const config = await this.loadEnabledConfig(context);
-
-    if (config === null) {
-      return;
-    }
-
-    const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
+    const { settings } = enabled;
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
 
