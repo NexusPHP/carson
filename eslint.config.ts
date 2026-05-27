@@ -44,6 +44,7 @@ const config: ConfigArray = tsEslint.config(
       '@typescript-eslint/default-param-last': 'error',
       '@typescript-eslint/explicit-member-accessibility': 'error',
       '@typescript-eslint/method-signature-style': 'error',
+      '@typescript-eslint/no-empty-function': ['error', { allow: ['methods'] }],
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/no-unnecessary-template-expression': 'error',
       '@typescript-eslint/no-unused-vars': ['error', {

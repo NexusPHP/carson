@@ -71,7 +71,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     pull_requests: 'read',
   };
 
-  public register(probot: Probot): void {
+  public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
       await this.#handlePrEvent(context as Context<PrEvent>);
     });
@@ -92,7 +92,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       return;
     }
 
-    await this.#checkPR(context, context.payload.pull_request.number, config);
+    await this.#checkPr(context, context.payload.pull_request.number, config);
   }
 
   async #handlePushEvent(context: Context<'push'>): Promise<void> {
@@ -123,11 +123,11 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
 
     for (const pr of prs) {
-      await this.#checkPR(context, pr.number, config);
+      await this.#checkPr(context, pr.number, config);
     }
   }
 
-  async #checkPR(context: SubscriberContext, prNumber: number, config: CarsonConfig): Promise<void> {
+  async #checkPr(context: SubscriberContext, prNumber: number, config: CarsonConfig): Promise<void> {
     const { owner, repo } = context.repo();
     const { data: pr } = await context.octokit.rest.pulls.get({
       owner,

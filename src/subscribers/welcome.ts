@@ -68,7 +68,7 @@ export class WelcomeSubscriber extends Subscriber {
   public readonly description = 'Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.';
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
 
-  public register(probot: Probot): void {
+  public override register(probot: Probot): void {
     probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {
       if (context.isBot) {
         return;

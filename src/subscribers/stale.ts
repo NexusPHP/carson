@@ -28,7 +28,7 @@ export class StaleSubscriber extends Subscriber {
   public readonly description = 'Marks inactive issues and pull requests as stale, then closes them after a further grace period.';
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
 
-  public register(probot: Probot): void {
+  public override register(probot: Probot): void {
     probot.on(['issue_comment.created', 'issues.edited'], async (context): Promise<void> => {
       const ctx = context as Context<'issue_comment.created' | 'issues.edited'>;
       await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);

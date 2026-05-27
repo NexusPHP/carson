@@ -52880,7 +52880,8 @@ var findCarsonComment = (comments, options2) => {
 
 // src/subscriber.ts
 var Subscriber = class {
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  register(_probot) {
+  }
   registerScheduled(_registrar) {
   }
   async loadEnabledConfig(context) {
@@ -52970,7 +52971,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    await this.#checkPR(context, context.payload.pull_request.number, config3);
+    await this.#checkPr(context, context.payload.pull_request.number, config3);
   }
   async #handlePushEvent(context) {
     if (context.isBot) {
@@ -52994,10 +52995,10 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       per_page: 100
     });
     for (const pr of prs) {
-      await this.#checkPR(context, pr.number, config3);
+      await this.#checkPr(context, pr.number, config3);
     }
   }
-  async #checkPR(context, prNumber, config3) {
+  async #checkPr(context, prNumber, config3) {
     const { owner, repo } = context.repo();
     const { data: pr } = await context.octokit.rest.pulls.get({
       owner,
@@ -53087,9 +53088,6 @@ var LockOldIssuesSubscriber = class extends Subscriber {
   id = "lock-old-issues";
   description = "Locks closed issues that have been inactive past a configurable threshold.";
   requiredPermissions = { issues: "write" };
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  register(_probot) {
-  }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
       await this.#run(context);

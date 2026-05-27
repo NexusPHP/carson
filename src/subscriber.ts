@@ -11,9 +11,8 @@ export abstract class Subscriber {
   public abstract readonly description: string;
   public abstract readonly requiredPermissions: RequiredPermissions;
 
-  public abstract register(probot: Probot): void;
+  public register(_probot: Probot): void {}
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   public registerScheduled(_registrar: ScheduledRegistrar): void {}
 
   protected async loadEnabledConfig(context: ConfigLoadable): Promise<CarsonConfig | null> {

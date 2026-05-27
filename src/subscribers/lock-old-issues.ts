@@ -1,7 +1,6 @@
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
-import type { Probot } from 'probot';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -22,9 +21,6 @@ export class LockOldIssuesSubscriber extends Subscriber {
   public readonly id = 'lock-old-issues';
   public readonly description = 'Locks closed issues that have been inactive past a configurable threshold.';
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
-
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  public register(_probot: Probot): void {}
 
   public override registerScheduled(registrar: ScheduledRegistrar): void {
     registrar.on(async (context) => {

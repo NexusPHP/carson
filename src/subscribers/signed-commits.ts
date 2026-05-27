@@ -39,7 +39,7 @@ export class SignedCommitsSubscriber extends Subscriber {
     pull_requests: 'read',
   };
 
-  public register(probot: Probot): void {
+  public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
       await this.#handle(context as SignedCommitsContext);
     });

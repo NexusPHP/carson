@@ -11,7 +11,7 @@ class FakeSubscriber extends Subscriber {
   public registerCalls: Probot[] = [];
   public scheduledCalls: ScheduledRegistrar[] = [];
 
-  public register(probot: Probot): void {
+  public override register(probot: Probot): void {
     this.registerCalls.push(probot);
   }
 
