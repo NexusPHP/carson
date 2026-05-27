@@ -138,7 +138,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
 
     if (pr.mergeable === null) {
-      context.log.info(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      this.log(context).info(`mergeable not yet computed for PR #${prNumber}, skipping`);
       return;
     }
 
@@ -170,7 +170,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     const { owner, repo } = context.repo();
 
     if (existing === null) {
-      const settings = subscriberSettings(config, this.id, Settings, context.log) ?? {};
+      const settings = subscriberSettings(config, this.id, Settings, this.log(context)) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,
@@ -186,13 +186,13 @@ export class ConflictsNotifierSubscriber extends Subscriber {
         issue_number: pr.number,
         body,
       });
-      context.log.info(`posted conflict notice on PR #${pr.number}`);
+      this.log(context).info(`posted conflict notice on PR #${pr.number}`);
       return;
     }
 
     if (existing.isMinimized) {
       await unminimizeComment(context.octokit, existing.id);
-      context.log.info(`reopened conflict notice on PR #${pr.number}`);
+      this.log(context).info(`reopened conflict notice on PR #${pr.number}`);
     }
   }
 
@@ -206,7 +206,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     }
 
     await minimizeComment(context.octokit, existing.id, 'RESOLVED');
-    context.log.info(`resolved conflict notice on PR #${prNumber}`);
+    this.log(context).info(`resolved conflict notice on PR #${prNumber}`);
   }
 
   async #findExistingComment(context: SubscriberContext, prNumber: number): Promise<ExistingComment | null> {

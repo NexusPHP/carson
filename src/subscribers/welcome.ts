@@ -91,7 +91,7 @@ export class WelcomeSubscriber extends Subscriber {
 
       await context.octokit.rest.issues.createComment(context.issue({ body }));
 
-      context.log.info(`commented on pull_request #${context.payload.pull_request.number}`);
+      this.log(context).info(`commented on pull_request #${context.payload.pull_request.number}`);
     });
 
     probot.on('issues.opened', async (context: Context<'issues.opened'>): Promise<void> => {
@@ -123,7 +123,7 @@ export class WelcomeSubscriber extends Subscriber {
 
       await context.octokit.rest.issues.createComment(context.issue({ body }));
 
-      context.log.info(`commented on issue #${context.payload.issue.number}`);
+      this.log(context).info(`commented on issue #${context.payload.issue.number}`);
     });
   }
 }

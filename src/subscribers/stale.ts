@@ -87,12 +87,14 @@ export class StaleSubscriber extends Subscriber {
       isBotAuthored: (c) => c.user?.type === 'Bot',
     });
 
+    const log = this.log(context);
+
     if (stalePost !== undefined) {
       await minimizeComment(context.octokit, stalePost.node_id, 'OUTDATED');
-      context.log.info(`stale: minimized stale notice on #${issueNumber}`);
+      log.info(`minimized stale notice on #${issueNumber}`);
     }
 
-    context.log.info(`stale: removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`removed "${staleLabel}" from #${issueNumber} after activity`);
   }
 
   public override registerScheduled(registrar: ScheduledRegistrar): void {
@@ -186,6 +188,6 @@ export class StaleSubscriber extends Subscriber {
       }
     });
 
-    scheduled.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
+    this.log(scheduled).info(`marked ${staled} stale, closed ${closed}`);
   }
 }

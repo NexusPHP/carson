@@ -102,6 +102,6 @@ export class LockOldIssuesSubscriber extends Subscriber {
       locked += 1;
     });
 
-    scheduled.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
+    this.log(scheduled).info(`locked ${locked} issue(s) older than ${days} day(s)`);
   }
 }

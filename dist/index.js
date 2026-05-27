@@ -52816,6 +52816,9 @@ var Subscriber = class {
   }
   registerScheduled(_registrar) {
   }
+  log(context) {
+    return context.log.child({ name: this.id });
+  }
   async loadEnabledConfig(context) {
     const config3 = await loadConfig(context);
     if (config3 === null) {
@@ -52834,7 +52837,7 @@ var Subscriber = class {
     if (config3 === null) {
       return null;
     }
-    const settings = subscriberSettings(config3, this.id, schema, context.log) ?? {};
+    const settings = subscriberSettings(config3, this.id, schema, this.log(context)) ?? {};
     return { config: config3, settings };
   }
 };
@@ -53133,7 +53136,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       pull_number: prNumber
     });
     if (pr.mergeable === null) {
-      context.log.info(`mergeable not yet computed for PR #${prNumber}, skipping`);
+      this.log(context).info(`mergeable not yet computed for PR #${prNumber}, skipping`);
       return;
     }
     if (pr.user === null) {
@@ -53150,7 +53153,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
   async #handleConflict(context, pr, config3, existing) {
     const { owner, repo } = context.repo();
     if (existing === null) {
-      const settings = subscriberSettings(config3, this.id, Settings, context.log) ?? {};
+      const settings = subscriberSettings(config3, this.id, Settings, this.log(context)) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,
@@ -53167,12 +53170,12 @@ ${COMMENT_MARKER}`;
         issue_number: pr.number,
         body
       });
-      context.log.info(`posted conflict notice on PR #${pr.number}`);
+      this.log(context).info(`posted conflict notice on PR #${pr.number}`);
       return;
     }
     if (existing.isMinimized) {
       await unminimizeComment(context.octokit, existing.id);
-      context.log.info(`reopened conflict notice on PR #${pr.number}`);
+      this.log(context).info(`reopened conflict notice on PR #${pr.number}`);
     }
   }
   async #handleNoConflict(context, prNumber, existing) {
@@ -53180,7 +53183,7 @@ ${COMMENT_MARKER}`;
       return;
     }
     await minimizeComment(context.octokit, existing.id, "RESOLVED");
-    context.log.info(`resolved conflict notice on PR #${prNumber}`);
+    this.log(context).info(`resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
     const { owner, repo } = context.repo();
@@ -53284,7 +53287,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       });
       locked += 1;
     });
-    scheduled.log.info(`lock-old-issues: locked ${locked} issue(s) older than ${days} day(s) in ${owner}/${repo}`);
+    this.log(scheduled).info(`locked ${locked} issue(s) older than ${days} day(s)`);
   }
 };
 
@@ -53352,7 +53355,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
       conclusion,
       output
     });
-    context.log.info(`signed-commits check ${conclusion} for PR #${pr.number}`);
+    this.log(context).info(`check ${conclusion} for PR #${pr.number}`);
   }
 };
 
@@ -53421,11 +53424,12 @@ var StaleSubscriber = class extends Subscriber {
       marker: COMMENT_MARKER2,
       isBotAuthored: (c) => c.user?.type === "Bot"
     });
+    const log = this.log(context);
     if (stalePost !== void 0) {
       await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
-      context.log.info(`stale: minimized stale notice on #${issueNumber}`);
+      log.info(`minimized stale notice on #${issueNumber}`);
     }
-    context.log.info(`stale: removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`removed "${staleLabel}" from #${issueNumber} after activity`);
   }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
@@ -53508,7 +53512,7 @@ ${COMMENT_MARKER2}`
         staled += 1;
       }
     });
-    scheduled.log.info(`stale: marked ${staled} stale, closed ${closed} in ${owner}/${repo}`);
+    this.log(scheduled).info(`marked ${staled} stale, closed ${closed}`);
   }
 };
 
@@ -53580,7 +53584,7 @@ var WelcomeSubscriber = class extends Subscriber {
         title: context.payload.pull_request.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      context.log.info(`commented on pull_request #${context.payload.pull_request.number}`);
+      this.log(context).info(`commented on pull_request #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
       const issue3 = context.payload.issue;
@@ -53603,7 +53607,7 @@ var WelcomeSubscriber = class extends Subscriber {
         title: issue3.title
       });
       await context.octokit.rest.issues.createComment(context.issue({ body }));
-      context.log.info(`commented on issue #${context.payload.issue.number}`);
+      this.log(context).info(`commented on issue #${context.payload.issue.number}`);
     });
   }
 };

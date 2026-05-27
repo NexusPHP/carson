@@ -1,6 +1,7 @@
 import { type CarsonConfig, subscriberSettings } from './configuration/schema.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
 import type { components } from '@octokit/openapi-types';
+import type { Logger } from 'pino';
 import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
 import type { z } from 'zod';
@@ -22,6 +23,10 @@ export abstract class Subscriber {
   public register(_probot: Probot): void {}
 
   public registerScheduled(_registrar: ScheduledRegistrar): void {}
+
+  protected log(context: { log: Logger }): Logger {
+    return context.log.child({ name: this.id });
+  }
 
   protected async loadEnabledConfig(context: ConfigLoadable): Promise<CarsonConfig | null> {
     const config = await loadConfig(context);
@@ -51,7 +56,7 @@ export abstract class Subscriber {
       return null;
     }
 
-    const settings = subscriberSettings(config, this.id, schema, context.log) ?? ({} as T);
+    const settings = subscriberSettings(config, this.id, schema, this.log(context)) ?? ({} as T);
 
     return { config, settings };
   }

@@ -22,6 +22,13 @@ interface Harness {
 const NOW = new Date('2026-01-01T00:00:00Z').getTime();
 const DAYS_AGO = (days: number): string => new Date(NOW - days * 24 * 60 * 60 * 1000).toISOString();
 
+const makeStubLog = (): Record<string, unknown> => {
+  const log: Record<string, unknown> = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+  log['child'] = vi.fn().mockReturnValue(log);
+
+  return log;
+};
+
 const makeHarness = (issues: IssueShape[], config: unknown): Harness => {
   const lockMock = vi.fn().mockResolvedValue({});
   const commentMock = vi.fn().mockResolvedValue({});
@@ -46,7 +53,7 @@ const makeHarness = (issues: IssueShape[], config: unknown): Harness => {
         },
       },
     } as never,
-    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+    log: makeStubLog() as never,
     payload: { schedule: '0 * * * *', workflow: '.github/workflows/cron.yml' },
     repo: () => ({ owner: 'acme', repo: 'widgets' }),
     config: configMock,
