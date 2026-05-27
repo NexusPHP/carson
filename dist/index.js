@@ -38200,52 +38200,6 @@ var parseRepository = (input) => {
   };
 };
 
-// src/scheduled.ts
-var ScheduledRegistrar = class {
-  #handlers = [];
-  on(handler2) {
-    this.#handlers.push(handler2);
-  }
-  get handlers() {
-    return this.#handlers;
-  }
-};
-var buildContext = (octokit, log, owner, repo, payload) => ({
-  octokit,
-  log,
-  payload,
-  repo: () => ({ owner, repo }),
-  config: async (file2) => {
-    const result = await octokit.config.get({
-      owner,
-      repo,
-      path: `.github/${file2}`
-    });
-    return result.config;
-  }
-});
-var dispatchScheduled = async (probot, registrar, repository, payload) => {
-  const parsed = parseRepository(repository);
-  if (parsed === null) {
-    throw new Error(INVALID_REPOSITORY_MESSAGE);
-  }
-  const { owner, repo } = parsed;
-  const appOctokit = await probot.auth();
-  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-  const octokit = await probot.auth(installation.id);
-  const context = buildContext(octokit, probot.log, owner, repo, payload);
-  let failed = false;
-  for (const handler2 of registrar.handlers) {
-    try {
-      await handler2(context);
-    } catch (error52) {
-      probot.log.error(error52);
-      failed = true;
-    }
-  }
-  return { failed };
-};
-
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -52787,6 +52741,18 @@ var subscriberSettings = (config3, subscriberId, schema, log) => {
 // src/configuration/cache.ts
 var CONFIG_FILE = "carson.yml";
 var CONFIG_PATH2 = `.github/${CONFIG_FILE}`;
+var createConfigLoadable = (octokit, owner, repo, log) => ({
+  config: async (file2) => {
+    const result = await octokit.config.get({
+      owner,
+      repo,
+      path: `.github/${file2}`
+    });
+    return result.config;
+  },
+  repo: () => ({ owner, repo }),
+  log
+});
 var cache = /* @__PURE__ */ new Map();
 var registeredIds = [];
 var setRegisteredSubscribers = (ids) => {
@@ -52820,6 +52786,43 @@ var loadConfig = async (context) => {
     cache.set(key, pending);
   }
   return await pending;
+};
+
+// src/scheduled.ts
+var ScheduledRegistrar = class {
+  #handlers = [];
+  on(handler2) {
+    this.#handlers.push(handler2);
+  }
+  get handlers() {
+    return this.#handlers;
+  }
+};
+var buildContext = (octokit, log, owner, repo, payload) => ({
+  ...createConfigLoadable(octokit, owner, repo, log),
+  octokit,
+  payload
+});
+var dispatchScheduled = async (probot, registrar, repository, payload) => {
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    throw new Error(INVALID_REPOSITORY_MESSAGE);
+  }
+  const { owner, repo } = parsed;
+  const appOctokit = await probot.auth();
+  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+  const octokit = await probot.auth(installation.id);
+  const context = buildContext(octokit, probot.log, owner, repo, payload);
+  let failed = false;
+  for (const handler2 of registrar.handlers) {
+    try {
+      await handler2(context);
+    } catch (error52) {
+      probot.log.error(error52);
+      failed = true;
+    }
+  }
+  return { failed };
 };
 
 // src/carson.ts
@@ -63787,18 +63790,7 @@ var runPreflight = async (probot, carson2, repository) => {
     return true;
   }
   const installationOctokit = await probot.auth(installationId);
-  const loadable = {
-    config: async (file2) => {
-      const result = await installationOctokit.config.get({
-        owner,
-        repo,
-        path: `.github/${file2}`
-      });
-      return result.config;
-    },
-    repo: () => ({ owner, repo }),
-    log: probot.log
-  };
+  const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config3 = await loadConfig(loadable);
   if (config3 === null) {
     return true;

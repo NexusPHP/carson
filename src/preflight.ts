@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { type AppIdentity, setAppIdentity } from './app-identity.js';
-import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
+import { createConfigLoadable, loadConfig } from './configuration/cache.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { type PermissionLevel, type RequiredPermissions, type Subscriber } from './subscriber.js';
 import type { Carson } from './carson.js';
@@ -103,18 +103,7 @@ export const runPreflight = async (
   }
 
   const installationOctokit = await probot.auth(installationId);
-  const loadable: ConfigLoadable = {
-    config: async <T>(file: string): Promise<T | null> => {
-      const result = await installationOctokit.config.get({
-        owner,
-        repo,
-        path: `.github/${file}`,
-      });
-      return result.config as T | null;
-    },
-    repo: () => ({ owner, repo }),
-    log: probot.log,
-  };
+  const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config = await loadConfig(loadable);
 
   if (config === null) {

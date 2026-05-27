@@ -1,5 +1,6 @@
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import type { Probot, ProbotOctokit } from 'probot';
+import { createConfigLoadable } from './configuration/cache.js';
 import type { Logger } from 'pino';
 
 export interface SchedulePayload {
@@ -40,18 +41,9 @@ const buildContext = (
   repo: string,
   payload: SchedulePayload,
 ): ScheduledContext => ({
+  ...createConfigLoadable(octokit, owner, repo, log),
   octokit,
-  log,
   payload,
-  repo: () => ({ owner, repo }),
-  config: async <T>(file: string): Promise<T | null> => {
-    const result = await octokit.config.get({
-      owner,
-      repo,
-      path: `.github/${file}`,
-    });
-    return result.config as T | null;
-  },
 });
 
 export const dispatchScheduled = async (

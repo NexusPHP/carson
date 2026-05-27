@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { type CarsonConfig, CarsonConfigSchema } from './schema.js';
 import type { Logger } from 'pino';
+import type { ProbotOctokit } from 'probot';
 
 const CONFIG_FILE = 'carson.yml';
 const CONFIG_PATH = `.github/${CONFIG_FILE}`;
@@ -10,6 +11,25 @@ export interface ConfigLoadable {
   repo: () => { owner: string; repo: string };
   log: Logger;
 }
+
+export const createConfigLoadable = (
+  octokit: InstanceType<typeof ProbotOctokit>,
+  owner: string,
+  repo: string,
+  log: Logger,
+): ConfigLoadable => ({
+  config: async <T>(file: string): Promise<T | null> => {
+    const result = await octokit.config.get({
+      owner,
+      repo,
+      path: `.github/${file}`,
+    });
+
+    return result.config as T | null;
+  },
+  repo: () => ({ owner, repo }),
+  log,
+});
 
 const cache = new Map<string, Promise<CarsonConfig | null>>();
 let registeredIds: readonly string[] = [];
