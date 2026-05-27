@@ -90,10 +90,10 @@ describe('Carson', () => {
     ]);
 
     // Only alpha is enabled. Beta's permissions are skipped.
-    const missing = carson.missingPermissions({ contents: 'read' }, ['alpha']);
+    const missing = carson.missingPermissions({ contents: 'read' }, { contents: 'read' }, ['alpha']);
 
     expect(missing).toEqual([
-      { subscriberId: 'alpha', permission: 'issues', required: 'write', granted: undefined },
+      { subscriberId: 'alpha', permission: 'issues', required: 'write', installGranted: undefined, appDeclared: undefined },
     ]);
   });
 });

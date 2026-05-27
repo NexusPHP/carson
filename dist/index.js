@@ -52833,24 +52833,31 @@ var LEVEL_RANK = {
   admin: 3
 };
 var isSufficient = (granted, required2) => granted !== void 0 && LEVEL_RANK[granted] >= LEVEL_RANK[required2];
-var collectMissing = (subscriberId, required2, granted) => Object.entries(required2).filter(([perm, level]) => !isSufficient(granted[perm], level)).map(([perm, level]) => ({
+var collectMissing = (subscriberId, required2, installPermissions, appPermissions) => Object.entries(required2).filter(([perm, level]) => !isSufficient(installPermissions[perm], level)).map(([perm, level]) => ({
   subscriberId,
   permission: perm,
   required: level,
-  granted: granted[perm]
+  installGranted: installPermissions[perm],
+  appDeclared: appPermissions[perm]
 }));
-var findMissingPermissions = (enabled, granted) => [
-  ...collectMissing("<base>", BASE_PERMISSIONS, granted),
-  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted))
+var findMissingPermissions = (enabled, installPermissions, appPermissions) => [
+  ...collectMissing("<base>", BASE_PERMISSIONS, installPermissions, appPermissions),
+  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, installPermissions, appPermissions))
 ];
+var describeLevel = (level) => level === void 0 ? "nothing" : `"${level}"`;
+var remediationFor = (m) => m.appDeclared !== void 0 && LEVEL_RANK[m.appDeclared] >= LEVEL_RANK[m.required] ? "Re-approve the installation" : "Update App settings, then re-approve the installation";
 var formatMissingPermissionsError = (missing, appHtmlUrl, app) => {
   const header = `${app?.name ?? "Carson"} is missing required GitHub App permissions:`;
   const body = missing.map((m) => {
-    const grantedText = m.granted === void 0 ? "not granted" : `granted "${m.granted}"`;
-    return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
+    const declared = describeLevel(m.appDeclared);
+    const accepted = describeLevel(m.installGranted);
+    return `  - ${m.permission} (${m.subscriberId}): required "${m.required}", App declares ${declared}, install accepted ${accepted}. ${remediationFor(m)}.`;
   });
-  const footer = appHtmlUrl === void 0 ? "Update permissions in your GitHub App settings." : `Update permissions in your GitHub App settings: ${appHtmlUrl}`;
-  return [header, ...body, footer].join("\n");
+  const lines = [header, ...body];
+  if (appHtmlUrl !== void 0) {
+    lines.push(`App settings: ${appHtmlUrl}`);
+  }
+  return lines.join("\n");
 };
 var runPreflight = async (probot, carson2, repository) => {
   const parsed = parseRepository(repository);
@@ -52872,9 +52879,11 @@ var runPreflight = async (probot, carson2, repository) => {
   };
   setAppIdentity(identity);
   let installationId;
+  let installationPermissions;
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
+    installationPermissions = installation.permissions ?? {};
   } catch (error52) {
     probot.log.warn({ err: error52 }, "preflight: could not resolve installation, skipping");
     return true;
@@ -52885,8 +52894,8 @@ var runPreflight = async (probot, carson2, repository) => {
   if (config3 === null) {
     return true;
   }
-  const granted = app.permissions ?? {};
-  const missing = carson2.missingPermissions(granted, config3.subscribers);
+  const appPermissions = app.permissions ?? {};
+  const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
     setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
     return false;
@@ -52958,9 +52967,9 @@ var Carson = class _Carson {
   get knownIds() {
     return this.#subscribers.map((s) => s.id);
   }
-  missingPermissions(granted, enabledIds) {
+  missingPermissions(installPermissions, appPermissions, enabledIds) {
     const enabled = this.#subscribers.filter((s) => enabledIds.includes(s.id));
-    return findMissingPermissions(enabled, granted);
+    return findMissingPermissions(enabled, installPermissions, appPermissions);
   }
 };
 

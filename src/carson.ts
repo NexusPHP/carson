@@ -37,11 +37,12 @@ export class Carson {
   }
 
   public missingPermissions(
-    granted: Readonly<Record<string, PermissionLevel>>,
+    installPermissions: Readonly<Record<string, PermissionLevel>>,
+    appPermissions: Readonly<Record<string, PermissionLevel>>,
     enabledIds: readonly string[],
   ): MissingPermission[] {
     const enabled = this.#subscribers.filter((s) => enabledIds.includes(s.id));
 
-    return findMissingPermissions(enabled, granted);
+    return findMissingPermissions(enabled, installPermissions, appPermissions);
   }
 }

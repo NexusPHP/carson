@@ -19,7 +19,8 @@ export interface MissingPermission {
   subscriberId: string;
   permission: string;
   required: PermissionLevel;
-  granted: PermissionLevel | undefined;
+  installGranted: PermissionLevel | undefined;
+  appDeclared: PermissionLevel | undefined;
 }
 
 const isSufficient = (granted: PermissionLevel | undefined, required: PermissionLevel): boolean =>
@@ -28,24 +29,35 @@ const isSufficient = (granted: PermissionLevel | undefined, required: Permission
 const collectMissing = (
   subscriberId: string,
   required: RequiredPermissions,
-  granted: Readonly<Record<string, PermissionLevel>>,
+  installPermissions: Readonly<Record<string, PermissionLevel>>,
+  appPermissions: Readonly<Record<string, PermissionLevel>>,
 ): MissingPermission[] =>
   Object.entries(required)
-    .filter(([perm, level]) => !isSufficient(granted[perm], level))
+    .filter(([perm, level]) => !isSufficient(installPermissions[perm], level))
     .map(([perm, level]) => ({
       subscriberId,
       permission: perm,
       required: level,
-      granted: granted[perm],
+      installGranted: installPermissions[perm],
+      appDeclared: appPermissions[perm],
     }));
 
 export const findMissingPermissions = (
   enabled: readonly Pick<Subscriber, 'id' | 'requiredPermissions'>[],
-  granted: Readonly<Record<string, PermissionLevel>>,
+  installPermissions: Readonly<Record<string, PermissionLevel>>,
+  appPermissions: Readonly<Record<string, PermissionLevel>>,
 ): MissingPermission[] => [
-  ...collectMissing('<base>', BASE_PERMISSIONS, granted),
-  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, granted)),
+  ...collectMissing('<base>', BASE_PERMISSIONS, installPermissions, appPermissions),
+  ...enabled.flatMap((s) => collectMissing(s.id, s.requiredPermissions, installPermissions, appPermissions)),
 ];
+
+const describeLevel = (level: PermissionLevel | undefined): string =>
+  level === undefined ? 'nothing' : `"${level}"`;
+
+const remediationFor = (m: MissingPermission): string =>
+  m.appDeclared !== undefined && LEVEL_RANK[m.appDeclared] >= LEVEL_RANK[m.required]
+    ? 'Re-approve the installation'
+    : 'Update App settings, then re-approve the installation';
 
 export const formatMissingPermissionsError = (
   missing: readonly MissingPermission[],
@@ -54,14 +66,18 @@ export const formatMissingPermissionsError = (
 ): string => {
   const header = `${app?.name ?? 'Carson'} is missing required GitHub App permissions:`;
   const body = missing.map((m) => {
-    const grantedText = m.granted === undefined ? 'not granted' : `granted "${m.granted}"`;
-    return `  - ${m.permission}: required "${m.required}", ${grantedText} (${m.subscriberId})`;
-  });
-  const footer = appHtmlUrl === undefined
-    ? 'Update permissions in your GitHub App settings.'
-    : `Update permissions in your GitHub App settings: ${appHtmlUrl}`;
+    const declared = describeLevel(m.appDeclared);
+    const accepted = describeLevel(m.installGranted);
 
-  return [header, ...body, footer].join('\n');
+    return `  - ${m.permission} (${m.subscriberId}): required "${m.required}", App declares ${declared}, install accepted ${accepted}. ${remediationFor(m)}.`;
+  });
+  const lines = [header, ...body];
+
+  if (appHtmlUrl !== undefined) {
+    lines.push(`App settings: ${appHtmlUrl}`);
+  }
+
+  return lines.join('\n');
 };
 
 export const runPreflight = async (
@@ -93,10 +109,12 @@ export const runPreflight = async (
   setAppIdentity(identity);
 
   let installationId: number;
+  let installationPermissions: Readonly<Record<string, PermissionLevel>>;
 
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
+    installationPermissions = (installation.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
   } catch (error) {
     probot.log.warn({ err: error }, 'preflight: could not resolve installation, skipping');
     return true;
@@ -110,8 +128,8 @@ export const runPreflight = async (
     return true;
   }
 
-  const granted = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
-  const missing = carson.missingPermissions(granted, config.subscribers);
+  const appPermissions = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
+  const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
 
   if (missing.length > 0) {
     core.setFailed(formatMissingPermissionsError(missing, app.html_url, identity));
