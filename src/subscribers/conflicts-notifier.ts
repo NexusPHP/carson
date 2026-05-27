@@ -1,4 +1,5 @@
 import type { Context, Probot } from 'probot';
+import { findCarsonComment, minimizeComment, unminimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
 import { interpolate } from '../template.js';
@@ -59,18 +60,6 @@ const COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
         }
       }
     }
-  }
-}`;
-
-const MINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  minimizeComment(input: { subjectId: $subjectId, classifier: RESOLVED }) {
-    minimizedComment { isMinimized }
-  }
-}`;
-
-const UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  unminimizeComment(input: { subjectId: $subjectId }) {
-    unminimizedComment { ... on IssueComment { id } }
   }
 }`;
 
@@ -200,7 +189,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     }
 
     if (existing.isMinimized) {
-      await context.octokit.graphql(UNMINIMIZE_MUTATION, { subjectId: existing.id });
+      await unminimizeComment(context.octokit, existing.id);
       context.log.info(`reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -214,7 +203,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       return;
     }
 
-    await context.octokit.graphql(MINIMIZE_MUTATION, { subjectId: existing.id });
+    await minimizeComment(context.octokit, existing.id, 'RESOLVED');
     context.log.info(`resolved conflict notice on PR #${prNumber}`);
   }
 
@@ -226,12 +215,10 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       number: prNumber,
     });
 
-    // Filter to bot-authored comments and require the marker at end-of-body.
-    // Carson always appends the marker last, so anchoring rejects a marker
-    // that ended up mid-body via attacker-controlled interpolation.
-    const match = response.repository.pullRequest.comments.nodes.find((node) =>
-      node.author?.__typename === 'Bot' && node.body.endsWith(COMMENT_MARKER),
-    );
+    const match = findCarsonComment(response.repository.pullRequest.comments.nodes, {
+      marker: COMMENT_MARKER,
+      isBotAuthored: (node) => node.author?.__typename === 'Bot',
+    });
 
     if (match === undefined) {
       return null;

@@ -1,4 +1,5 @@
 import type { Context, Probot } from 'probot';
+import { findCarsonComment, minimizeComment } from '../github/comments.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { interpolate } from '../template.js';
@@ -21,12 +22,6 @@ const DEFAULT_STALE_MESSAGE = 'This {{type}} has been inactive for {{days_inacti
 const DEFAULT_CLOSE_MESSAGE = 'Closing this {{type}} due to extended inactivity.';
 const COMMENT_MARKER = '<!-- carson:stale -->';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-const MINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  minimizeComment(input: { subjectId: $subjectId, classifier: OUTDATED }) {
-    minimizedComment { isMinimized }
-  }
-}`;
 
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';
@@ -92,15 +87,13 @@ export class StaleSubscriber extends Subscriber {
       issue_number: issueNumber,
       per_page: 100,
     });
-    // Filter to bot-authored comments and require the marker at end-of-body.
-    // Carson always appends the marker last, so anchoring rejects a marker
-    // that ended up mid-body via attacker-controlled interpolation.
-    const stalePost = comments.find((c) =>
-      c.user?.type === 'Bot' && c.body?.endsWith(COMMENT_MARKER) === true,
-    );
+    const stalePost = findCarsonComment(comments, {
+      marker: COMMENT_MARKER,
+      isBotAuthored: (c) => c.user?.type === 'Bot',
+    });
 
     if (stalePost !== undefined) {
-      await context.octokit.graphql(MINIMIZE_MUTATION, { subjectId: stalePost.node_id });
+      await minimizeComment(context.octokit, stalePost.node_id, 'OUTDATED');
       context.log.info(`stale: minimized stale notice on #${issueNumber}`);
     }
 

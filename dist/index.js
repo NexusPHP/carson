@@ -52840,6 +52840,29 @@ var Carson = class _Carson {
   }
 };
 
+// src/github/comments.ts
+var MINIMIZE_MUTATION = `mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
+  minimizeComment(input: { subjectId: $subjectId, classifier: $classifier }) {
+    minimizedComment { isMinimized }
+  }
+}`;
+var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
+  unminimizeComment(input: { subjectId: $subjectId }) {
+    unminimizedComment { ... on IssueComment { id } }
+  }
+}`;
+var minimizeComment = async (octokit, subjectId, classifier) => {
+  await octokit.graphql(MINIMIZE_MUTATION, { subjectId, classifier });
+};
+var unminimizeComment = async (octokit, subjectId) => {
+  await octokit.graphql(UNMINIMIZE_MUTATION, { subjectId });
+};
+var findCarsonComment = (comments, options2) => {
+  return comments.find(
+    (comment) => options2.isBotAuthored(comment) && comment.body?.endsWith(options2.marker) === true
+  );
+};
+
 // src/subscriber.ts
 var Subscriber = class {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -52907,16 +52930,6 @@ var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
         }
       }
     }
-  }
-}`;
-var MINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  minimizeComment(input: { subjectId: $subjectId, classifier: RESOLVED }) {
-    minimizedComment { isMinimized }
-  }
-}`;
-var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  unminimizeComment(input: { subjectId: $subjectId }) {
-    unminimizedComment { ... on IssueComment { id } }
   }
 }`;
 var ConflictsNotifierSubscriber = class extends Subscriber {
@@ -53015,7 +53028,7 @@ ${COMMENT_MARKER}`;
       return;
     }
     if (existing.isMinimized) {
-      await context.octokit.graphql(UNMINIMIZE_MUTATION, { subjectId: existing.id });
+      await unminimizeComment(context.octokit, existing.id);
       context.log.info(`reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -53023,7 +53036,7 @@ ${COMMENT_MARKER}`;
     if (existing === null || existing.isMinimized) {
       return;
     }
-    await context.octokit.graphql(MINIMIZE_MUTATION, { subjectId: existing.id });
+    await minimizeComment(context.octokit, existing.id, "RESOLVED");
     context.log.info(`resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
@@ -53033,9 +53046,10 @@ ${COMMENT_MARKER}`;
       repo,
       number: prNumber
     });
-    const match = response.repository.pullRequest.comments.nodes.find(
-      (node) => node.author?.__typename === "Bot" && node.body.endsWith(COMMENT_MARKER)
-    );
+    const match = findCarsonComment(response.repository.pullRequest.comments.nodes, {
+      marker: COMMENT_MARKER,
+      isBotAuthored: (node) => node.author?.__typename === "Bot"
+    });
     if (match === void 0) {
       return null;
     }
@@ -53216,11 +53230,6 @@ var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive
 var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}} due to extended inactivity.";
 var COMMENT_MARKER2 = "<!-- carson:stale -->";
 var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
-var MINIMIZE_MUTATION2 = `mutation($subjectId: ID!) {
-  minimizeComment(input: { subjectId: $subjectId, classifier: OUTDATED }) {
-    minimizedComment { isMinimized }
-  }
-}`;
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
@@ -53269,11 +53278,12 @@ var StaleSubscriber = class extends Subscriber {
       issue_number: issueNumber,
       per_page: 100
     });
-    const stalePost = comments.find(
-      (c) => c.user?.type === "Bot" && c.body?.endsWith(COMMENT_MARKER2) === true
-    );
+    const stalePost = findCarsonComment(comments, {
+      marker: COMMENT_MARKER2,
+      isBotAuthored: (c) => c.user?.type === "Bot"
+    });
     if (stalePost !== void 0) {
-      await context.octokit.graphql(MINIMIZE_MUTATION2, { subjectId: stalePost.node_id });
+      await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
       context.log.info(`stale: minimized stale notice on #${issueNumber}`);
     }
     context.log.info(`stale: removed "${staleLabel}" from #${issueNumber} after activity`);
