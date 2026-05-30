@@ -134,6 +134,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
+- [**pr-title-linter**](SUBSCRIBERS.md#pr-title-linter): validates PR titles against a configurable set of regex rules and reports the result as a check run.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.

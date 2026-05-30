@@ -12,6 +12,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - Subscribers
   - [conflicts-notifier](#conflicts-notifier)
   - [lock-old-issues](#lock-old-issues)
+  - [pr-title-linter](#pr-title-linter)
   - [signed-commits](#signed-commits)
   - [stale](#stale)
   - [thanks](#thanks)
@@ -157,6 +158,57 @@ settings:
       This issue has been quiet for {{days}} days, so I'm locking it to keep
       the discussion focused. If you have new information, please open a fresh
       issue and link back to this one.
+```
+
+---
+
+## pr-title-linter
+
+Validates pull request titles against a configurable set of regex rules and reports the result as a [Check Run](https://docs.github.com/en/rest/checks/runs).
+
+**Triggers**: `pull_request.opened`, `pull_request.edited`
+**Permissions**: `checks: write`, `pull_requests: read`
+
+Each event re-evaluates the current PR title against every configured rule and updates a single rolling check (keyed by check name). Rules with a malformed regex are skipped with a warning, so a single bad rule does not silence the whole subscriber.
+
+A rule's `mode` decides what the regex match means: `require` means the title must match the pattern, `forbid` means it must not. Each rule's `level` decides what a failure does to the check conclusion: an `error` rule failing produces `failure` (which blocks merging if the check is required), a `warning` rule failing produces `neutral` (advisory only). If every rule passes the conclusion is `success`. When both error and warning rules fail in the same evaluation, the conclusion is `failure`.
+
+> [!CAUTION]
+> Rule patterns are compiled to JavaScript `RegExp` and tested against the title with no runtime timeout. A catastrophically backtracking pattern (ReDoS) in `carson.yml` will hang the action. Since `carson.yml` lives on the default branch only, this is a maintainer footgun rather than a contributor attack surface, but keep patterns simple and test them locally before committing.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `name` | string | `Carson / pr-title-linter` |
+| `rules` | array of rule objects (see below) | `[]` (subscriber bails silently when empty) |
+
+Each rule object:
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `pattern` | string (compiled as JavaScript `RegExp`) | required |
+| `description` | string (shown in check output on failure) | required |
+| `mode` | `require` or `forbid` | `require` |
+| `level` | `error` or `warning` | `error` |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - pr-title-linter
+settings:
+  pr-title-linter:
+    name: "Carson / pr-title"
+    rules:
+      - pattern: '^(feat|fix|docs|chore|refactor|test)(\(.+\))?: .+'
+        description: 'Follow conventional commits'
+        level: error
+      - pattern: '^(WIP|TODO|DRAFT)\b'
+        description: 'Avoid WIP/TODO/DRAFT prefixes'
+        mode: forbid
+        level: warning
 ```
 
 ---
