@@ -14,6 +14,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [lock-old-issues](#lock-old-issues)
   - [signed-commits](#signed-commits)
   - [stale](#stale)
+  - [thanks](#thanks)
   - [welcome](#welcome)
 
 </details>
@@ -272,6 +273,50 @@ settings:
     exempt_labels:
       - pinned
       - security
+```
+
+---
+
+## thanks
+
+Posts a thank-you comment when a pull request is merged by someone other than its author.
+
+**Triggers**: `pull_request.closed`
+**Permissions**: `pull_requests: write`
+
+Carson fires once per merged PR. The subscriber skips four cases:
+
+- The PR was closed without merging.
+- The PR author merged the PR themselves (maintainer self-merge). Detected by `pull_request.user.login === pull_request.merged_by.login`.
+- The PR author is a bot (e.g. Dependabot, Renovate).
+- The PR has no author (a ghost user).
+
+There is no `author_association` filter. The self-merge guard already handles the most common "don't thank me for my own work" case, and the bot guard suppresses automation PRs. If you want finer scoping (e.g. exclude org members), open an issue.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `message` | string | `Thanks for the contribution, @{{user}}!` |
+
+### Context
+
+| Key | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the PR author |
+| `{{repo}}` | Repository name |
+| `{{number}}` | PR number |
+| `{{title}}` | PR title |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - thanks
+settings:
+  thanks:
+    message: "Thanks for landing #{{number}}, @{{user}}! 🎉"
 ```
 
 ---

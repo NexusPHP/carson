@@ -3,6 +3,7 @@ import { ConflictsNotifierSubscriber } from './subscribers/conflicts-notifier.js
 import { LockOldIssuesSubscriber } from './subscribers/lock-old-issues.js';
 import { SignedCommitsSubscriber } from './subscribers/signed-commits.js';
 import { StaleSubscriber } from './subscribers/stale.js';
+import { ThanksSubscriber } from './subscribers/thanks.js';
 import { WelcomeSubscriber } from './subscribers/welcome.js';
 
 export const carson = new Carson([
@@ -10,6 +11,7 @@ export const carson = new Carson([
   new LockOldIssuesSubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
+  new ThanksSubscriber(),
   new WelcomeSubscriber(),
 ]);
 

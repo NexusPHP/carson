@@ -53556,6 +53556,50 @@ ${COMMENT_MARKER2}`
   }
 };
 
+// src/subscribers/thanks.ts
+var Settings5 = external_exports.object({
+  message: external_exports.string().optional()
+});
+var DEFAULT_MESSAGE2 = "Thanks for the contribution, @{{user}}!";
+var ThanksSubscriber = class extends Subscriber {
+  id = "thanks";
+  description = "Posts a thank-you comment when a pull request is merged by someone other than its author. Skips bot and ghost authors.";
+  requiredPermissions = { pull_requests: "write" };
+  register(probot) {
+    probot.on("pull_request.closed", async (context) => {
+      const log = this.log(context);
+      const pr = context.payload.pull_request;
+      if (!pr.merged) {
+        return;
+      }
+      if (pr.user === null) {
+        log.debug(`PR #${pr.number}: no user (ghost), skipping`);
+        return;
+      }
+      if (pr.user.type === "Bot") {
+        log.debug(`PR #${pr.number}: author is a bot (${pr.user.login}), skipping`);
+        return;
+      }
+      if (pr.user.login === pr.merged_by?.login) {
+        log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
+        return;
+      }
+      const enabled = await this.loadEnabledSettings(context, Settings5);
+      if (enabled === null) {
+        return;
+      }
+      const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, {
+        user: pr.user.login,
+        repo: context.payload.repository.name,
+        number: pr.number,
+        title: pr.title
+      });
+      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      log.info(`Commented on PR #${pr.number}`);
+    });
+  }
+};
+
 // src/subscribers/welcome.ts
 var FIRST_TIME_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
 var RETURNING_ASSOCIATIONS = ["CONTRIBUTOR", "MEMBER", "COLLABORATOR", "OWNER"];
@@ -53569,7 +53613,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings5 = external_exports.object({
+var Settings6 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -53609,7 +53653,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings5);
+      const enabled = await this.loadEnabledSettings(context, Settings6);
       if (enabled === null) {
         return;
       }
@@ -53637,7 +53681,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings5);
+      const enabled = await this.loadEnabledSettings(context, Settings6);
       if (enabled === null) {
         return;
       }
@@ -53667,6 +53711,7 @@ var carson = new Carson([
   new LockOldIssuesSubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
+  new ThanksSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;
