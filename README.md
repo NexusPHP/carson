@@ -71,7 +71,7 @@ name: Carson
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, edited, closed]
+    types: [opened, synchronize, reopened, edited, closed, ready_for_review, converted_to_draft]
   pull_request_review:
     types: [submitted]
   push:
@@ -138,6 +138,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.
+- [**triage-labeler**](SUBSCRIBERS.md#triage-labeler): labels pull requests with their review state (needs-review, needs-rework, approved), ignoring drive-by reviews from contributors without write access.
 - [**welcome**](SUBSCRIBERS.md#welcome): greets contributors on pull requests and issues, with separate, configurable messages for first-time and returning contributors.
 
 ## Development

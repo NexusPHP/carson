@@ -16,6 +16,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [signed-commits](#signed-commits)
   - [stale](#stale)
   - [thanks](#thanks)
+  - [triage-labeler](#triage-labeler)
   - [welcome](#welcome)
 
 </details>
@@ -369,6 +370,52 @@ subscribers:
 settings:
   thanks:
     message: "Thanks for landing #{{number}}, @{{user}}! 🎉"
+```
+
+---
+
+## triage-labeler
+
+Labels pull requests with their current review state: `needs-review`, `needs-rework`, or `approved`. The three labels are mutually exclusive: applying one removes the others (other labels on the PR are untouched).
+
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+For each event the subscriber paginates `pulls.listReviews`, reduces to the latest review per reviewer, ignores `COMMENTED` reviews and reviews from users without write access, then derives the target state:
+
+- Any qualifying reviewer's latest review is `CHANGES_REQUESTED` → `needs-rework`
+- Otherwise any qualifying reviewer's latest review is `APPROVED` → `approved`
+- Otherwise → `needs-review`
+
+Draft PRs are never labeled. A PR converted to draft has its triage label removed. A PR moved out of draft via `ready_for_review` is re-evaluated.
+
+A reviewer "qualifies" when their `author_association` is in the configured `qualifying_associations` set. The default and maximum set is `{OWNER, MEMBER, COLLABORATOR}`. The set cannot be widened to include `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `NONE`, or `MANNEQUIN`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label.
+
+Labels are auto-created by GitHub on first use with a random color. To control the colors, create the labels manually in the repository's label settings before enabling the subscriber.
+
+If the existing managed label already matches the desired state, no label API calls are made.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `needs_review_label` | string | `needs-review` |
+| `needs_rework_label` | string | `needs-rework` |
+| `approved_label` | string | `approved` |
+| `qualifying_associations` | array of `OWNER`, `MEMBER`, `COLLABORATOR` | `[OWNER, MEMBER, COLLABORATOR]` |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - triage-labeler
+settings:
+  triage-labeler:
+    needs_review_label: "status: needs review"
+    needs_rework_label: "status: changes requested"
+    approved_label: "status: ready to merge"
+    qualifying_associations: [OWNER, MEMBER]   # tighten to org members and owner only
 ```
 
 ---

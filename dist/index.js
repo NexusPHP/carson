@@ -53781,6 +53781,123 @@ var ThanksSubscriber = class extends Subscriber {
   }
 };
 
+// src/subscribers/triage-labeler.ts
+var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
+var Settings7 = external_exports.object({
+  needs_review_label: external_exports.string().optional(),
+  needs_rework_label: external_exports.string().optional(),
+  approved_label: external_exports.string().optional(),
+  qualifying_associations: external_exports.array(external_exports.enum(QUALIFYING_ASSOCIATIONS)).optional()
+});
+var DEFAULT_NEEDS_REVIEW = "needs-review";
+var DEFAULT_NEEDS_REWORK = "needs-rework";
+var DEFAULT_APPROVED = "approved";
+var PR_EVENTS4 = [
+  "pull_request.opened",
+  "pull_request.reopened",
+  "pull_request.synchronize",
+  "pull_request.ready_for_review",
+  "pull_request.converted_to_draft"
+];
+var resolveSettings = (raw) => ({
+  needsReviewLabel: raw.needs_review_label ?? DEFAULT_NEEDS_REVIEW,
+  needsReworkLabel: raw.needs_rework_label ?? DEFAULT_NEEDS_REWORK,
+  approvedLabel: raw.approved_label ?? DEFAULT_APPROVED,
+  qualifyingAssociations: new Set(raw.qualifying_associations ?? QUALIFYING_ASSOCIATIONS)
+});
+var computeDesired = (reviews, qualifying) => {
+  const latest = /* @__PURE__ */ new Map();
+  for (const review of reviews) {
+    if (review.user === null) {
+      continue;
+    }
+    if (!qualifying.has(review.author_association)) {
+      continue;
+    }
+    if (review.state !== "APPROVED" && review.state !== "CHANGES_REQUESTED") {
+      continue;
+    }
+    latest.set(review.user.login, review.state);
+  }
+  const states = Array.from(latest.values());
+  if (states.includes("CHANGES_REQUESTED")) {
+    return "needs_rework";
+  }
+  if (states.includes("APPROVED")) {
+    return "approved";
+  }
+  return "needs_review";
+};
+var labelFor = (desired, settings) => {
+  if (desired === "needs_rework") {
+    return settings.needsReworkLabel;
+  }
+  if (desired === "approved") {
+    return settings.approvedLabel;
+  }
+  return settings.needsReviewLabel;
+};
+var TriageLabelerSubscriber = class extends Subscriber {
+  id = "triage-labeler";
+  description = "Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from contributors without write access are ignored.";
+  requiredPermissions = {
+    issues: "write",
+    pull_requests: "write"
+  };
+  register(probot) {
+    probot.on(PR_EVENTS4, async (context) => {
+      await this.#handle(context);
+    });
+    probot.on("pull_request_review.submitted", async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings7);
+    if (enabled === null) {
+      return;
+    }
+    const settings = resolveSettings(enabled.settings);
+    const pr = context.payload.pull_request;
+    const { owner, repo } = context.repo();
+    const managed = [settings.needsReviewLabel, settings.needsReworkLabel, settings.approvedLabel];
+    const currentManaged = pr.labels.map((l) => l.name).filter((n) => managed.includes(n));
+    let desiredLabel = null;
+    if (pr.draft !== true) {
+      const reviews = await context.octokit.paginate(context.octokit.rest.pulls.listReviews, {
+        owner,
+        repo,
+        pull_number: pr.number,
+        per_page: 100
+      });
+      desiredLabel = labelFor(
+        computeDesired(reviews, settings.qualifyingAssociations),
+        settings
+      );
+    }
+    for (const label of currentManaged) {
+      if (label !== desiredLabel) {
+        await context.octokit.rest.issues.removeLabel({
+          owner,
+          repo,
+          issue_number: pr.number,
+          name: label
+        });
+      }
+    }
+    if (desiredLabel !== null && !currentManaged.includes(desiredLabel)) {
+      await context.octokit.rest.issues.addLabels({
+        owner,
+        repo,
+        issue_number: pr.number,
+        labels: [desiredLabel]
+      });
+    }
+    log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? "none"}`);
+  }
+};
+
 // src/subscribers/welcome.ts
 var FIRST_TIME_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
 var RETURNING_ASSOCIATIONS = ["CONTRIBUTOR", "MEMBER", "COLLABORATOR", "OWNER"];
@@ -53794,7 +53911,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -53834,7 +53951,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings7);
+      const enabled = await this.loadEnabledSettings(context, Settings8);
       if (enabled === null) {
         return;
       }
@@ -53862,7 +53979,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings7);
+      const enabled = await this.loadEnabledSettings(context, Settings8);
       if (enabled === null) {
         return;
       }
@@ -53894,6 +54011,7 @@ var carson = new Carson([
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
   new ThanksSubscriber(),
+  new TriageLabelerSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;

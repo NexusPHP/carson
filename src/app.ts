@@ -5,6 +5,7 @@ import { PrTitleLinterSubscriber } from './subscribers/pr-title-linter.js';
 import { SignedCommitsSubscriber } from './subscribers/signed-commits.js';
 import { StaleSubscriber } from './subscribers/stale.js';
 import { ThanksSubscriber } from './subscribers/thanks.js';
+import { TriageLabelerSubscriber } from './subscribers/triage-labeler.js';
 import { WelcomeSubscriber } from './subscribers/welcome.js';
 
 export const carson = new Carson([
@@ -14,6 +15,7 @@ export const carson = new Carson([
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
   new ThanksSubscriber(),
+  new TriageLabelerSubscriber(),
   new WelcomeSubscriber(),
 ]);
 
