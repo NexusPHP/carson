@@ -38,7 +38,7 @@
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^26.0.1",
     "@vitest/coverage-v8": "^4.1.9",
-    "esbuild": "^0.28.0",
+    "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
     "jiti": "^2.4.2",
     "nock": "^14.0.0",
@@ -51,5 +51,9 @@
   "engines": {
     "node": "^24 || ^26",
     "npm": "^11"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
   }
 }
