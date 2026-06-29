@@ -1,3 +1,4 @@
+import { AutoLabelerSubscriber } from './subscribers/auto-labeler.js';
 import { Carson } from './carson.js';
 import { ConflictsNotifierSubscriber } from './subscribers/conflicts-notifier.js';
 import { LockOldIssuesSubscriber } from './subscribers/lock-old-issues.js';
@@ -11,6 +12,7 @@ import { TriageLabelerSubscriber } from './subscribers/triage-labeler.js';
 import { WelcomeSubscriber } from './subscribers/welcome.js';
 
 export const carson = new Carson([
+  new AutoLabelerSubscriber(),
   new ConflictsNotifierSubscriber(),
   new LockOldIssuesSubscriber(),
   new NoResponseCloserSubscriber(),

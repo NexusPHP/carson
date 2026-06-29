@@ -132,6 +132,7 @@ Carson reads its configuration from the **default branch only**, so pull request
 
 See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
 
+- [**auto-labeler**](SUBSCRIBERS.md#auto-labeler): adds labels to PRs based on path globs, title/body regex, or branch name patterns, with optional sync mode.
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
 - [**no-response-closer**](SUBSCRIBERS.md#no-response-closer): closes open issues and PRs carrying a configurable label whose activity has been stale past a threshold.

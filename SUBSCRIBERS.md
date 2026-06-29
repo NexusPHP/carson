@@ -10,6 +10,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - [Template interpolation](#template-interpolation)
 - [Comment markers](#comment-markers)
 - Subscribers
+  - [auto-labeler](#auto-labeler)
   - [conflicts-notifier](#conflicts-notifier)
   - [lock-old-issues](#lock-old-issues)
   - [no-response-closer](#no-response-closer)
@@ -56,6 +57,88 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
+
+---
+
+## auto-labeler
+
+Adds labels to pull requests based on path globs, title or body regex, or branch name patterns. Rules are evaluated on every PR event, and (optionally) labels Carson added that no longer match are removed.
+
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+Each rule pairs a single `label` with one or more *criteria*. A rule matches when **any** criterion matches (OR semantic across criteria within the same rule). The label is added when at least one rule for that label matches.
+
+The `pulls.listFiles` API call is only made when at least one rule uses `files`. PRs whose rules are purely title/body/branch-based avoid the extra round trip.
+
+### Overlap with `actions/labeler`
+
+GitHub publishes [`actions/labeler`](https://github.com/actions/labeler) for the same use case. Differences worth knowing before choosing:
+
+- **Config location**: `auto-labeler` reuses `.github/carson.yml`. `actions/labeler` reads its own `.github/labeler.yml`.
+- **Match dimensions**: `auto-labeler` supports title, body, head_branch, and base_branch regex in addition to globs. `actions/labeler` is glob-and-branch only.
+- **Sync behavior**: `actions/labeler` defaults to syncing labels (removing labels it manages that no longer match). `auto-labeler` defaults to add-only and requires an explicit `sync_labels: true` to opt in.
+- **Glob semantics**: `actions/labeler` exposes a richer matrix (`any-glob-to-any-file`, `all-globs-to-any-file`, etc.). `auto-labeler` exposes only `any` and `all`.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `sync_labels` | boolean | `false` |
+| `rules` | array of rule objects (see below) | `[]` (subscriber bails silently when empty) |
+
+Each rule object:
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `label` | string | required |
+| `files` | array of glob strings, or `{ any?: string[]; all?: string[] }` | (no file matching) |
+| `title` | array of regex strings | (no title matching) |
+| `body` | array of regex strings | (no body matching) |
+| `head_branch` | array of regex strings | (no head-branch matching) |
+| `base_branch` | array of regex strings | (no base-branch matching) |
+
+The `files` matcher accepts two shapes:
+
+- A bare array (`files: ['src/api/**']`) is shorthand for `{ any: ['src/api/**'] }`: matches if any changed file matches any glob.
+- An object lets you compose `any` and `all`. `all` matches only when every changed file matches at least one of its globs. When both `any` and `all` are present, both must hold.
+
+Invalid globs and regexes are warning-logged and skipped, so one broken rule does not silence the others.
+
+### Sync labels
+
+With `sync_labels: false` (default), Carson only adds labels. Labels removed by maintainers stay removed even if a rule still matches on the next event.
+
+With `sync_labels: true`, Carson reconciles the PR's labels against the rules: any label appearing in a rule's `label` field is "managed", and managed labels currently on the PR that no longer match are removed. Labels not declared in any rule (manually applied by maintainers, applied by other subscribers, etc.) are never touched.
+
+> [!CAUTION]
+> Patterns are compiled to JavaScript `RegExp` and matched with no runtime timeout. A catastrophically backtracking pattern in `carson.yml` will hang the action. Since `carson.yml` lives on the default branch only, this is a maintainer footgun rather than a contributor attack surface, but keep patterns simple and test them locally.
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - auto-labeler
+settings:
+  auto-labeler:
+    sync_labels: false
+    rules:
+      - label: "area:api"
+        files: ["src/api/**", "tests/api/**"]
+      - label: "type:docs"
+        files: ["**/*.md", "docs/**"]
+        title: ["^docs?:"]
+      - label: docs-only
+        files:
+          all: ["**/*.md", "docs/**"]
+      - label: hotfix
+        head_branch: ["^hotfix/"]
+      - label: backport
+        base_branch: ["^release/"]
+      - label: needs-discussion
+        body: ["NEEDS DISCUSSION"]
+```
 
 ---
 
