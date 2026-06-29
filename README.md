@@ -36,6 +36,7 @@ Fill in:
   - **Checks**: Read and write (for the `signed-commits` check run).
   - **Contents**: Read-only (to read `.github/carson.yml`).
   - **Issues**: Read and write (to label, lock, and close issues and pull requests, and to comment on issues).
+  - **Metadata**: Read-only (mandatory for any App accessing a repo, declared explicitly to keep this list complete).
   - **Pull requests**: Read and write (to comment on pull requests, and to read PR metadata and commit lists).
 - **Subscribe to events**: none.
 

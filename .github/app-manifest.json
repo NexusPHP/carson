@@ -12,6 +12,7 @@
     "checks": "write",
     "contents": "read",
     "issues": "write",
+    "metadata": "read",
     "pull_requests": "write"
   },
   "default_events": []
