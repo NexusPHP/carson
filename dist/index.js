@@ -53401,6 +53401,92 @@ var LockOldIssuesSubscriber = class extends Subscriber {
   }
 };
 
+// src/subscribers/no-response-closer.ts
+var Settings3 = external_exports.object({
+  label: external_exports.string().optional(),
+  days_until_close: external_exports.number().int().positive().optional(),
+  close_message: external_exports.string().optional(),
+  exempt_labels: external_exports.array(external_exports.string()).optional()
+});
+var DEFAULT_LABEL = "needs-info";
+var DEFAULT_DAYS_UNTIL_CLOSE = 14;
+var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY3 = 5;
+var NoResponseCloserSubscriber = class extends Subscriber {
+  id = "no-response-closer";
+  description = "Closes issues and pull requests carrying a configurable label whose activity has been stale past a configurable threshold.";
+  requiredPermissions = {
+    issues: "write",
+    pull_requests: "write"
+  };
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#run(context);
+    });
+  }
+  async #run(scheduled) {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings3);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const label = settings.label ?? DEFAULT_LABEL;
+    const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE;
+    const exemptLabels = new Set(settings.exempt_labels ?? []);
+    const cutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
+    const { owner, repo } = scheduled.repo();
+    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
+      owner,
+      repo,
+      state: "open",
+      labels: label,
+      per_page: 100
+    });
+    let closed = 0;
+    const log = this.log(scheduled);
+    log.debug(`Scanning ${items.length} open item(s) labeled "${label}"`);
+    await forEachConcurrent(items, CONCURRENCY3, async (item) => {
+      if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
+        log.debug(`#${item.number}: Exempt label, skipping`);
+        return;
+      }
+      if (new Date(item.updated_at).getTime() > cutoff) {
+        log.debug(`#${item.number}: Recent activity, skipping`);
+        return;
+      }
+      const isPr = item.pull_request !== void 0;
+      if (settings.close_message !== void 0) {
+        const context = {
+          number: item.number,
+          repo,
+          title: item.title,
+          type: isPr ? "pull request" : "issue",
+          days_until_close: daysUntilClose
+        };
+        if (item.user !== null) {
+          context["user"] = item.user.login;
+        }
+        await scheduled.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: item.number,
+          body: interpolate(settings.close_message, context)
+        });
+      }
+      await scheduled.octokit.rest.issues.update({
+        owner,
+        repo,
+        issue_number: item.number,
+        state: "closed",
+        ...isPr ? {} : { state_reason: "not_planned" }
+      });
+      log.debug(`#${item.number}: Closed`);
+      closed += 1;
+    });
+    log.info(`Closed ${closed} item(s) labeled "${label}" with no activity for ${daysUntilClose} day(s)`);
+  }
+};
+
 // src/subscribers/pr-title-linter.ts
 var Rule = external_exports.object({
   pattern: external_exports.string(),
@@ -53408,7 +53494,7 @@ var Rule = external_exports.object({
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings3 = external_exports.object({
+var Settings4 = external_exports.object({
   name: external_exports.string().optional(),
   rules: external_exports.array(Rule).optional()
 });
@@ -53470,7 +53556,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings3);
+    const enabled = await this.loadEnabledSettings(context, Settings4);
     if (enabled === null) {
       return;
     }
@@ -53504,7 +53590,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings4 = external_exports.object({
+var Settings5 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
@@ -53529,7 +53615,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings4);
+    const enabled = await this.loadEnabledSettings(context, Settings5);
     if (enabled === null) {
       return;
     }
@@ -53572,7 +53658,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings5 = external_exports.object({
+var Settings6 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -53586,8 +53672,8 @@ var DEFAULT_STALE_LABEL = "stale";
 var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
 var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}} due to extended inactivity.";
 var COMMENT_MARKER2 = "<!-- carson:stale -->";
-var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
-var CONCURRENCY3 = 5;
+var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY4 = 5;
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
@@ -53610,7 +53696,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
-    const enabled = await this.loadEnabledSettings(context, Settings5);
+    const enabled = await this.loadEnabledSettings(context, Settings6);
     if (enabled === null) {
       return;
     }
@@ -53649,7 +53735,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings5);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings6);
     if (enabled === null) {
       return;
     }
@@ -53660,8 +53746,8 @@ var StaleSubscriber = class extends Subscriber {
     const staleMessage = settings.stale_message ?? DEFAULT_STALE_MESSAGE;
     const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
-    const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY2;
-    const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
+    const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY3;
+    const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY3;
     const { owner, repo } = scheduled.repo();
     const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
       owner,
@@ -53673,7 +53759,7 @@ var StaleSubscriber = class extends Subscriber {
     let closed = 0;
     const log = this.log(scheduled);
     log.debug(`Scanning ${items.length} open item(s)`);
-    await forEachConcurrent(items, CONCURRENCY3, async (item) => {
+    await forEachConcurrent(items, CONCURRENCY4, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
@@ -53748,14 +53834,14 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule2).optional()
 });
-var Settings6 = external_exports.object({
+var Settings7 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
   pull_requests: TypeSettings.optional()
 });
 var COMMENT_MARKER3 = "<!-- carson:template-enforcer -->";
-var DEFAULT_LABEL = "needs-template";
+var DEFAULT_LABEL2 = "needs-template";
 var DEFAULT_MESSAGE2 = [
   "Thanks for opening this {{type}}, @{{user}}! The description doesn't match the template:",
   "",
@@ -53845,7 +53931,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #apply(context, kind, item) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings6);
+    const enabled = await this.loadEnabledSettings(context, Settings7);
     if (enabled === null) {
       return;
     }
@@ -53855,7 +53941,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       log.debug(`No rules configured for ${typeLabel(kind)}, skipping`);
       return;
     }
-    const label = settings.label ?? DEFAULT_LABEL;
+    const label = settings.label ?? DEFAULT_LABEL2;
     const messageTemplate = settings.message ?? DEFAULT_MESSAGE2;
     const violations = collectViolations(item.body, typeRules, log);
     const hasLabel = item.labels.includes(label);
@@ -53914,7 +54000,7 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE3 = "Thanks for the contribution, @{{user}}!";
@@ -53941,7 +54027,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings7);
+      const enabled = await this.loadEnabledSettings(context, Settings8);
       if (enabled === null) {
         return;
       }
@@ -53959,7 +54045,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -54030,7 +54116,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -54087,7 +54173,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -54127,7 +54213,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings9);
+      const enabled = await this.loadEnabledSettings(context, Settings10);
       if (enabled === null) {
         return;
       }
@@ -54155,7 +54241,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings9);
+      const enabled = await this.loadEnabledSettings(context, Settings10);
       if (enabled === null) {
         return;
       }
@@ -54183,6 +54269,7 @@ var WelcomeSubscriber = class extends Subscriber {
 var carson = new Carson([
   new ConflictsNotifierSubscriber(),
   new LockOldIssuesSubscriber(),
+  new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),

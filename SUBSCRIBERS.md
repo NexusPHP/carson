@@ -12,6 +12,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - Subscribers
   - [conflicts-notifier](#conflicts-notifier)
   - [lock-old-issues](#lock-old-issues)
+  - [no-response-closer](#no-response-closer)
   - [pr-title-linter](#pr-title-linter)
   - [signed-commits](#signed-commits)
   - [stale](#stale)
@@ -161,6 +162,81 @@ settings:
       This issue has been quiet for {{days}} days, so I'm locking it to keep
       the discussion focused. If you have new information, please open a fresh
       issue and link back to this one.
+```
+
+---
+
+## no-response-closer
+
+Closes open issues and pull requests carrying a configurable label whose activity has been stale past a configurable threshold. Designed for the common "we asked for more info, then never heard back" workflow.
+
+**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
+**Permissions**: `issues: write`, `pull_requests: write`
+
+On each scheduled run the subscriber:
+
+1. Paginates open items filtered server-side by the configured `label` (default `needs-info`).
+2. Skips items carrying any of `exempt_labels`.
+3. Skips items whose `updated_at` is more recent than `days_until_close` ago.
+4. If `close_message` is set, posts it as a comment before closing.
+5. Closes the item. Issues are closed with `state_reason: 'not_planned'` (rendered in GitHub's UI as the gray "not planned" close icon). PRs are closed without a state reason.
+
+The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
+
+Add a cron schedule to your `.github/workflows/carson.yml`:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC
+```
+
+### Overlap with `stale`
+
+Both subscribers walk the repo on a schedule and close items. The difference:
+
+- **`stale`** picks items by age (`updated_at` older than `days_until_stale`), adds its own warning label, and closes after a further `days_until_close`. Two-phase.
+- **`no-response-closer`** acts on a label that someone else (typically a maintainer) applied. Single-phase: close after `days_until_close` of stale activity.
+
+They are complementary. A repo can enable both, with non-overlapping label scopes (e.g. `stale` ignores `needs-info` via `exempt_labels`, and `no-response-closer` only acts on `needs-info`).
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `label` | string | `needs-info` |
+| `days_until_close` | positive integer | `14` |
+| `close_message` | string | (no comment posted) |
+| `exempt_labels` | array of strings | `[]` |
+
+### Context (for `close_message`)
+
+| Key | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the item's author (left verbatim if the user is a ghost) |
+| `{{number}}` | Issue or PR number |
+| `{{repo}}` | Repository name |
+| `{{title}}` | Item title |
+| `{{type}}` | `issue` or `pull request` |
+| `{{days_until_close}}` | The configured `days_until_close` value |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - no-response-closer
+settings:
+  no-response-closer:
+    label: needs-info
+    days_until_close: 21
+    exempt_labels:
+      - pinned
+      - good-first-issue
+    close_message: |
+      Closing this {{type}} after {{days_until_close}} days without further
+      information, @{{user}}. Feel free to reopen with more details if this
+      still matters.
 ```
 
 ---
