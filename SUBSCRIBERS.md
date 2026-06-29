@@ -15,6 +15,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [pr-title-linter](#pr-title-linter)
   - [signed-commits](#signed-commits)
   - [stale](#stale)
+  - [template-enforcer](#template-enforcer)
   - [thanks](#thanks)
   - [triage-labeler](#triage-labeler)
   - [welcome](#welcome)
@@ -53,6 +54,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
 | `<!-- carson:stale -->` | [stale](#stale) |
+| `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
 
 ---
 
@@ -326,6 +328,100 @@ settings:
     exempt_labels:
       - pinned
       - security
+```
+
+---
+
+## template-enforcer
+
+Comments on and labels issues or pull requests whose description does not match a configured template, and removes the label when the description is updated to comply.
+
+**Triggers**: `issues.opened`, `issues.edited`, `pull_request.opened`, `pull_request.edited`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+Issues and pull requests are configured separately under `issues:` and `pull_requests:` subsections because their templates typically differ. Omit a subsection to skip enforcement for that type entirely.
+
+Three rule kinds are supported per type:
+
+- `required_sections`: a list of section strings that must appear somewhere in the body. The match is case-insensitive substring. Consumers who need anchored matching can use a `rules` regex instead.
+- `min_length`: a positive integer. The body (trimmed) must be at least this many characters.
+- `rules`: a list of regex rules with `pattern`, `description`, and an optional `mode` (`require` or `forbid`, default `require`). Invalid patterns are logged as warnings and skipped, so one malformed rule does not silence the subscriber.
+
+On every event the subscriber computes the current violations and reconciles state:
+
+- **New violation, no prior carson comment**: post a comment listing the violations, add the label.
+- **Violation with prior carson comment but label missing**: add the label only (no duplicate comment).
+- **Violation with prior carson comment and label present**: no action.
+- **No violations, label present**: remove the label. The historical comment is left in place.
+- **No violations, label absent**: no action.
+
+The subscriber locates its prior comment via the `<!-- carson:template-enforcer -->` marker, filtered by bot author. The marker is appended last so attacker-controlled body content cannot forge a match.
+
+There is no `close_on_violation` option. Closing on a first offense is hostile to contributors, and a `stale`-style auto-close after a grace period belongs in `stale` rather than here.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `label` | string | `needs-template` |
+| `message` | string (template) | see below |
+| `issues` | per-type rule object (see below) | (none, issues are not enforced) |
+| `pull_requests` | per-type rule object | (none, PRs are not enforced) |
+
+Per-type object (used in both `issues` and `pull_requests`):
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `required_sections` | array of strings | `[]` |
+| `min_length` | positive integer | (no minimum) |
+| `rules` | array of regex rule objects | `[]` |
+
+Default message:
+
+```
+Thanks for opening this {{type}}, @{{user}}! The description doesn't match the template:
+
+{{violations}}
+
+Please update the description. The `{{label}}` label will be removed automatically.
+```
+
+### Context
+
+| Key | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the author |
+| `{{type}}` | `issue` or `pull request` |
+| `{{number}}` | Issue or PR number |
+| `{{title}}` | Issue or PR title |
+| `{{label}}` | The configured label name |
+| `{{violations}}` | Pre-rendered bulleted list of failed checks |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - template-enforcer
+settings:
+  template-enforcer:
+    label: needs-template
+    issues:
+      required_sections:
+        - "## Steps to reproduce"
+        - "## Expected behavior"
+      min_length: 50
+    pull_requests:
+      required_sections:
+        - "## Summary"
+        - "## Test plan"
+      min_length: 30
+      rules:
+        - pattern: 'fixes #[0-9]+'
+          description: 'Reference the issue you fix with `fixes #N`'
+        - pattern: 'lorem ipsum'
+          description: 'Replace placeholder text in the description'
+          mode: forbid
 ```
 
 ---

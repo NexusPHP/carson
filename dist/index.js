@@ -44611,13 +44611,13 @@ var error18 = () => {
     // no unit
   };
   const typeEntry = (t) => t ? TypeNames[t] : void 0;
-  const typeLabel = (t) => {
+  const typeLabel2 = (t) => {
     const e = typeEntry(t);
     if (e)
       return e.label;
     return t ?? TypeNames.unknown.label;
   };
-  const withDefinite = (t) => `\u05D4${typeLabel(t)}`;
+  const withDefinite = (t) => `\u05D4${typeLabel2(t)}`;
   const verbFor = (t) => {
     const e = typeEntry(t);
     const gender = e?.gender ?? "m";
@@ -44667,7 +44667,7 @@ var error18 = () => {
     switch (issue3.code) {
       case "invalid_type": {
         const expectedKey = issue3.expected;
-        const expected = TypeDictionary[expectedKey ?? ""] ?? typeLabel(expectedKey);
+        const expected = TypeDictionary[expectedKey ?? ""] ?? typeLabel2(expectedKey);
         const receivedType = parsedType(issue3.input);
         const received = TypeDictionary[receivedType] ?? TypeNames[receivedType]?.label ?? receivedType;
         if (/^[A-Z]/.test(issue3.expected)) {
@@ -53737,11 +53737,187 @@ ${COMMENT_MARKER2}`
   }
 };
 
-// src/subscribers/thanks.ts
+// src/subscribers/template-enforcer.ts
+var Rule2 = external_exports.object({
+  pattern: external_exports.string(),
+  description: external_exports.string(),
+  mode: external_exports.enum(["require", "forbid"]).optional()
+});
+var TypeSettings = external_exports.object({
+  required_sections: external_exports.array(external_exports.string()).optional(),
+  min_length: external_exports.number().int().positive().optional(),
+  rules: external_exports.array(Rule2).optional()
+});
 var Settings6 = external_exports.object({
+  label: external_exports.string().optional(),
+  message: external_exports.string().optional(),
+  issues: TypeSettings.optional(),
+  pull_requests: TypeSettings.optional()
+});
+var COMMENT_MARKER3 = "<!-- carson:template-enforcer -->";
+var DEFAULT_LABEL = "needs-template";
+var DEFAULT_MESSAGE2 = [
+  "Thanks for opening this {{type}}, @{{user}}! The description doesn't match the template:",
+  "",
+  "{{violations}}",
+  "",
+  "Please update the description. The `{{label}}` label will be removed automatically."
+].join("\n");
+var ISSUE_EVENTS = ["issues.opened", "issues.edited"];
+var PR_EVENTS4 = ["pull_request.opened", "pull_request.edited"];
+var compileRules2 = (rules, log) => {
+  const compiled = [];
+  for (const rule of rules) {
+    try {
+      compiled.push({
+        description: rule.description,
+        mode: rule.mode ?? "require",
+        regex: new RegExp(rule.pattern)
+      });
+    } catch (error52) {
+      log.warn(`Skipping rule "${rule.description}": invalid regex (${String(error52)})`);
+    }
+  }
+  return compiled;
+};
+var collectViolations = (body, rules, log) => {
+  const violations = [];
+  const lower = body.toLowerCase();
+  for (const section of rules.required_sections ?? []) {
+    if (!lower.includes(section.toLowerCase())) {
+      violations.push(`Required section missing: \`${section}\``);
+    }
+  }
+  if (rules.min_length !== void 0 && body.trim().length < rules.min_length) {
+    violations.push(`Description too short (minimum ${rules.min_length} characters).`);
+  }
+  for (const compiled of compileRules2(rules.rules ?? [], log)) {
+    const matches = compiled.regex.test(body);
+    const failed = compiled.mode === "require" ? !matches : matches;
+    if (failed) {
+      violations.push(compiled.description);
+    }
+  }
+  return violations;
+};
+var renderViolations = (violations) => violations.map((v) => `- ${v}`).join("\n");
+var typeLabel = (kind) => kind === "issue" ? "issue" : "pull request";
+var TemplateEnforcerSubscriber = class extends Subscriber {
+  id = "template-enforcer";
+  description = "Comments and labels issues or pull requests whose description does not match the configured template.";
+  requiredPermissions = {
+    issues: "write",
+    pull_requests: "write"
+  };
+  register(probot) {
+    probot.on(ISSUE_EVENTS, async (context) => {
+      await this.#handleIssue(context);
+    });
+    probot.on(PR_EVENTS4, async (context) => {
+      await this.#handlePr(context);
+    });
+  }
+  async #handleIssue(context) {
+    const issue3 = context.payload.issue;
+    if (issue3.user === null) {
+      return;
+    }
+    await this.#apply(context, "issue", {
+      number: issue3.number,
+      body: issue3.body ?? "",
+      title: issue3.title,
+      user: issue3.user.login,
+      labels: issue3.labels?.map((l) => l.name) ?? []
+    });
+  }
+  async #handlePr(context) {
+    const pr = context.payload.pull_request;
+    if (pr.user === null) {
+      return;
+    }
+    await this.#apply(context, "pull_request", {
+      number: pr.number,
+      body: pr.body ?? "",
+      title: pr.title,
+      user: pr.user.login,
+      labels: pr.labels?.map((l) => l.name) ?? []
+    });
+  }
+  async #apply(context, kind, item) {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings6);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const typeRules = kind === "issue" ? settings.issues : settings.pull_requests;
+    if (typeRules === void 0) {
+      log.debug(`No rules configured for ${typeLabel(kind)}, skipping`);
+      return;
+    }
+    const label = settings.label ?? DEFAULT_LABEL;
+    const messageTemplate = settings.message ?? DEFAULT_MESSAGE2;
+    const violations = collectViolations(item.body, typeRules, log);
+    const hasLabel = item.labels.includes(label);
+    const { owner, repo } = context.repo();
+    if (violations.length === 0) {
+      if (hasLabel) {
+        await context.octokit.rest.issues.removeLabel({
+          owner,
+          repo,
+          issue_number: item.number,
+          name: label
+        });
+        log.info(`Removed "${label}" from #${item.number}`);
+      }
+      return;
+    }
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: item.number,
+      per_page: 100
+    });
+    const priorComment = findCarsonComment(comments, {
+      marker: COMMENT_MARKER3,
+      isBotAuthored: (c) => c.user?.type === "Bot"
+    });
+    if (priorComment === void 0) {
+      const body = `${interpolate(messageTemplate, {
+        user: item.user,
+        type: typeLabel(kind),
+        number: item.number,
+        title: item.title,
+        label,
+        violations: renderViolations(violations)
+      })}
+
+${COMMENT_MARKER3}`;
+      await context.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: item.number,
+        body
+      });
+      log.info(`Posted template-enforcer comment on #${item.number}`);
+    }
+    if (!hasLabel) {
+      await context.octokit.rest.issues.addLabels({
+        owner,
+        repo,
+        issue_number: item.number,
+        labels: [label]
+      });
+      log.info(`Added "${label}" to #${item.number}`);
+    }
+  }
+};
+
+// src/subscribers/thanks.ts
+var Settings7 = external_exports.object({
   message: external_exports.string().optional()
 });
-var DEFAULT_MESSAGE2 = "Thanks for the contribution, @{{user}}!";
+var DEFAULT_MESSAGE3 = "Thanks for the contribution, @{{user}}!";
 var ThanksSubscriber = class extends Subscriber {
   id = "thanks";
   description = "Posts a thank-you comment when a pull request is merged by someone other than its author. Skips bot and ghost authors.";
@@ -53765,11 +53941,11 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings6);
+      const enabled = await this.loadEnabledSettings(context, Settings7);
       if (enabled === null) {
         return;
       }
-      const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, {
+      const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, {
         user: pr.user.login,
         repo: context.payload.repository.name,
         number: pr.number,
@@ -53783,7 +53959,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -53792,7 +53968,7 @@ var Settings7 = external_exports.object({
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
 var DEFAULT_APPROVED = "approved";
-var PR_EVENTS4 = [
+var PR_EVENTS5 = [
   "pull_request.opened",
   "pull_request.reopened",
   "pull_request.synchronize",
@@ -53845,7 +54021,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS4, async (context) => {
+    probot.on(PR_EVENTS5, async (context) => {
       await this.#handle(context);
     });
     probot.on("pull_request_review.submitted", async (context) => {
@@ -53854,7 +54030,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings7);
+    const enabled = await this.loadEnabledSettings(context, Settings8);
     if (enabled === null) {
       return;
     }
@@ -53911,7 +54087,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -53951,7 +54127,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings8);
+      const enabled = await this.loadEnabledSettings(context, Settings9);
       if (enabled === null) {
         return;
       }
@@ -53979,7 +54155,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings8);
+      const enabled = await this.loadEnabledSettings(context, Settings9);
       if (enabled === null) {
         return;
       }
@@ -54010,6 +54186,7 @@ var carson = new Carson([
   new PrTitleLinterSubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
+  new TemplateEnforcerSubscriber(),
   new ThanksSubscriber(),
   new TriageLabelerSubscriber(),
   new WelcomeSubscriber()

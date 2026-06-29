@@ -4,6 +4,7 @@ import { LockOldIssuesSubscriber } from './subscribers/lock-old-issues.js';
 import { PrTitleLinterSubscriber } from './subscribers/pr-title-linter.js';
 import { SignedCommitsSubscriber } from './subscribers/signed-commits.js';
 import { StaleSubscriber } from './subscribers/stale.js';
+import { TemplateEnforcerSubscriber } from './subscribers/template-enforcer.js';
 import { ThanksSubscriber } from './subscribers/thanks.js';
 import { TriageLabelerSubscriber } from './subscribers/triage-labeler.js';
 import { WelcomeSubscriber } from './subscribers/welcome.js';
@@ -14,6 +15,7 @@ export const carson = new Carson([
   new PrTitleLinterSubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
+  new TemplateEnforcerSubscriber(),
   new ThanksSubscriber(),
   new TriageLabelerSubscriber(),
   new WelcomeSubscriber(),
