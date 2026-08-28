@@ -68,6 +68,7 @@ All registered subscriber IDs are pushed into [src/configuration/cache.ts](src/c
 3. Document it in [SUBSCRIBERS.md](SUBSCRIBERS.md) (triggers, permissions, settings, interpolation context, example) and add a link from the index in [README.md](README.md).
 4. Add tests under `tests/subscribers/<id>.test.ts` following the pattern in [tests/subscribers/welcome.test.ts](tests/subscribers/welcome.test.ts): a real `Probot` plus nock-mocked GitHub API plus `probot.receive(...)`.
 5. If the subscriber needs an event the consumer workflow doesn't yet emit, note it in `SUBSCRIBERS.md`. The consumer's `.github/workflows/carson.yml` must include the trigger.
+6. For `repository_dispatch` events, register the plain event name and branch on `payload.action` (the sender's custom `event_type`): custom event types are not in octokit's event-name union, so the action-qualified form does not typecheck. Routing is verified in [tests/repository-dispatch.test.ts](tests/repository-dispatch.test.ts).
 
 ### Untrusted PR content under `pull_request_target`
 

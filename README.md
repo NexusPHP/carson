@@ -100,6 +100,18 @@ The trigger list above covers every event Carson's bundled subscribers register.
 
 Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.0.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
 
+### External triggers (`repository_dispatch`)
+
+Events pushed from outside GitHub (an application backend, a script) reach Carson through [`repository_dispatch`](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#repository_dispatch). Add the trigger with the expected event names pinned:
+
+```yaml
+on:
+  repository_dispatch:
+    types: [support-ticket]
+```
+
+The sender calls [`POST /repos/{owner}/{repo}/dispatches`](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event) with a token holding `contents: write` on this repository. The `event_type` it sends becomes the payload's `action`, and `client_payload` (capped by GitHub at 10 top-level properties) carries the data.
+
 ### Configuration
 
 Commit a `.github/carson.yml` to your default branch:
