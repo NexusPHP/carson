@@ -54,10 +54,12 @@ const makeHarness = (items: ItemShape[], config: unknown): Harness => {
       paginate,
       rest: {
         issues: {
-          listForRepo: 'listForRepo-fn',
           addLabels: addLabelsMock,
           createComment: createCommentMock,
           update: updateMock,
+        },
+        search: {
+          issuesAndPullRequests: 'search-fn',
         },
       },
     } as never,
@@ -92,6 +94,19 @@ describe('stale subscriber', () => {
     resetConfigCache();
     logger.reset();
     vi.useRealTimers();
+  });
+
+  it('searches stale-labeled items and newly inactive unlabeled items in two queries', async () => {
+    const { context } = makeHarness([], ENABLED);
+
+    await runScheduled(context);
+
+    expect(context.octokit.paginate).toHaveBeenNthCalledWith(1, 'search-fn', expect.objectContaining({
+      q: 'repo:acme/widgets is:open label:"stale"',
+    }));
+    expect(context.octokit.paginate).toHaveBeenNthCalledWith(2, 'search-fn', expect.objectContaining({
+      q: 'repo:acme/widgets is:open -label:"stale" updated:<2025-11-02T00:00:00+00:00',
+    }));
   });
 
   it('marks an inactive issue stale: applies label + posts message with marker and {{type}} = issue', async () => {

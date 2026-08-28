@@ -55351,6 +55351,9 @@ var labelNames = (labels) => {
   return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
 };
 
+// src/github/search.ts
+var searchTimestamp = (epochMs) => `${new Date(epochMs).toISOString().slice(0, 19)}+00:00`;
+
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
 var Settings4 = external_exports.object({
@@ -55383,15 +55386,16 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - days * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
-    const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: "closed",
+    const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:issue is:closed is:unlocked closed:<${searchTimestamp(cutoff)}`,
+      advanced_search: "true",
+      sort: "created",
+      order: "asc",
       per_page: 100
     });
     let locked = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${issues.length} closed issue(s) and PR(s)`);
+    log.debug(`Scanning ${issues.length} candidate issue(s)`);
     await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
       if (issue3.pull_request !== void 0) {
         log.debug(`#${issue3.number}: Pull request, skipping`);
@@ -55476,16 +55480,16 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
     const { owner, repo } = scheduled.repo();
-    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: "open",
-      labels: label,
+    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open label:"${label}" updated:<${searchTimestamp(cutoff)}`,
+      advanced_search: "true",
+      sort: "updated",
+      order: "asc",
       per_page: 100
     });
     let closed = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${items.length} open item(s) labeled "${label}"`);
+    log.debug(`Scanning ${items.length} candidate item(s) labeled "${label}"`);
     await forEachConcurrent(items, CONCURRENCY3, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
@@ -55789,16 +55793,32 @@ var StaleSubscriber = class extends Subscriber {
     const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY3;
     const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY3;
     const { owner, repo } = scheduled.repo();
-    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: "open",
+    const staleItems = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open label:"${staleLabel}"`,
+      advanced_search: "true",
+      sort: "updated",
+      order: "asc",
       per_page: 100
+    });
+    const freshItems = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open -label:"${staleLabel}" updated:<${searchTimestamp(staleCutoff)}`,
+      advanced_search: "true",
+      sort: "updated",
+      order: "asc",
+      per_page: 100
+    });
+    const seen = /* @__PURE__ */ new Set();
+    const items = [...staleItems, ...freshItems].filter((item) => {
+      if (seen.has(item.number)) {
+        return false;
+      }
+      seen.add(item.number);
+      return true;
     });
     let staled = 0;
     let closed = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${items.length} open item(s)`);
+    log.debug(`Scanning ${staleItems.length} stale and ${freshItems.length} newly inactive item(s)`);
     await forEachConcurrent(items, CONCURRENCY4, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {

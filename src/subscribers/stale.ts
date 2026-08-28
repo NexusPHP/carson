@@ -5,6 +5,7 @@ import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
+import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -121,18 +122,35 @@ export class StaleSubscriber extends Subscriber {
     const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
 
-    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: 'open',
+    const staleItems = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open label:"${staleLabel}"`,
+      advanced_search: 'true',
+      sort: 'updated',
+      order: 'asc',
       per_page: 100,
+    });
+    const freshItems = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open -label:"${staleLabel}" updated:<${searchTimestamp(staleCutoff)}`,
+      advanced_search: 'true',
+      sort: 'updated',
+      order: 'asc',
+      per_page: 100,
+    });
+    const seen = new Set<number>();
+    const items = [...staleItems, ...freshItems].filter((item) => {
+      if (seen.has(item.number)) {
+        return false;
+      }
+
+      seen.add(item.number);
+      return true;
     });
 
     let staled = 0;
     let closed = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${items.length} open item(s)`);
+    log.debug(`Scanning ${staleItems.length} stale and ${freshItems.length} newly inactive item(s)`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);

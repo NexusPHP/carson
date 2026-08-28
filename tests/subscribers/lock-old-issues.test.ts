@@ -18,6 +18,7 @@ interface Harness {
   lockMock: ReturnType<typeof vi.fn>;
   commentMock: ReturnType<typeof vi.fn>;
   configMock: ReturnType<typeof vi.fn>;
+  paginateMock: ReturnType<typeof vi.fn>;
 }
 
 const NOW = new Date('2026-01-01T00:00:00Z').getTime();
@@ -48,9 +49,11 @@ const makeHarness = (issues: IssueShape[], config: unknown): Harness => {
       paginate,
       rest: {
         issues: {
-          listForRepo: 'listForRepo-fn',
           lock: lockMock,
           createComment: commentMock,
+        },
+        search: {
+          issuesAndPullRequests: 'search-fn',
         },
       },
     } as never,
@@ -60,7 +63,7 @@ const makeHarness = (issues: IssueShape[], config: unknown): Harness => {
     config: configMock,
   };
 
-  return { context, lockMock, commentMock, configMock };
+  return { context, lockMock, commentMock, configMock, paginateMock: paginate };
 };
 
 const runScheduled = async (context: ScheduledContext): Promise<void> => {
@@ -104,6 +107,20 @@ describe('lock-old-issues subscriber', () => {
       repo: 'widgets',
       issue_number: 1,
       lock_reason: 'resolved',
+    });
+  });
+
+  it('searches for unlocked closed issues older than the cutoff, oldest first', async () => {
+    const { context, paginateMock } = makeHarness([], ENABLED_CONFIG);
+
+    await runScheduled(context);
+
+    expect(paginateMock).toHaveBeenCalledWith('search-fn', {
+      q: 'repo:acme/widgets is:issue is:closed is:unlocked closed:<2025-10-03T00:00:00+00:00',
+      advanced_search: 'true',
+      sort: 'created',
+      order: 'asc',
+      per_page: 100,
     });
   });
 

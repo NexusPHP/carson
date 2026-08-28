@@ -3,6 +3,7 @@ import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
+import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
 
 const LOCK_REASONS = ['off-topic', 'too heated', 'resolved', 'spam'] as const;
@@ -44,17 +45,18 @@ export class LockOldIssuesSubscriber extends Subscriber {
     const cutoff = Date.now() - days * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
 
-    const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: 'closed',
+    const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:issue is:closed is:unlocked closed:<${searchTimestamp(cutoff)}`,
+      advanced_search: 'true',
+      sort: 'created',
+      order: 'asc',
       per_page: 100,
     });
 
     let locked = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${issues.length} closed issue(s) and PR(s)`);
+    log.debug(`Scanning ${issues.length} candidate issue(s)`);
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.pull_request !== undefined) {

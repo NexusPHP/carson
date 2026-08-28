@@ -48,9 +48,11 @@ const makeHarness = (items: ItemShape[], config: unknown): Harness => {
       paginate,
       rest: {
         issues: {
-          listForRepo: 'listForRepo-fn',
           update: updateMock,
           createComment: commentMock,
+        },
+        search: {
+          issuesAndPullRequests: 'search-fn',
         },
       },
     } as never,
@@ -123,7 +125,7 @@ describe('no-response-closer subscriber', () => {
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ issue_number: 10 }));
   });
 
-  it('passes the configured label to the listForRepo call', async () => {
+  it('searches for open items with the configured label past the inactivity cutoff, oldest first', async () => {
     const { context } = makeHarness(
       [],
       { ...ENABLED_CONFIG, settings: { 'no-response-closer': { label: 'awaiting-info' } } },
@@ -131,10 +133,13 @@ describe('no-response-closer subscriber', () => {
 
     await runScheduled(context);
 
-    expect(context.octokit.paginate).toHaveBeenCalledWith(
-      'listForRepo-fn',
-      expect.objectContaining({ labels: 'awaiting-info', state: 'open' }),
-    );
+    expect(context.octokit.paginate).toHaveBeenCalledWith('search-fn', {
+      q: 'repo:acme/widgets is:open label:"awaiting-info" updated:<2026-06-16T00:00:00+00:00',
+      advanced_search: 'true',
+      sort: 'updated',
+      order: 'asc',
+      per_page: 100,
+    });
   });
 
   it('skips items carrying an exempt label', async () => {

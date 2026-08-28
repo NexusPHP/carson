@@ -276,7 +276,7 @@ Locks closed issues that have been inactive past a configurable age, preventing 
 **Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `issues: write`
 
-On each scheduled run, the subscriber walks the repository's closed issues (paginated), skips pull requests, skips already-locked issues, skips issues whose `closed_at` is more recent than the configured threshold, skips issues carrying any of the exempt labels, and locks the rest using GitHub's lock reason classifier.
+On each scheduled run, the subscriber searches the repository for closed, unlocked issues whose `closed_at` is older than the configured threshold (server-side, oldest first), skips issues carrying any of the exempt labels, and locks the rest using GitHub's lock reason classifier. The search API caps a query at 1000 results, so a larger backlog converges over successive runs.
 
 The action runner needs to receive `schedule` events for this to run. Add a cron schedule to your `.github/workflows/carson.yml`:
 
@@ -336,10 +336,9 @@ Closes open issues and pull requests carrying a configurable label whose activit
 
 On each scheduled run the subscriber:
 
-1. Paginates open items filtered server-side by the configured `label` (default `needs-info`).
+1. Searches open items carrying the configured `label` (default `needs-info`) whose `updated_at` is older than `days_until_close` ago, server-side and oldest first.
 2. Skips items carrying any of `exempt_labels`.
-3. Skips items whose `updated_at` is more recent than `days_until_close` ago.
-4. If `close_message` is set, posts it as a comment before closing.
+3. If `close_message` is set, posts it as a comment before closing.
 5. Closes the item. Issues are closed with `state_reason: 'not_planned'` (rendered in GitHub's UI as the gray "not planned" close icon). PRs are closed without a state reason.
 
 The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
@@ -494,7 +493,7 @@ Marks inactive issues and pull requests as stale, then closes them after a furth
 **Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `issues: write`, `pull_requests: write`
 
-On each scheduled run, the subscriber walks every open issue and PR. For each:
+On each scheduled run, the subscriber issues two searches (server-side, oldest first): open items carrying the stale label, and open items without it whose `updated_at` is older than `days_until_stale`. Items with recent activity never come back at all. For each result:
 
 - If the item has any exempt label, skip.
 - If the item already has the stale label and its `updated_at` is older than `days_until_close`, post the close message and close.

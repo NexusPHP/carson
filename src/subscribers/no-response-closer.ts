@@ -3,6 +3,7 @@ import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
+import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -45,18 +46,18 @@ export class NoResponseCloserSubscriber extends Subscriber {
     const cutoff = Date.now() - daysUntilClose * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
 
-    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listForRepo, {
-      owner,
-      repo,
-      state: 'open',
-      labels: label,
+    const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
+      q: `repo:${owner}/${repo} is:open label:"${label}" updated:<${searchTimestamp(cutoff)}`,
+      advanced_search: 'true',
+      sort: 'updated',
+      order: 'asc',
       per_page: 100,
     });
 
     let closed = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${items.length} open item(s) labeled "${label}"`);
+    log.debug(`Scanning ${items.length} candidate item(s) labeled "${label}"`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
