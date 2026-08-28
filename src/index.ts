@@ -57,7 +57,10 @@ const main = async (): Promise<void> => {
     handlerFailed = true;
   });
 
+  // probot.log is null until Probot's async initialization completes.
+  await probot.ready();
   logger.init(probot.log);
+
   const log = logger.for('carson');
   const preflight = await runPreflight(probot, carson, repository);
 

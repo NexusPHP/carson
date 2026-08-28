@@ -64383,6 +64383,7 @@ var main = async () => {
     logger.for("carson").error(error52);
     handlerFailed = true;
   });
+  await probot.ready();
   logger.init(probot.log);
   const log = logger.for("carson");
   const preflight = await runPreflight(probot, carson, repository);
