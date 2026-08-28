@@ -168,13 +168,13 @@ describe('runPreflight', () => {
     logger.reset();
   });
 
-  it('returns null when every enabled subscriber has its permissions satisfied', async () => {
+  it('returns null and the enabled subscriber ids when permissions are satisfied', async () => {
     const probot = makeProbot();
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, enabledIds: ['s1'] });
   });
 
   it('returns an error message listing each missing permission when the App is under-permissioned', async () => {
@@ -186,10 +186,11 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).not.toBeNull();
-    expect(result).toContain('Carson @ test is missing required GitHub App permissions:');
-    expect(result).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-    expect(result).toContain('App settings: https://github.com/apps/test');
+    expect(result.error).not.toBeNull();
+    expect(result.error).toContain('Carson @ test is missing required GitHub App permissions:');
+    expect(result.error).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result.error).toContain('App settings: https://github.com/apps/test');
+    expect(result.enabledIds).toEqual(['s1']);
   });
 
   it('reports "Re-approve the installation" when the App declares the permission but the install has not accepted it', async () => {
@@ -201,34 +202,34 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toContain('issues (s1): required "write", App declares "write", install accepted "read". Re-approve the installation.');
+    expect(result.error).toContain('issues (s1): required "write", App declares "write", install accepted "read". Re-approve the installation.');
   });
 
-  it('returns null and skips the check when the App is not installed on the repo', async () => {
+  it('returns null and skips filtering when the App is not installed on the repo', async () => {
     const probot = makeProbot({ installFails: true });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, enabledIds: undefined });
   });
 
-  it('returns null when carson.yml is missing (no subscribers to preflight)', async () => {
+  it('returns no enabled subscribers when carson.yml is missing', async () => {
     const probot = makeProbot({ config: null });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, enabledIds: [] });
   });
 
-  it('returns null when apps.getAuthenticated returns no app', async () => {
+  it('returns null and skips filtering when apps.getAuthenticated returns no app', async () => {
     const probot = makeProbot({ appData: null });
     const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, enabledIds: undefined });
   });
 
   it('falls back to the default name and slug when the App response omits them', async () => {
@@ -239,7 +240,7 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result.error).toBeNull();
     expect(appIdentity.name).toBe('Carson');
   });
 
@@ -252,8 +253,8 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toContain('contents (<base>): required "read", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-    expect(result).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result.error).toContain('contents (<base>): required "read", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
+    expect(result.error).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
   });
 
   it('returns the invalid-repository message when the repository is not in owner/repo format', async () => {
@@ -262,7 +263,7 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'not-a-slash-pair');
 
-    expect(result).toBe('GITHUB_REPOSITORY must be in owner/repo format');
+    expect(result).toEqual({ error: 'GITHUB_REPOSITORY must be in owner/repo format', enabledIds: undefined });
   });
 
   it('omits the App settings line when the App data has no html_url', async () => {
@@ -274,9 +275,9 @@ describe('runPreflight', () => {
 
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).not.toBeNull();
-    expect(result).not.toContain('App settings:');
-    expect(result).not.toContain('http');
+    expect(result.error).not.toBeNull();
+    expect(result.error).not.toContain('App settings:');
+    expect(result.error).not.toContain('http');
   });
 
   it('ignores subscribers that are bundled but not enabled in carson.yml', async () => {
@@ -291,6 +292,6 @@ describe('runPreflight', () => {
     ]);
     const result = await runPreflight(probot, carson, 'acme/widgets');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, enabledIds: ['s1'] });
   });
 });

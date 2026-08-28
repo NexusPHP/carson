@@ -39987,6 +39987,19 @@ function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 
+// src/github/repository.ts
+var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
+var parseRepository = (input) => {
+  const slash = input.indexOf("/");
+  if (slash === -1) {
+    return null;
+  }
+  return {
+    owner: input.slice(0, slash),
+    repo: input.slice(slash + 1)
+  };
+};
+
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -54592,6 +54605,67 @@ var loadConfig = async (context, knownIds) => {
   return await pending;
 };
 
+// src/scheduled.ts
+var ScheduledRegistrar = class {
+  #handlers = [];
+  on(handler2) {
+    this.#handlers.push(handler2);
+  }
+  get handlers() {
+    return this.#handlers;
+  }
+};
+var buildContext = (octokit, log, owner, repo, payload) => ({
+  ...createConfigLoadable(octokit, owner, repo, log),
+  octokit,
+  payload
+});
+var dispatchScheduled = async (probot, registrar, repository, payload) => {
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    throw new Error(INVALID_REPOSITORY_MESSAGE);
+  }
+  const { owner, repo } = parsed;
+  const appOctokit = await probot.auth();
+  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+  const octokit = await probot.auth(installation.id);
+  const context = buildContext(octokit, probot.log, owner, repo, payload);
+  let failed = false;
+  for (const handler2 of registrar.handlers) {
+    try {
+      await handler2(context);
+    } catch (error52) {
+      logger.for("carson").error(error52);
+      failed = true;
+    }
+  }
+  return { failed };
+};
+
+// src/app-identity.ts
+var AppIdentity = class {
+  #cached = null;
+  set(data) {
+    this.#cached = data;
+  }
+  reset() {
+    this.#cached = null;
+  }
+  get current() {
+    return this.#cached;
+  }
+  get name() {
+    return this.#cached?.name ?? "Carson";
+  }
+  get slug() {
+    return this.#cached?.slug ?? "carson";
+  }
+  get login() {
+    return `${this.slug}[bot]`;
+  }
+};
+var appIdentity = new AppIdentity();
+
 // src/subscriber.ts
 var Subscriber = class {
   register(_probot) {
@@ -54806,43 +54880,6 @@ var AutoLabelerSubscriber = class extends Subscriber {
 // src/carson.ts
 import { dirname, resolve } from "node:path";
 
-// src/app-identity.ts
-var AppIdentity = class {
-  #cached = null;
-  set(data) {
-    this.#cached = data;
-  }
-  reset() {
-    this.#cached = null;
-  }
-  get current() {
-    return this.#cached;
-  }
-  get name() {
-    return this.#cached?.name ?? "Carson";
-  }
-  get slug() {
-    return this.#cached?.slug ?? "carson";
-  }
-  get login() {
-    return `${this.slug}[bot]`;
-  }
-};
-var appIdentity = new AppIdentity();
-
-// src/github/repository.ts
-var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
-var parseRepository = (input) => {
-  const slash = input.indexOf("/");
-  if (slash === -1) {
-    return null;
-  }
-  return {
-    owner: input.slice(0, slash),
-    repo: input.slice(slash + 1)
-  };
-};
-
 // src/preflight.ts
 var BASE_PERMISSIONS = { contents: "read" };
 var LEVEL_RANK = {
@@ -54881,14 +54918,14 @@ var runPreflight = async (probot, carson2, repository) => {
   const log = logger.for("preflight");
   const parsed = parseRepository(repository);
   if (parsed === null) {
-    return INVALID_REPOSITORY_MESSAGE;
+    return { error: INVALID_REPOSITORY_MESSAGE, enabledIds: void 0 };
   }
   const { owner, repo } = parsed;
   const appOctokit = await probot.auth();
   const { data: app } = await appOctokit.rest.apps.getAuthenticated();
   if (app === null) {
     log.warn("App lookup returned no data, skipping");
-    return null;
+    return { error: null, enabledIds: void 0 };
   }
   appIdentity.set({ name: app.name, slug: app.slug });
   log.debug(`App authenticated: ${appIdentity.login}`);
@@ -54901,67 +54938,28 @@ var runPreflight = async (probot, carson2, repository) => {
     log.debug({ installationId, permissions: installationPermissions }, "Installation resolved");
   } catch (error52) {
     log.warn({ err: error52 }, "Could not resolve installation, skipping");
-    return null;
+    return { error: null, enabledIds: void 0 };
   }
   const installationOctokit = await probot.auth(installationId);
   const loadable = createConfigLoadable(installationOctokit, owner, repo, probot.log);
   const config3 = await loadConfig(loadable, carson2.knownIds);
   if (config3 === null) {
     log.debug("No carson.yml on default branch, skipping");
-    return null;
+    return { error: null, enabledIds: [] };
   }
   log.debug({ subscribers: config3.subscribers }, "Config loaded");
   const appPermissions = app.permissions ?? {};
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
-    return formatMissingPermissionsError(missing, app.html_url, appIdentity.current);
+    return { error: formatMissingPermissionsError(missing, app.html_url, appIdentity.current), enabledIds: config3.subscribers };
   }
   log.debug("All required permissions satisfied");
-  return null;
+  return { error: null, enabledIds: config3.subscribers };
 };
 
 // src/carson.ts
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
-
-// src/scheduled.ts
-var ScheduledRegistrar = class {
-  #handlers = [];
-  on(handler2) {
-    this.#handlers.push(handler2);
-  }
-  get handlers() {
-    return this.#handlers;
-  }
-};
-var buildContext = (octokit, log, owner, repo, payload) => ({
-  ...createConfigLoadable(octokit, owner, repo, log),
-  octokit,
-  payload
-});
-var dispatchScheduled = async (probot, registrar, repository, payload) => {
-  const parsed = parseRepository(repository);
-  if (parsed === null) {
-    throw new Error(INVALID_REPOSITORY_MESSAGE);
-  }
-  const { owner, repo } = parsed;
-  const appOctokit = await probot.auth();
-  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-  const octokit = await probot.auth(installation.id);
-  const context = buildContext(octokit, probot.log, owner, repo, payload);
-  let failed = false;
-  for (const handler2 of registrar.handlers) {
-    try {
-      await handler2(context);
-    } catch (error52) {
-      logger.for("carson").error(error52);
-      failed = true;
-    }
-  }
-  return { failed };
-};
-
-// src/carson.ts
 var carsonPackage = JSON.parse(
   readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8")
 );
@@ -54974,11 +54972,15 @@ var Carson = class _Carson {
   constructor(subscribers) {
     this.#subscribers = subscribers;
   }
-  run(probot) {
+  run(probot, enabledIds) {
     logger.init(probot.log);
     const log = logger.for("carson");
     log.info(`${_Carson.DISPLAY_NAME} v${carsonVersion} starting (Probot v${probotVersion}, Node ${process.version})`);
     for (const subscriber of this.#subscribers) {
+      if (enabledIds !== void 0 && !enabledIds.includes(subscriber.id)) {
+        log.debug(`Skipping subscriber: ${subscriber.id} (not enabled)`);
+        continue;
+      }
       log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);
@@ -64110,13 +64112,14 @@ var main = async () => {
     logger.for("carson").error(error52);
     handlerFailed = true;
   });
-  await probot.load(app_default);
+  logger.init(probot.log);
   const log = logger.for("carson");
-  const preflightError = await runPreflight(probot, carson, repository);
-  if (preflightError !== null) {
-    setFailed(preflightError);
+  const preflight = await runPreflight(probot, carson, repository);
+  if (preflight.error !== null) {
+    setFailed(preflight.error);
     return;
   }
+  carson.run(probot, preflight.enabledIds);
   if (appIdentity.current !== null) {
     log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }

@@ -1,8 +1,8 @@
 import * as core from '@actions/core';
-import app, { carson } from './app.js';
 import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import { appIdentity } from './app-identity.js';
+import { carson } from './app.js';
 import { createProbot } from 'probot';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 import { logger } from './logger.js';
@@ -57,14 +57,16 @@ const main = async (): Promise<void> => {
     handlerFailed = true;
   });
 
-  await probot.load(app);
+  logger.init(probot.log);
   const log = logger.for('carson');
-  const preflightError = await runPreflight(probot, carson, repository);
+  const preflight = await runPreflight(probot, carson, repository);
 
-  if (preflightError !== null) {
-    core.setFailed(preflightError);
+  if (preflight.error !== null) {
+    core.setFailed(preflight.error);
     return;
   }
+
+  carson.run(probot, preflight.enabledIds);
 
   if (appIdentity.current !== null) {
     log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);

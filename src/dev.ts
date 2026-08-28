@@ -9,10 +9,10 @@ const devApp: ApplicationFunction = async (probot) => {
   const repository = process.env['DEV_REPOSITORY'];
 
   if (repository !== undefined && repository.length > 0) {
-    const preflightError = await runPreflight(probot, carson, repository);
+    const preflight = await runPreflight(probot, carson, repository);
 
-    if (preflightError !== null) {
-      log.error(preflightError);
+    if (preflight.error !== null) {
+      log.error(preflight.error);
       process.exit(1);
     }
   } else {

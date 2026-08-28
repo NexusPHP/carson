@@ -24,12 +24,17 @@ export class Carson {
     this.#subscribers = subscribers;
   }
 
-  public run(probot: Probot): void {
+  public run(probot: Probot, enabledIds?: readonly string[]): void {
     logger.init(probot.log);
     const log = logger.for('carson');
     log.info(`${Carson.DISPLAY_NAME} v${carsonVersion} starting (Probot v${probotVersion}, Node ${process.version})`);
 
     for (const subscriber of this.#subscribers) {
+      if (enabledIds !== undefined && !enabledIds.includes(subscriber.id)) {
+        log.debug(`Skipping subscriber: ${subscriber.id} (not enabled)`);
+        continue;
+      }
+
       log.info(`Registering subscriber: ${subscriber.id}`);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);

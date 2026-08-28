@@ -80,16 +80,21 @@ export const formatMissingPermissionsError = (
   return lines.join('\n');
 };
 
+export interface PreflightResult {
+  error: string | null;
+  enabledIds: readonly string[] | undefined;
+}
+
 export const runPreflight = async (
   probot: Probot,
   carson: Carson,
   repository: string,
-): Promise<string | null> => {
+): Promise<PreflightResult> => {
   const log = logger.for('preflight');
   const parsed = parseRepository(repository);
 
   if (parsed === null) {
-    return INVALID_REPOSITORY_MESSAGE;
+    return { error: INVALID_REPOSITORY_MESSAGE, enabledIds: undefined };
   }
 
   const { owner, repo } = parsed;
@@ -98,7 +103,7 @@ export const runPreflight = async (
 
   if (app === null) {
     log.warn('App lookup returned no data, skipping');
-    return null;
+    return { error: null, enabledIds: undefined };
   }
 
   appIdentity.set({ name: app.name, slug: app.slug });
@@ -114,7 +119,7 @@ export const runPreflight = async (
     log.debug({ installationId, permissions: installationPermissions }, 'Installation resolved');
   } catch (error) {
     log.warn({ err: error }, 'Could not resolve installation, skipping');
-    return null;
+    return { error: null, enabledIds: undefined };
   }
 
   const installationOctokit = await probot.auth(installationId);
@@ -123,7 +128,7 @@ export const runPreflight = async (
 
   if (config === null) {
     log.debug('No carson.yml on default branch, skipping');
-    return null;
+    return { error: null, enabledIds: [] };
   }
 
   log.debug({ subscribers: config.subscribers }, 'Config loaded');
@@ -132,10 +137,10 @@ export const runPreflight = async (
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
 
   if (missing.length > 0) {
-    return formatMissingPermissionsError(missing, app.html_url, appIdentity.current);
+    return { error: formatMissingPermissionsError(missing, app.html_url, appIdentity.current), enabledIds: config.subscribers };
   }
 
   log.debug('All required permissions satisfied');
 
-  return null;
+  return { error: null, enabledIds: config.subscribers };
 };

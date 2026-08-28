@@ -54,6 +54,39 @@ describe('Carson', () => {
     expect(sub.scheduledCalls).toEqual([carson.scheduled]);
   });
 
+  it('run() only registers subscribers listed in enabledIds when it is provided', () => {
+    class NamedFakeSubscriber extends Subscriber {
+      public readonly description = 'named fake subscriber for tests';
+      public readonly requiredPermissions: RequiredPermissions = {};
+      public registerCalls: Probot[] = [];
+      public scheduledCalls: ScheduledRegistrar[] = [];
+
+      public constructor(public readonly id: string) {
+        super();
+      }
+
+      public override register(probot: Probot): void {
+        this.registerCalls.push(probot);
+      }
+
+      public override registerScheduled(registrar: ScheduledRegistrar): void {
+        this.scheduledCalls.push(registrar);
+      }
+    }
+
+    const enabled = new NamedFakeSubscriber('enabled');
+    const disabled = new NamedFakeSubscriber('disabled');
+    const carson = new Carson([enabled, disabled]);
+    const probot = makeProbot();
+
+    carson.run(probot, ['enabled']);
+
+    expect(enabled.registerCalls).toEqual([probot]);
+    expect(enabled.scheduledCalls).toEqual([carson.scheduled]);
+    expect(disabled.registerCalls).toEqual([]);
+    expect(disabled.scheduledCalls).toEqual([]);
+  });
+
   it('app getter returns a function that invokes run', () => {
     const sub = new FakeSubscriber();
     const carson = new Carson([sub]);
