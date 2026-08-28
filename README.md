@@ -8,6 +8,7 @@
 [![Test](https://github.com/NexusPHP/carson/actions/workflows/test.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/test.yml)
 [![Typecheck](https://github.com/NexusPHP/carson/actions/workflows/typecheck.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/typecheck.yml)
 [![Pages](https://github.com/NexusPHP/carson/actions/workflows/pages.yml/badge.svg?branch=1.x)](https://github.com/NexusPHP/carson/actions/workflows/pages.yml)
+[![Action runs](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FNexusPHP%2Fcarson%2Ftraffic%2Fbadge.json)](https://github.com/NexusPHP/carson/blob/traffic/clones.json)
 
 A GitHub App that manages your repository like a butler. Distributed as a GitHub Action.
 
