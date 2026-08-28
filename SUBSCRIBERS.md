@@ -21,6 +21,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [template-enforcer](#template-enforcer)
   - [thanks](#thanks)
   - [triage-labeler](#triage-labeler)
+  - [webhook-notifier](#webhook-notifier)
   - [welcome](#welcome)
 
 </details>
@@ -56,7 +57,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | Marker | Used by |
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
-| `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake) |
+| `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake), [webhook-notifier](#webhook-notifier) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
 
@@ -202,7 +203,7 @@ Turns a `repository_dispatch` event into a labeled GitHub issue carrying a hidde
 
 The sender calls [`POST /repos/{owner}/{repo}/dispatches`](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event) with an `event_type` matching a key under `events` and a flat `client_payload` (string or number values only, up to GitHub's 10-property cap). Carson validates the payload against the event's declared `fields`, interpolates the title and body templates, and creates the issue with the marker `<!-- carson:issue-intake:{event_type}:{ref} -->` appended as the final line of the body. A malformed payload fails the workflow run loudly: the sender is a machine, so a bad payload is a sender bug.
 
-The `ref` is the value of the payload key named by `ref_field` and must match `^[\w.-]{1,64}$`. It is the correlation handle an external system uses to tie the issue back to its own record.
+The `ref` is the value of the payload key named by `ref_field` and must match `^[\w.-]{1,64}$`. It is the correlation handle an external system uses to tie the issue back to its own record (see [webhook-notifier](#webhook-notifier) for the return path).
 
 Delivery is at-least-once on the sender's side. The primary idempotency contract is sender-side (dispatch once per ref, retry only when the dispatch API call itself failed). `dedupe: true` adds a best-effort guard: before creating, Carson scans the most recent 100 issues carrying the event's static `labels` for the exact marker and skips creation on a hit.
 
@@ -748,6 +749,98 @@ settings:
     needs_rework_label: "status: changes requested"
     approved_label: "status: ready to merge"
     qualifying_associations: [OWNER, MEMBER]   # tighten to org members and owner only
+```
+
+---
+
+## webhook-notifier
+
+POSTs a signed JSON payload to a consumer-configured URL when tracked issues change state. This is the return path for [issue-intake](#issue-intake): an external system files an issue through a `repository_dispatch` and learns from this callback when maintainers close (or reopen) it.
+
+**Triggers**: `issues.closed`, `issues.reopened`
+**Permissions**: none (operates on the event payload only)
+
+By default (`require_marker: true`) only issues carrying an [issue-intake](#issue-intake) marker are notified: the issue body must end with `<!-- carson:issue-intake:{event_type}:{ref} -->` **and** the issue author must be a Bot. Without the bot-author check, anyone could paste a marker into their own issue and aim callbacks with a forged ref at the receiver. The marker, not the intake subscriber, is the contract: a consumer creating issues directly (e.g. under the App's installation token from its own backend) opts into callbacks by emitting that exact marker as the final line of a bot-authored issue body.
+
+The HMAC secret never goes in `carson.yml`. The `secret_env` setting names an environment variable that the consumer workflow passes on the Carson step:
+
+```yaml
+- uses: NexusPHP/carson@<commit-sha>  # vX.Y.Z
+  with:
+    app_id: ${{ secrets.CARSON_APP_ID }}
+    private_key: ${{ secrets.CARSON_PRIVATE_KEY }}
+  env:
+    CARSON_WEBHOOK_SECRET: ${{ secrets.SUPPORT_WEBHOOK_SECRET }}
+```
+
+A missing or empty variable fails the run. Carson never sends unsigned.
+
+### Delivery
+
+The request is a `POST` with:
+
+| Header | Value |
+| --- | --- |
+| `content-type` | `application/json` |
+| `x-carson-event` | the `event.action` string, e.g. `issues.closed` |
+| `x-carson-delivery` | the workflow run id |
+| `x-carson-signature-256` | `sha256=` + hex HMAC-SHA256 of the raw request body, keyed by the secret |
+
+The signature scheme mirrors GitHub's own webhook signing, so receivers can reuse existing verification code. The body:
+
+```json
+{
+  "version": 1,
+  "event": "issues.closed",
+  "ref": "tkt_8f3a2c",
+  "dispatch_event_type": "support-ticket",
+  "issue": {
+    "number": 42,
+    "title": "[bug] Export fails on large TB",
+    "state": "closed",
+    "state_reason": "completed",
+    "html_url": "https://github.com/acme/support/issues/42"
+  },
+  "repository": "acme/support",
+  "delivered_at": "2026-07-11T09:00:00Z"
+}
+```
+
+`ref` and `dispatch_event_type` are parsed from the marker. When `require_marker` is `false` both are `null` and the `labels` filter should carry the filtering burden. `delivered_at` inside the signed body gives receivers a replay-rejection handle.
+
+Delivery uses a bounded timeout with up to 3 attempts and short backoff on network errors and 5xx responses. A final non-2xx fails the workflow run (other subscribers still complete). The remediation for a missed delivery is re-running the workflow run from the Actions UI: the event payload is preserved, so failed-run visibility is the retry story. Receiver response bodies are never parsed or acted upon.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `url` | string, `https://` only, no userinfo | required |
+| `secret_env` | string, name of the env var holding the HMAC secret | required |
+| `events` | array of `issues.closed` / `issues.reopened` | `[issues.closed]` |
+| `require_marker` | boolean, only notify for issues carrying a bot-authored issue-intake marker | `true` |
+| `labels` | array, additionally require at least one of these labels on the issue | `[]` (no label filter) |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - issue-intake
+  - webhook-notifier
+settings:
+  webhook-notifier:
+    url: https://app.example.com/api/support/github-webhook
+    secret_env: CARSON_WEBHOOK_SECRET
+    events: [issues.closed, issues.reopened]
+    labels: [support]
+```
+
+The consumer workflow needs `issues` in its triggers:
+
+```yaml
+on:
+  issues:
+    types: [closed, reopened]
 ```
 
 ---

@@ -10,6 +10,7 @@ import { StaleSubscriber } from './subscribers/stale.js';
 import { TemplateEnforcerSubscriber } from './subscribers/template-enforcer.js';
 import { ThanksSubscriber } from './subscribers/thanks.js';
 import { TriageLabelerSubscriber } from './subscribers/triage-labeler.js';
+import { WebhookNotifierSubscriber } from './subscribers/webhook-notifier.js';
 import { WelcomeSubscriber } from './subscribers/welcome.js';
 
 export const carson = new Carson([
@@ -24,6 +25,7 @@ export const carson = new Carson([
   new TemplateEnforcerSubscriber(),
   new ThanksSubscriber(),
   new TriageLabelerSubscriber(),
+  new WebhookNotifierSubscriber(),
   new WelcomeSubscriber(),
 ]);
 

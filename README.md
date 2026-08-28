@@ -77,7 +77,7 @@ on:
     types: [submitted]
   push:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, closed, reopened]
   issue_comment:
     types: [created]
   schedule:
@@ -156,6 +156,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**template-enforcer**](SUBSCRIBERS.md#template-enforcer): comments on and labels issues or PRs whose description does not match the configured template, and clears the label when fixed.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.
 - [**triage-labeler**](SUBSCRIBERS.md#triage-labeler): labels pull requests with their review state (needs-review, needs-rework, approved), ignoring drive-by reviews from contributors without write access.
+- [**webhook-notifier**](SUBSCRIBERS.md#webhook-notifier): POSTs a signed JSON callback to a configured URL when tracked issues are closed or reopened.
 - [**welcome**](SUBSCRIBERS.md#welcome): greets contributors on pull requests and issues, with separate, configurable messages for first-time and returning contributors.
 
 ## Development

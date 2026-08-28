@@ -13482,7 +13482,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch(input, init2 = void 0) {
+    function fetch2(input, init2 = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise2();
       let requestObject;
@@ -14439,7 +14439,7 @@ var require_fetch = __commonJS({
       }
     }
     module2.exports = {
-      fetch,
+      fetch: fetch2,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -18788,7 +18788,7 @@ var require_undici = __commonJS({
     module2.exports.setGlobalDispatcher = setGlobalDispatcher;
     module2.exports.getGlobalDispatcher = getGlobalDispatcher;
     var fetchImpl = require_fetch().fetch;
-    module2.exports.fetch = async function fetch(init2, options2 = void 0) {
+    module2.exports.fetch = async function fetch2(init2, options2 = void 0) {
       try {
         return await fetchImpl(init2, options2);
       } catch (err) {
@@ -21857,7 +21857,7 @@ var require_atomic_sleep = __commonJS({
   "node_modules/atomic-sleep/index.js"(exports2, module2) {
     "use strict";
     if (typeof SharedArrayBuffer !== "undefined" && typeof Atomics !== "undefined") {
-      let sleep = function(ms) {
+      let sleep2 = function(ms) {
         const valid = ms > 0 && ms < Infinity;
         if (valid === false) {
           if (typeof ms !== "number" && typeof ms !== "bigint") {
@@ -21868,9 +21868,9 @@ var require_atomic_sleep = __commonJS({
         Atomics.wait(nil, 0, 0, Number(ms));
       };
       const nil = new Int32Array(new SharedArrayBuffer(4));
-      module2.exports = sleep;
+      module2.exports = sleep2;
     } else {
-      let sleep = function(ms) {
+      let sleep2 = function(ms) {
         const valid = ms > 0 && ms < Infinity;
         if (valid === false) {
           if (typeof ms !== "number" && typeof ms !== "bigint") {
@@ -21882,7 +21882,7 @@ var require_atomic_sleep = __commonJS({
         while (target > Date.now()) {
         }
       };
-      module2.exports = sleep;
+      module2.exports = sleep2;
     }
   }
 });
@@ -21895,7 +21895,7 @@ var require_sonic_boom = __commonJS({
     var EventEmitter = __require("events");
     var inherits = __require("util").inherits;
     var path2 = __require("path");
-    var sleep = require_atomic_sleep();
+    var sleep2 = require_atomic_sleep();
     var assert2 = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
     var kEmptyBuffer = Buffer.allocUnsafe(0);
@@ -22041,7 +22041,7 @@ var require_sonic_boom = __commonJS({
           if ((err.code === "EAGAIN" || err.code === "EBUSY") && this.retryEAGAIN(err, this._writingBuf.length, this._len - this._writingBuf.length)) {
             if (this.sync) {
               try {
-                sleep(BUSY_WRITE_TIMEOUT);
+                sleep2(BUSY_WRITE_TIMEOUT);
                 this.release(void 0, 0);
               } catch (err2) {
                 this.release(err2);
@@ -22354,7 +22354,7 @@ var require_sonic_boom = __commonJS({
           if (shouldRetry && !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
             throw err;
           }
-          sleep(BUSY_WRITE_TIMEOUT);
+          sleep2(BUSY_WRITE_TIMEOUT);
         }
       }
       try {
@@ -22391,7 +22391,7 @@ var require_sonic_boom = __commonJS({
           if (shouldRetry && !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
             throw err;
           }
-          sleep(BUSY_WRITE_TIMEOUT);
+          sleep2(BUSY_WRITE_TIMEOUT);
         }
       }
     }
@@ -23226,7 +23226,7 @@ var require_transport = __commonJS({
     var getCallers = require_caller();
     var { join, isAbsolute, sep: sep2 } = __require("node:path");
     var { fileURLToPath: fileURLToPath2 } = __require("node:url");
-    var sleep = require_atomic_sleep();
+    var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
     function setupOnExit(stream) {
@@ -23349,7 +23349,7 @@ var require_transport = __commonJS({
           return;
         }
         stream.flushSync();
-        sleep(100);
+        sleep2(100);
         stream.end();
       }
       return stream;
@@ -55210,7 +55210,19 @@ ${COMMENT_MARKER}`;
 
 // src/github/markers.ts
 var REF_REGEX = /^[\w.-]{1,64}$/;
+var MARKER_END_REGEX = /<!--\s*carson:issue-intake:(.+):([\w.-]{1,64})\s*-->\s*$/;
 var buildIssueIntakeMarker = (eventType, ref) => `<!-- carson:issue-intake:${eventType}:${ref} -->`;
+var parseIssueIntakeMarker = (body) => {
+  if (body === null || body === void 0) {
+    return null;
+  }
+  const match = MARKER_END_REGEX.exec(body);
+  if (match === null) {
+    return null;
+  }
+  const [, eventType, ref] = match;
+  return { eventType: eventType.trim(), ref };
+};
 
 // src/subscribers/issue-intake.ts
 var TITLE_LIMIT = 256;
@@ -56188,6 +56200,137 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
 };
 
+// src/webhook.ts
+import { createHmac } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+var DEFAULT_TIMEOUT_MS = 1e4;
+var DEFAULT_ATTEMPTS = 3;
+var DEFAULT_BACKOFF_MS = 1e3;
+var signBody = (secret, body) => `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+var deliver = async (url2, body, headers, options2 = {}) => {
+  const timeoutMs = options2.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const attempts = options2.attempts ?? DEFAULT_ATTEMPTS;
+  const backoffMs = options2.backoffMs ?? DEFAULT_BACKOFF_MS;
+  for (let attempt = 1; ; attempt++) {
+    let response;
+    try {
+      response = await fetch(url2, {
+        method: "POST",
+        body,
+        headers,
+        redirect: "error",
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+    } catch (error52) {
+      if (attempt >= attempts) {
+        throw new Error(`Webhook delivery to ${url2} failed: ${String(error52)}`, { cause: error52 });
+      }
+      await sleep(backoffMs * attempt);
+      continue;
+    }
+    if (response.ok) {
+      return;
+    }
+    const failure = new Error(`Webhook delivery to ${url2} failed with status ${response.status}`);
+    if (response.status < 500 || attempt >= attempts) {
+      throw failure;
+    }
+    await sleep(backoffMs * attempt);
+  }
+};
+
+// src/subscribers/webhook-notifier.ts
+var EVENT_VALUES = ["issues.closed", "issues.reopened"];
+var isSafeHttpsUrl = (value) => {
+  let url2;
+  try {
+    url2 = new URL(value);
+  } catch {
+    return false;
+  }
+  return url2.protocol === "https:" && url2.username === "" && url2.password === "";
+};
+var Settings12 = external_exports.object({
+  url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
+  secret_env: external_exports.string().min(1),
+  events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
+  require_marker: external_exports.boolean().default(true),
+  labels: external_exports.array(external_exports.string().min(1)).default([])
+});
+var WebhookNotifierSubscriber = class extends Subscriber {
+  id = "webhook-notifier";
+  description = "POSTs a signed JSON payload to a consumer-configured URL when tracked issues change state.";
+  requiredPermissions = {};
+  register(probot) {
+    probot.on([...EVENT_VALUES], async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config3, this.id, Settings12, log);
+    if (settings === void 0) {
+      log.debug("No valid webhook-notifier settings, skipping");
+      return;
+    }
+    const event = `issues.${context.payload.action}`;
+    const issue3 = context.payload.issue;
+    if (!settings.events.includes(event)) {
+      log.debug(`Event ${event} not in configured events, skipping`);
+      return;
+    }
+    if (settings.labels.length > 0) {
+      const issueLabels = (issue3.labels ?? []).map((label) => label?.name);
+      if (!settings.labels.some((label) => issueLabels.includes(label))) {
+        log.debug(`Issue #${issue3.number} carries none of the configured labels, skipping`);
+        return;
+      }
+    }
+    let ref = null;
+    let dispatchEventType = null;
+    if (settings.require_marker) {
+      const marker = parseIssueIntakeMarker(issue3.body);
+      if (marker === null || issue3.user?.type !== "Bot") {
+        log.debug(`Issue #${issue3.number} has no bot-authored issue-intake marker, skipping`);
+        return;
+      }
+      ref = marker.ref;
+      dispatchEventType = marker.eventType;
+    }
+    const secret = process.env[settings.secret_env];
+    if (secret === void 0 || secret.length === 0) {
+      throw new Error(`Environment variable "${settings.secret_env}" named by secret_env is not set`);
+    }
+    const { owner, repo } = context.repo();
+    const body = JSON.stringify({
+      version: 1,
+      event,
+      ref,
+      dispatch_event_type: dispatchEventType,
+      issue: {
+        number: issue3.number,
+        title: issue3.title,
+        state: issue3.state ?? null,
+        state_reason: issue3.state_reason ?? null,
+        html_url: issue3.html_url
+      },
+      repository: `${owner}/${repo}`,
+      delivered_at: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    await deliver(settings.url, body, {
+      "content-type": "application/json",
+      "x-carson-event": event,
+      "x-carson-delivery": process.env["GITHUB_RUN_ID"] ?? "",
+      "x-carson-signature-256": signBody(secret, body)
+    });
+    log.info(`Delivered ${event} for issue #${issue3.number}`);
+  }
+};
+
 // src/subscribers/welcome.ts
 var FIRST_TIME_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
 var RETURNING_ASSOCIATIONS = ["CONTRIBUTOR", "MEMBER", "COLLABORATOR", "OWNER"];
@@ -56201,7 +56344,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -56241,7 +56384,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings12);
+      const enabled = await this.loadEnabledSettings(context, Settings13);
       if (enabled === null) {
         return;
       }
@@ -56269,7 +56412,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings12);
+      const enabled = await this.loadEnabledSettings(context, Settings13);
       if (enabled === null) {
         return;
       }
@@ -56306,6 +56449,7 @@ var carson = new Carson([
   new TemplateEnforcerSubscriber(),
   new ThanksSubscriber(),
   new TriageLabelerSubscriber(),
+  new WebhookNotifierSubscriber(),
   new WelcomeSubscriber()
 ]);
 var app_default = carson.app;
@@ -56474,7 +56618,7 @@ var Context = class {
 };
 
 // node_modules/@octokit/webhooks-methods/dist-node/index.js
-import { createHmac } from "node:crypto";
+import { createHmac as createHmac2 } from "node:crypto";
 import { timingSafeEqual } from "node:crypto";
 import { Buffer as Buffer2 } from "node:buffer";
 var VERSION = "6.0.0";
@@ -56488,7 +56632,7 @@ async function sign(secret, payload) {
     throw new TypeError("[@octokit/webhooks-methods] payload must be a string");
   }
   const algorithm = "sha256";
-  return `${algorithm}=${createHmac(algorithm, secret).update(payload).digest("hex")}`;
+  return `${algorithm}=${createHmac2(algorithm, secret).update(payload).digest("hex")}`;
 }
 sign.VERSION = VERSION;
 async function verify(secret, eventPayload, signature) {
@@ -58679,8 +58823,8 @@ function isPlainObject3(value) {
 }
 var noop = () => "";
 async function fetchWrapper(requestOptions) {
-  const fetch = requestOptions.request?.fetch || globalThis.fetch;
-  if (!fetch) {
+  const fetch2 = requestOptions.request?.fetch || globalThis.fetch;
+  if (!fetch2) {
     throw new Error(
       "fetch is not set. Please pass a fetch implementation as new Octokit({ request: { fetch }}). Learn more at https://github.com/octokit/octokit.js/#fetch-missing"
     );
@@ -58696,7 +58840,7 @@ async function fetchWrapper(requestOptions) {
   );
   let fetchResponse;
   try {
-    fetchResponse = await fetch(requestOptions.url, {
+    fetchResponse = await fetch2(requestOptions.url, {
       method: requestOptions.method,
       body,
       redirect: requestOptions.request?.redirect,
