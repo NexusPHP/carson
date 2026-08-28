@@ -1,6 +1,6 @@
 {
   "name": "carson",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "A GitHub App that manages your repository like a butler.",
   "homepage": "https://github.com/NexusPHP/carson#readme",
@@ -23,6 +23,7 @@
     "dev": "tsx watch src/dev.ts",
     "lint": "eslint --color src tests docs \"*.config.ts\"",
     "lint:fix": "eslint --color --fix src tests docs \"*.config.ts\"",
+    "release": "scripts/release.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage"
   },
