@@ -114,15 +114,15 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_ACTIONS_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           WARNING: ${{ steps.perms.outputs.warning }}
           NOTES: ${{ steps.notes.outputs.body }}
         run: |
-          set -euo pipefail
           gh release create "$TAG" \
             --repo "$REPO" \
+            --title "$TAG" \
             --notes "${WARNING}${NOTES}" \
             --draft \
             --verify-tag
