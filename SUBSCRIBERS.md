@@ -12,6 +12,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - Subscribers
   - [auto-labeler](#auto-labeler)
   - [conflicts-notifier](#conflicts-notifier)
+  - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
   - [no-response-closer](#no-response-closer)
   - [pr-title-linter](#pr-title-linter)
@@ -55,6 +56,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | Marker | Used by |
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
+| `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
 
@@ -187,6 +189,81 @@ subscribers:
 settings:
   conflicts-notifier:
     message: "@{{user}} #{{number}} conflicts with `{{base}}`. Please rebase."
+```
+
+---
+
+## issue-intake
+
+Turns a `repository_dispatch` event into a labeled GitHub issue carrying a hidden correlation marker, so an external system (an application backend, a script) can file issues through Carson and correlate them later.
+
+**Triggers**: `repository_dispatch` (only the `event_type`s configured under `events`)
+**Permissions**: `issues: write`
+
+The sender calls [`POST /repos/{owner}/{repo}/dispatches`](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event) with an `event_type` matching a key under `events` and a flat `client_payload` (string or number values only, up to GitHub's 10-property cap). Carson validates the payload against the event's declared `fields`, interpolates the title and body templates, and creates the issue with the marker `<!-- carson:issue-intake:{event_type}:{ref} -->` appended as the final line of the body. A malformed payload fails the workflow run loudly: the sender is a machine, so a bad payload is a sender bug.
+
+The `ref` is the value of the payload key named by `ref_field` and must match `^[\w.-]{1,64}$`. It is the correlation handle an external system uses to tie the issue back to its own record.
+
+Delivery is at-least-once on the sender's side. The primary idempotency contract is sender-side (dispatch once per ref, retry only when the dispatch API call itself failed). `dedupe: true` adds a best-effort guard: before creating, Carson scans the most recent 100 issues carrying the event's static `labels` for the exact marker and skips creation on a hit.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `events` | map of `event_type` → event config (see below) | required, non-empty |
+
+Each event config:
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `ref_field` | string, name of the `client_payload` key holding the correlation ref | required |
+| `title` | template string | required |
+| `body` | template string | required |
+| `labels` | array of static label names | `[]` |
+| `label_field` | string, payload key whose value is applied as an extra label | (none) |
+| `label_allowlist` | array of allowed values for `label_field` | required when `label_field` is set |
+| `fields` | map of payload key → `{ required?: boolean, escape?: boolean }` | `{}` |
+| `dedupe` | boolean, scan for an existing issue with the same marker before creating | `false` |
+
+A `label_field` value outside `label_allowlist` is skipped with a warning. The issue is still created. Labels are never created from raw payload values.
+
+### Context
+
+Only keys declared under `fields`, plus the `ref_field` key, reach the templates. Undeclared payload keys are left verbatim as `{{placeholder}}`. Fields with `escape: true` have markdown specials escaped (payload content originates from the sender's end users and is untrusted text). The title is truncated to 256 characters and the body to GitHub's 65536-character limit, marker included.
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - issue-intake
+settings:
+  issue-intake:
+    events:
+      support-ticket:
+        ref_field: ticket_id
+        title: "[{{kind}}] {{subject}}"
+        body: |
+          {{description}}
+
+          ---
+          Reported via the in-app support page. Ticket `{{ticket_id}}`.
+        labels: [support]
+        label_field: kind
+        label_allowlist: [bug, feature-request]
+        fields:
+          kind: { required: true }
+          subject: { required: true, escape: true }
+          description: { required: true }
+        dedupe: true
+```
+
+The consumer workflow needs the trigger:
+
+```yaml
+on:
+  repository_dispatch:
+    types: [support-ticket]
 ```
 
 ---

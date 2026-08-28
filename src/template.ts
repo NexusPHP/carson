@@ -15,6 +15,11 @@ const universalContext = (): TemplateContext => ({
   app_login: appIdentity.login,
 });
 
+// Escape the markdown specials that enable link/image/HTML/code breakout.
+// Cosmetic markdown (*, _, ~) is left alone. Rendered output is identical
+// for benign text.
+export const escapeMarkdown = (s: string): string => s.replace(/[\\`[\]()<>!]/g, '\\$&');
+
 export const interpolate = (template: string, context: TemplateContext): string => {
   const merged: TemplateContext = { ...universalContext(), ...context };
 

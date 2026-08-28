@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { escapeMarkdown } from '../template.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -9,11 +10,6 @@ const Settings = z.object({
 
 const DEFAULT_NAME = 'Carson / signed-commits';
 const DEFAULT_TREATMENT: 'failure' | 'neutral' = 'failure';
-
-// Escape the markdown specials that enable link/image/HTML/code breakout in
-// check output. Cosmetic markdown (*, _, ~) is left alone. Rendered output
-// is identical for benign text.
-const escapeMarkdown = (s: string): string => s.replace(/[\\`[\]()<>!]/g, '\\$&');
 
 type SignedCommitsEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
 type SignedCommitsContext = Context<SignedCommitsEvent>;

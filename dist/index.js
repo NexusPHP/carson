@@ -55040,6 +55040,7 @@ var universalContext = () => ({
   app_slug: appIdentity.slug,
   app_login: appIdentity.login
 });
+var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
 var interpolate = (template, context) => {
   const merged = { ...universalContext(), ...context };
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
@@ -55207,6 +55208,132 @@ ${COMMENT_MARKER}`;
   }
 };
 
+// src/github/markers.ts
+var REF_REGEX = /^[\w.-]{1,64}$/;
+var buildIssueIntakeMarker = (eventType, ref) => `<!-- carson:issue-intake:${eventType}:${ref} -->`;
+
+// src/subscribers/issue-intake.ts
+var TITLE_LIMIT = 256;
+var BODY_LIMIT = 65536;
+var FieldSpec = external_exports.object({
+  required: external_exports.boolean().default(false),
+  escape: external_exports.boolean().default(false)
+});
+var EventSettings = external_exports.object({
+  ref_field: external_exports.string().min(1),
+  title: external_exports.string().min(1),
+  body: external_exports.string().min(1),
+  labels: external_exports.array(external_exports.string().min(1)).default([]),
+  label_field: external_exports.string().min(1).optional(),
+  label_allowlist: external_exports.array(external_exports.string().min(1)).optional(),
+  fields: external_exports.record(external_exports.string().min(1), FieldSpec).default({}),
+  dedupe: external_exports.boolean().default(false)
+}).refine((event) => event.label_field === void 0 || event.label_allowlist !== void 0, {
+  message: "label_allowlist is required when label_field is set"
+});
+var Settings3 = external_exports.object({
+  events: external_exports.record(external_exports.string().regex(/^[\w.-]{1,100}$/), EventSettings).refine((events) => Object.keys(events).length > 0, { message: "events must not be empty" })
+});
+var buildTemplateContext = (eventType, eventConfig, payload) => {
+  const templateContext = {};
+  for (const [name, spec] of Object.entries(eventConfig.fields)) {
+    const value = payload[name];
+    if (value === void 0 || value === null) {
+      if (spec.required) {
+        throw new Error(`Missing required field "${name}" in client_payload for "${eventType}"`);
+      }
+      continue;
+    }
+    if (typeof value !== "string" && typeof value !== "number") {
+      throw new Error(`Field "${name}" in client_payload for "${eventType}" must be a string or number, got ${typeof value}`);
+    }
+    templateContext[name] = spec.escape && typeof value === "string" ? escapeMarkdown(value) : value;
+  }
+  const refValue = payload[eventConfig.ref_field];
+  if (typeof refValue !== "string" && typeof refValue !== "number") {
+    throw new Error(`ref_field "${eventConfig.ref_field}" is missing from client_payload for "${eventType}" or is not a string or number`);
+  }
+  const ref = String(refValue);
+  if (!REF_REGEX.test(ref)) {
+    throw new Error(`ref_field "${eventConfig.ref_field}" value "${ref}" must match ${REF_REGEX.source}`);
+  }
+  templateContext[eventConfig.ref_field] = ref;
+  return { templateContext, ref };
+};
+var IssueIntakeSubscriber = class extends Subscriber {
+  id = "issue-intake";
+  description = "Turns repository_dispatch events into labeled issues carrying a correlation marker.";
+  requiredPermissions = { issues: "write" };
+  register(probot) {
+    probot.on("repository_dispatch", async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config3, this.id, Settings3, log);
+    if (settings === void 0) {
+      log.debug("No valid issue-intake settings, skipping");
+      return;
+    }
+    const eventType = context.payload.action;
+    const eventConfig = settings.events[eventType];
+    if (eventConfig === void 0) {
+      log.debug(`No event configured for "${eventType}", skipping`);
+      return;
+    }
+    const payload = context.payload.client_payload;
+    if (payload === null) {
+      throw new Error(`client_payload is missing for "${eventType}"`);
+    }
+    const { templateContext, ref } = buildTemplateContext(eventType, eventConfig, payload);
+    const marker = buildIssueIntakeMarker(eventType, ref);
+    const { owner, repo } = context.repo();
+    if (eventConfig.dedupe) {
+      const { data: existing } = await context.octokit.rest.issues.listForRepo({
+        owner,
+        repo,
+        state: "all",
+        ...eventConfig.labels.length > 0 ? { labels: eventConfig.labels.join(",") } : {},
+        sort: "created",
+        direction: "desc",
+        per_page: 100
+      });
+      const duplicate = existing.find((issue4) => issue4.body?.endsWith(marker) === true);
+      if (duplicate !== void 0) {
+        log.info(`Issue #${duplicate.number} already exists for ${eventType} ref ${ref}, skipping`);
+        return;
+      }
+    }
+    const labels = [...eventConfig.labels];
+    if (eventConfig.label_field !== void 0) {
+      const labelValue = payload[eventConfig.label_field];
+      if (typeof labelValue === "string" && eventConfig.label_allowlist?.includes(labelValue) === true) {
+        labels.push(labelValue);
+      } else {
+        log.warn(`Value of label_field "${eventConfig.label_field}" is not in label_allowlist, label skipped`);
+      }
+    }
+    const title = interpolate(eventConfig.title, templateContext).slice(0, TITLE_LIMIT);
+    const bodyBudget = BODY_LIMIT - marker.length - 2;
+    const body = `${interpolate(eventConfig.body, templateContext).slice(0, bodyBudget)}
+
+${marker}`;
+    const { data: issue3 } = await context.octokit.rest.issues.create({
+      owner,
+      repo,
+      title,
+      body,
+      ...labels.length > 0 ? { labels } : {}
+    });
+    log.info(`Created issue #${issue3.number} for ${eventType} ref ${ref}`);
+  }
+};
+
 // src/github/labels.ts
 var labelNames = (labels) => {
   return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
@@ -55214,7 +55341,7 @@ var labelNames = (labels) => {
 
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
-var Settings3 = external_exports.object({
+var Settings4 = external_exports.object({
   days: external_exports.number().int().positive().optional(),
   reason: external_exports.enum(LOCK_REASONS).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
@@ -55234,7 +55361,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings3);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
     if (enabled === null) {
       return;
     }
@@ -55304,7 +55431,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-response-closer.ts
-var Settings4 = external_exports.object({
+var Settings5 = external_exports.object({
   label: external_exports.string().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
@@ -55327,7 +55454,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings5);
     if (enabled === null) {
       return;
     }
@@ -55396,7 +55523,7 @@ var Rule2 = external_exports.object({
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings5 = external_exports.object({
+var Settings6 = external_exports.object({
   name: external_exports.string().optional(),
   rules: external_exports.array(Rule2).optional()
 });
@@ -55458,7 +55585,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings5);
+    const enabled = await this.loadEnabledSettings(context, Settings6);
     if (enabled === null) {
       return;
     }
@@ -55492,13 +55619,12 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings6 = external_exports.object({
+var Settings7 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
 var DEFAULT_NAME2 = "Carson / signed-commits";
 var DEFAULT_TREATMENT = "failure";
-var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
 var PR_EVENTS4 = [
   "pull_request.opened",
   "pull_request.synchronize",
@@ -55517,7 +55643,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings6);
+    const enabled = await this.loadEnabledSettings(context, Settings7);
     if (enabled === null) {
       return;
     }
@@ -55560,7 +55686,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -55598,7 +55724,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
-    const enabled = await this.loadEnabledSettings(context, Settings7);
+    const enabled = await this.loadEnabledSettings(context, Settings8);
     if (enabled === null) {
       return;
     }
@@ -55637,7 +55763,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings7);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings8);
     if (enabled === null) {
       return;
     }
@@ -55736,7 +55862,7 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule3).optional()
 });
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
@@ -55833,7 +55959,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #apply(context, kind, item) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -55902,7 +56028,7 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE3 = "Thanks for the contribution, @{{user}}!";
@@ -55929,7 +56055,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings9);
+      const enabled = await this.loadEnabledSettings(context, Settings10);
       if (enabled === null) {
         return;
       }
@@ -55947,7 +56073,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -56018,7 +56144,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings10);
+    const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
       return;
     }
@@ -56075,7 +56201,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -56115,7 +56241,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings11);
+      const enabled = await this.loadEnabledSettings(context, Settings12);
       if (enabled === null) {
         return;
       }
@@ -56143,7 +56269,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings11);
+      const enabled = await this.loadEnabledSettings(context, Settings12);
       if (enabled === null) {
         return;
       }
@@ -56171,6 +56297,7 @@ var WelcomeSubscriber = class extends Subscriber {
 var carson = new Carson([
   new AutoLabelerSubscriber(),
   new ConflictsNotifierSubscriber(),
+  new IssueIntakeSubscriber(),
   new LockOldIssuesSubscriber(),
   new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),

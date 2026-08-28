@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { escapeMarkdown, interpolate } from '../src/template.js';
 import { appIdentity } from '../src/app-identity.js';
-import { interpolate } from '../src/template.js';
 
 describe('interpolate', () => {
   afterEach(() => {
@@ -66,5 +66,15 @@ describe('interpolate', () => {
       '{{app_name}} / {{app_slug}} / {{app_login}}',
       { app_name: 'CustomBot', app_slug: 'custom', app_login: 'custom-bot' },
     )).toBe('CustomBot / custom / custom-bot');
+  });
+});
+
+describe('escapeMarkdown', () => {
+  it('escapes link, image, HTML, and code specials', () => {
+    expect(escapeMarkdown('[x](http://e) `c` <b>! \\')).toBe('\\[x\\]\\(http://e\\) \\`c\\` \\<b\\>\\! \\\\');
+  });
+
+  it('leaves cosmetic markdown untouched', () => {
+    expect(escapeMarkdown('*bold* _em_ ~strike~ plain')).toBe('*bold* _em_ ~strike~ plain');
   });
 });
