@@ -129,4 +129,4 @@ TypeScript ([tsconfig.json](tsconfig.json)) enables `exactOptionalPropertyTypes`
 
 ## Release flow
 
-Tag `vX.Y.Z` triggers [release.yml](.github/workflows/release.yml), which creates a draft GitHub Release via `gh release create`. Carson does **not** maintain a moving `v1` tag. Every release is a fixed `vX.Y.Z` and consumers pin a commit SHA with a trailing `# vX.Y.Z` comment for Dependabot.
+`npm run release -- X.Y.Z` ([scripts/release.sh](scripts/release.sh)) bumps `package.json` and the lockfile after checking the version format and that `vX.Y.Z` isn't already tagged on origin. It never commits, tags, or pushes: commit the bump, tag `vX.Y.Z`, and push both yourself. The tag push triggers [release.yml](.github/workflows/release.yml), which creates a draft GitHub Release via `gh release create`. Carson does **not** maintain a moving `v1` tag. Every release is a fixed `vX.Y.Z` and consumers pin a commit SHA with a trailing `# vX.Y.Z` comment for Dependabot.
