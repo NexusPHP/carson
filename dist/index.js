@@ -19611,7 +19611,11 @@ var require_parse2 = __commonJS({
         }
       }
     };
-    var getStarExtglobSequenceOutput = (pattern) => {
+    var buildCharClassStar = (chars) => {
+      const source = chars.length === 1 ? utils.escapeRegex(chars[0]) : `[${chars.map((ch) => utils.escapeRegex(ch)).join("")}]`;
+      return `${source}*`;
+    };
+    var getStarExtglobSequenceChars = (pattern) => {
       let index = 0;
       const chars = [];
       while (index < pattern.length) {
@@ -19633,8 +19637,7 @@ var require_parse2 = __commonJS({
       if (chars.length < 1) {
         return;
       }
-      const source = chars.length === 1 ? utils.escapeRegex(chars[0]) : `[${chars.map((ch) => utils.escapeRegex(ch)).join("")}]`;
-      return `${source}*`;
+      return chars;
     };
     var repeatedExtglobRecursion = (pattern) => {
       let depth = 0;
@@ -19658,14 +19661,28 @@ var require_parse2 = __commonJS({
           return { risky: true };
         }
       }
+      const safeChars = [];
+      let sawStarSequence = false;
+      let combinable = true;
       for (const branch of branches) {
-        const safeOutput = getStarExtglobSequenceOutput(branch);
-        if (safeOutput) {
-          return { risky: true, safeOutput };
+        const chars = getStarExtglobSequenceChars(branch);
+        if (chars) {
+          sawStarSequence = true;
+          safeChars.push(...chars);
+          continue;
         }
+        const literal2 = normalizeSimpleBranch(branch);
+        if (literal2 && literal2.length === 1) {
+          safeChars.push(literal2);
+          continue;
+        }
+        combinable = false;
         if (repeatedExtglobRecursion(branch) > max) {
           return { risky: true };
         }
+      }
+      if (sawStarSequence) {
+        return combinable ? { risky: true, safeOutput: buildCharClassStar([...new Set(safeChars)]) } : { risky: true };
       }
       return { risky: false };
     };
@@ -20516,9 +20533,9 @@ var require_picomatch = __commonJS({
       }
       return { isMatch: Boolean(match), match, output };
     };
-    picomatch2.matchBase = (input, glob, options2) => {
+    picomatch2.matchBase = (input, glob, options2, posix = options2 && options2.windows) => {
       const regex2 = glob instanceof RegExp ? glob : picomatch2.makeRe(glob, options2);
-      return regex2.test(utils.basename(input));
+      return regex2.test(utils.basename(input, { windows: posix }));
     };
     picomatch2.isMatch = (str, patterns, options2) => picomatch2(patterns, options2)(str);
     picomatch2.parse = (pattern, options2) => {
