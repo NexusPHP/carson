@@ -37,7 +37,7 @@ export abstract class Subscriber {
     return context.log.child({ name: this.id });
   }
 
-  /** Resolves to false when no router is bound or no enabled subscriber owns the action. */
+  /** Resolves to false when no router is bound, no enabled subscriber owns the action, or the owner declined it. */
   protected async dispatch<N extends ActionName>(
     name: N,
     context: ActionContext,

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [read-only](SUBSCRIBERS.md#read-only) subscriber: closes issues and pull requests opened on a read-only mirror and requests a lock from `lock-old-issues`.
 - `auto-labeler` labels issues too, via `issue_rules` (title and body regex).
 - `lock-old-issues` locks an issue immediately when a label listed in `lock_on_labels` is applied.
+- [commands](SUBSCRIBERS.md#commands) subscriber: slash commands in comments (`/label`, `/unlabel`, `/close`, `/reopen`, `/lock`, `/assign`, `/unassign`), gated on the commenter's repository role.
 
 ### Changed
 

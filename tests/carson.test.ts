@@ -83,7 +83,7 @@ describe('Carson', () => {
   it('run() binds the action router so subscribers can dispatch to each other', async () => {
     const sub = new FakeSubscriber();
     const carson = new Carson([sub]);
-    const handler = vi.fn().mockResolvedValue(undefined);
+    const handler = vi.fn().mockResolvedValue(true);
     const context = makeContext();
 
     carson.run(makeProbot());

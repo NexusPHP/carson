@@ -269,11 +269,10 @@ describe('lock-old-issues subscriber', () => {
     expect(lockMock).toHaveBeenCalledOnce();
   });
 
-  it('ignores a lock request when the subscriber is not enabled', async () => {
+  it('declines a lock request when the subscriber is not enabled', async () => {
     const { context, lockMock } = makeHarness([], { version: 1, subscribers: ['welcome'] });
 
-    await dispatchLock(context, 12);
-
+    await expect(dispatchLock(context, 12)).resolves.toBe(false);
     expect(lockMock).not.toHaveBeenCalled();
   });
 

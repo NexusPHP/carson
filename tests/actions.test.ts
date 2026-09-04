@@ -29,7 +29,7 @@ describe('ActionRegistrar', () => {
 
   it('dispatches to the registered handler with the context and request', async () => {
     const registrar = new ActionRegistrar();
-    const handler = vi.fn().mockResolvedValue(undefined);
+    const handler = vi.fn().mockResolvedValue(true);
     const context = makeContext();
 
     registrar.on('lock', 'locker', handler);
@@ -37,6 +37,13 @@ describe('ActionRegistrar', () => {
     expect(registrar.has('lock')).toBe(true);
     await expect(registrar.dispatch('lock', context, { number: 7 })).resolves.toBe(true);
     expect(handler).toHaveBeenCalledWith(context, { number: 7 });
+  });
+
+  it('resolves false when the owner declines the request', async () => {
+    const registrar = new ActionRegistrar();
+    registrar.on('lock', 'locker', vi.fn().mockResolvedValue(false));
+
+    await expect(registrar.dispatch('lock', makeContext(), { number: 7 })).resolves.toBe(false);
   });
 
   it('warns and resolves false when nothing handles the action', async () => {
@@ -57,8 +64,8 @@ describe('ActionRegistrar', () => {
 
   it('lets the same owner re-register, replacing the handler', async () => {
     const registrar = new ActionRegistrar();
-    const first = vi.fn().mockResolvedValue(undefined);
-    const second = vi.fn().mockResolvedValue(undefined);
+    const first = vi.fn().mockResolvedValue(true);
+    const second = vi.fn().mockResolvedValue(true);
 
     registrar.on('lock', 'locker', first);
     registrar.on('lock', 'locker', second);

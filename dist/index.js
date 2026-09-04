@@ -54680,15 +54680,14 @@ var ActionRegistrar = class {
   has(name) {
     return this.#handlers.has(name);
   }
-  /** Resolves to false, after a warning, when no enabled subscriber handles the action. */
+  /** Resolves to false when no subscriber handles the action (after a warning) or the owner declined it. */
   async dispatch(name, context, request2) {
     const registration = this.#handlers.get(name);
     if (registration === void 0) {
       logger.for("carson").warn(`No enabled subscriber handles the "${name}" action, skipping`);
       return false;
     }
-    await registration.handler(context, request2);
-    return true;
+    return await registration.handler(context, request2);
   }
 };
 
@@ -54707,7 +54706,7 @@ var Subscriber = class {
   log(context) {
     return context.log.child({ name: this.id });
   }
-  /** Resolves to false when no router is bound or no enabled subscriber owns the action. */
+  /** Resolves to false when no router is bound, no enabled subscriber owns the action, or the owner declined it. */
   async dispatch(name, context, request2) {
     if (this.#actions === null) {
       this.log(context).warn(`No action router bound, cannot dispatch "${name}"`);
@@ -55095,6 +55094,176 @@ var Carson = class _Carson {
   }
 };
 
+// src/subscribers/commands.ts
+var COMMANDS = ["label", "unlabel", "close", "reopen", "lock", "assign", "unassign"];
+var ROLES = ["admin", "maintain", "write", "triage", "read"];
+var MAX_COMMANDS_PER_COMMENT = 10;
+var MAX_LABEL_LENGTH = 50;
+var LOGIN_REGEX = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+var COMMAND_LINE_REGEX = /^\/([a-z]+)(?:[ \t]+(.*))?$/;
+var FENCE_REGEX = /^(?:```|~~~)/;
+var Settings2 = external_exports.object({
+  commands: external_exports.array(external_exports.enum(COMMANDS)).default([...COMMANDS]),
+  roles: external_exports.array(external_exports.enum(ROLES)).default(["admin", "maintain", "write", "triage"]),
+  allowed_labels: external_exports.array(external_exports.string().min(1)).optional(),
+  react: external_exports.boolean().default(true)
+});
+var isCommandName = (value) => COMMANDS.includes(value);
+var parseCommands = (body) => {
+  const commands = [];
+  let inFence = false;
+  for (const line of body.split(/\r?\n/)) {
+    if (FENCE_REGEX.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    const match = COMMAND_LINE_REGEX.exec(line);
+    if (match === null) {
+      continue;
+    }
+    const [, name, rawArgs] = match;
+    if (!isCommandName(name)) {
+      continue;
+    }
+    const args = (rawArgs ?? "").split(",").map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+    commands.push({ name, args });
+    if (commands.length >= MAX_COMMANDS_PER_COMMENT) {
+      break;
+    }
+  }
+  return commands;
+};
+var asLogins = (args, fallback) => {
+  const logins = args.length === 0 ? [fallback] : args;
+  return logins.flatMap((arg) => arg.split(/\s+/)).map((login) => login.replace(/^@/, "")).filter((login) => LOGIN_REGEX.test(login));
+};
+var CommandsSubscriber = class extends Subscriber {
+  id = "commands";
+  description = "Runs slash commands (/label, /close, /lock, ...) posted in comments by repository collaborators.";
+  requiredPermissions = { issues: "write", pull_requests: "write" };
+  register(probot) {
+    probot.on("issue_comment.created", async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const { comment, issue: issue3 } = context.payload;
+    if (context.isBot || comment.user === null) {
+      return;
+    }
+    const commands = parseCommands(comment.body);
+    if (commands.length === 0) {
+      return;
+    }
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config3, this.id, Settings2, log) ?? Settings2.parse({});
+    const { owner, repo } = context.repo();
+    const login = comment.user.login;
+    const role = await this.#roleOf(context, owner, repo, login);
+    if (!settings.roles.includes(role)) {
+      log.debug(`#${issue3.number}: "${login}" has role "${role}", commands ignored`);
+      return;
+    }
+    let succeeded = 0;
+    for (const command of commands) {
+      if (!settings.commands.includes(command.name)) {
+        log.debug(`#${issue3.number}: /${command.name} not enabled, skipping`);
+        continue;
+      }
+      try {
+        await this.#execute(context, command, settings, login);
+        succeeded += 1;
+        log.info(`#${issue3.number}: /${command.name} by ${login}`);
+      } catch (error52) {
+        log.warn({ err: error52 }, `#${issue3.number}: /${command.name} failed`);
+      }
+    }
+    if (succeeded > 0 && settings.react) {
+      await context.octokit.rest.reactions.createForIssueComment({
+        owner,
+        repo,
+        comment_id: comment.id,
+        content: "+1"
+      });
+    }
+  }
+  // Anyone can comment, so the gate is the commenter's actual repository
+  // role, not the self-reported author_association.
+  async #roleOf(context, owner, repo, username) {
+    try {
+      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+      return data.role_name;
+    } catch {
+      return "none";
+    }
+  }
+  async #execute(context, command, settings, login) {
+    const { owner, repo } = context.repo();
+    const issue3 = context.payload.issue;
+    const target = { owner, repo, issue_number: issue3.number };
+    switch (command.name) {
+      case "label": {
+        const labels = command.args.filter((label) => label.length <= MAX_LABEL_LENGTH).filter((label) => settings.allowed_labels === void 0 || settings.allowed_labels.includes(label));
+        if (labels.length === 0) {
+          throw new Error("no allowed labels given");
+        }
+        await context.octokit.rest.issues.addLabels({ ...target, labels });
+        break;
+      }
+      case "unlabel": {
+        if (command.args.length === 0) {
+          throw new Error("no labels given");
+        }
+        for (const name of command.args) {
+          await context.octokit.rest.issues.removeLabel({ ...target, name });
+        }
+        break;
+      }
+      case "close": {
+        const reason = command.args[0];
+        const stateReason = reason === "not_planned" ? "not_planned" : "completed";
+        await context.octokit.rest.issues.update({
+          ...target,
+          state: "closed",
+          ...issue3.pull_request === void 0 ? { state_reason: stateReason } : {}
+        });
+        break;
+      }
+      case "reopen":
+        await context.octokit.rest.issues.update({ ...target, state: "open" });
+        break;
+      case "lock":
+        if (!await this.dispatch("lock", context, { number: issue3.number })) {
+          throw new Error("no enabled subscriber handles lock");
+        }
+        break;
+      case "assign": {
+        const assignees = asLogins(command.args, login);
+        if (assignees.length === 0) {
+          throw new Error("no valid logins given");
+        }
+        await context.octokit.rest.issues.addAssignees({ ...target, assignees });
+        break;
+      }
+      case "unassign": {
+        const assignees = asLogins(command.args, login);
+        if (assignees.length === 0) {
+          throw new Error("no valid logins given");
+        }
+        await context.octokit.rest.issues.removeAssignees({ ...target, assignees });
+        break;
+      }
+    }
+  }
+};
+
 // src/github/comments.ts
 var MINIMIZE_MUTATION = `mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
   minimizeComment(input: { subjectId: $subjectId, classifier: $classifier }) {
@@ -55142,7 +55311,7 @@ var interpolate = (template, context) => {
 };
 
 // src/subscribers/conflicts-notifier.ts
-var Settings2 = external_exports.object({
+var Settings3 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
@@ -55244,7 +55413,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
   async #handleConflict(context, pr, config3, existing) {
     const { owner, repo } = context.repo();
     if (existing === null) {
-      const settings = subscriberSettings(config3, this.id, Settings2, this.log(context)) ?? {};
+      const settings = subscriberSettings(config3, this.id, Settings3, this.log(context)) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,
@@ -55335,7 +55504,7 @@ var EventSettings = external_exports.object({
 }).refine((event) => event.label_field === void 0 || event.label_allowlist !== void 0, {
   message: "label_allowlist is required when label_field is set"
 });
-var Settings3 = external_exports.object({
+var Settings4 = external_exports.object({
   events: external_exports.record(external_exports.string().regex(/^[\w.-]{1,100}$/), EventSettings).refine((events) => Object.keys(events).length > 0, { message: "events must not be empty" })
 });
 var buildTemplateContext = (eventType, eventConfig, payload) => {
@@ -55379,7 +55548,7 @@ var IssueIntakeSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings3, log);
+    const settings = subscriberSettings(config3, this.id, Settings4, log);
     if (settings === void 0) {
       log.debug("No valid issue-intake settings, skipping");
       return;
@@ -55443,7 +55612,7 @@ var searchTimestamp = (epochMs) => `${new Date(epochMs).toISOString().slice(0, 1
 
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
-var Settings4 = external_exports.object({
+var Settings5 = external_exports.object({
   days: external_exports.number().int().positive().optional(),
   reason: external_exports.enum(LOCK_REASONS).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
@@ -55470,20 +55639,19 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
   }
   registerActions(registrar) {
-    registrar.on("lock", this.id, async (context, request2) => {
-      await this.#lock(context, request2.number);
-    });
+    registrar.on("lock", this.id, async (context, request2) => await this.#lock(context, request2.number));
   }
   // The requester has already commented and already decided the sender is
   // legitimate, so this posts nothing and applies no bot-sender guard.
   async #lock(context, number4) {
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
-      return;
+      return false;
     }
-    const settings = subscriberSettings(config3, this.id, Settings4, this.log(context));
+    const settings = subscriberSettings(config3, this.id, Settings5, this.log(context));
     await this.#applyLock(context, number4, settings?.reason ?? DEFAULT_REASON);
     this.log(context).info(`Locked #${number4} on request`);
+    return true;
   }
   // A label applied by another bot (auto-labeler, say) must still lock, so
   // this applies no bot-sender guard either.
@@ -55498,7 +55666,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings4, log);
+    const settings = subscriberSettings(config3, this.id, Settings5, log);
     if (!(settings?.lock_on_labels ?? []).includes(label)) {
       log.debug(`#${issue3.number}: Label "${label}" not in lock_on_labels, skipping`);
       return;
@@ -55516,7 +55684,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings5);
     if (enabled === null) {
       return;
     }
@@ -55586,7 +55754,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-response-closer.ts
-var Settings5 = external_exports.object({
+var Settings6 = external_exports.object({
   label: external_exports.string().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
@@ -55610,7 +55778,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings5);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings6);
     if (enabled === null) {
       return;
     }
@@ -55678,7 +55846,7 @@ var Rule2 = external_exports.object({
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings6 = external_exports.object({
+var Settings7 = external_exports.object({
   name: external_exports.string().optional(),
   rules: external_exports.array(Rule2).optional()
 });
@@ -55740,7 +55908,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings6);
+    const enabled = await this.loadEnabledSettings(context, Settings7);
     if (enabled === null) {
       return;
     }
@@ -55775,7 +55943,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 
 // src/subscribers/read-only.ts
 var DEFAULT_MESSAGE2 = "This repository is read-only, so this {{type}} has been closed.";
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   upstream: external_exports.string().regex(/^[\w.-]+\/[\w.-]+$/, "upstream must be owner/repo").optional(),
   message: external_exports.string().min(1).default(DEFAULT_MESSAGE2),
   lock: external_exports.boolean().default(true),
@@ -55797,7 +55965,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings7, log) ?? Settings7.parse({});
+    const settings = subscriberSettings(config3, this.id, Settings8, log) ?? Settings8.parse({});
     const payload = context.payload;
     const isIssue = "issue" in payload;
     const item = "issue" in payload ? payload.issue : payload.pull_request;
@@ -55840,7 +56008,7 @@ var ReadOnlySubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
@@ -55864,7 +56032,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -55907,7 +56075,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -55945,7 +56113,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
-    const enabled = await this.loadEnabledSettings(context, Settings9);
+    const enabled = await this.loadEnabledSettings(context, Settings10);
     if (enabled === null) {
       return;
     }
@@ -55984,7 +56152,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings9);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings10);
     if (enabled === null) {
       return;
     }
@@ -56099,7 +56267,7 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule3).optional()
 });
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
@@ -56196,7 +56364,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #apply(context, kind, item) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings10);
+    const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
       return;
     }
@@ -56265,7 +56433,7 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE4 = "Thanks for the contribution, @{{user}}!";
@@ -56292,7 +56460,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings11);
+      const enabled = await this.loadEnabledSettings(context, Settings12);
       if (enabled === null) {
         return;
       }
@@ -56310,7 +56478,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -56381,7 +56549,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings12);
+    const enabled = await this.loadEnabledSettings(context, Settings13);
     if (enabled === null) {
       return;
     }
@@ -56475,7 +56643,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings13 = external_exports.object({
+var Settings14 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -56497,7 +56665,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings13, log);
+    const settings = subscriberSettings(config3, this.id, Settings14, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -56569,7 +56737,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings14 = external_exports.object({
+var Settings15 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -56609,7 +56777,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings14);
+      const enabled = await this.loadEnabledSettings(context, Settings15);
       if (enabled === null) {
         return;
       }
@@ -56637,7 +56805,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings14);
+      const enabled = await this.loadEnabledSettings(context, Settings15);
       if (enabled === null) {
         return;
       }
@@ -56664,6 +56832,7 @@ var WelcomeSubscriber = class extends Subscriber {
 // src/app.ts
 var carson = new Carson([
   new AutoLabelerSubscriber(),
+  new CommandsSubscriber(),
   new ConflictsNotifierSubscriber(),
   new IssueIntakeSubscriber(),
   new LockOldIssuesSubscriber(),

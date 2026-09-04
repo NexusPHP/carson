@@ -11,6 +11,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - [Comment markers](#comment-markers)
 - Subscribers
   - [auto-labeler](#auto-labeler)
+  - [commands](#commands)
   - [conflicts-notifier](#conflicts-notifier)
   - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
@@ -148,6 +149,54 @@ settings:
         title: ["[Cc]rash", "[Bb]roken"]
       - label: feature-request
         title: ["^\\[feature\\]"]
+```
+
+---
+
+## commands
+
+Runs slash commands posted as comments on issues and pull requests, so maintainers can label, close, reopen, lock, and assign from the conversation instead of the sidebar.
+
+**Triggers**: `issue_comment.created`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+| Command | Effect |
+| --- | --- |
+| `/label a, b` | Adds the labels |
+| `/unlabel a, b` | Removes the labels |
+| `/close [not_planned]` | Closes (issues as `completed`, or `not_planned` when given) |
+| `/reopen` | Reopens |
+| `/lock` | Locks, via [lock-old-issues](#lock-old-issues) (which must be enabled) |
+| `/assign [@user ...]` | Assigns the named users, or the commenter when none are given |
+| `/unassign [@user ...]` | Unassigns likewise |
+
+Comments are attacker-controlled input, so the subscriber is deliberately strict:
+
+- **Authorization is checked against the commenter's actual repository role** (`admin`, `maintain`, `write`, `triage` by default) through the collaborator-permission API, not the comment's `author_association`. Unauthorized comments are ignored with no feedback.
+- **Only newly created comments count.** Editing an old comment never runs a command. Comments from bots are ignored.
+- **A command must start at the first column of its own line.** Text inside fenced code blocks, block quotes, indented lines, or inline code never matches. Unknown commands are ignored. At most ten commands per comment run.
+- Successful commands are acknowledged with a 👍 reaction on the comment. Nothing from the comment body is echoed back or logged.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `commands` | array of enabled command names | all of `label`, `unlabel`, `close`, `reopen`, `lock`, `assign`, `unassign` |
+| `roles` | array of roles allowed to run commands, from `admin`, `maintain`, `write`, `triage`, `read` | `[admin, maintain, write, triage]` |
+| `allowed_labels` | array, restricts `/label` to these names | (any label) |
+| `react` | boolean, acknowledge with a 👍 reaction | `true` |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - commands
+  - lock-old-issues
+settings:
+  commands:
+    commands: [label, unlabel, close, reopen, lock]
+    allowed_labels: [bug, enhancement, question, wontfix]
 ```
 
 ---

@@ -43,24 +43,24 @@ export class LockOldIssuesSubscriber extends Subscriber {
   }
 
   public override registerActions(registrar: ActionRegistrar): void {
-    registrar.on('lock', this.id, async (context, request) => {
-      await this.#lock(context, request.number);
-    });
+    registrar.on('lock', this.id, async (context, request) => await this.#lock(context, request.number));
   }
 
   // The requester has already commented and already decided the sender is
   // legitimate, so this posts nothing and applies no bot-sender guard.
-  async #lock(context: ActionContext, number: number): Promise<void> {
+  async #lock(context: ActionContext, number: number): Promise<boolean> {
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {
-      return;
+      return false;
     }
 
     const settings = subscriberSettings(config, this.id, Settings, this.log(context));
 
     await this.#applyLock(context, number, settings?.reason ?? DEFAULT_REASON);
     this.log(context).info(`Locked #${number} on request`);
+
+    return true;
   }
 
   // A label applied by another bot (auto-labeler, say) must still lock, so

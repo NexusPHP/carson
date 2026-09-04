@@ -9,10 +9,11 @@ export interface ActionRequests {
 
 export type ActionName = keyof ActionRequests;
 
+/** Resolves to false when the owner declined the request (for instance because it is not enabled). */
 export type ActionHandler<N extends ActionName> = (
   context: ActionContext,
   request: ActionRequests[N],
-) => Promise<void>;
+) => Promise<boolean>;
 
 interface Registration<N extends ActionName> {
   subscriberId: string;
@@ -38,7 +39,7 @@ export class ActionRegistrar {
     return this.#handlers.has(name);
   }
 
-  /** Resolves to false, after a warning, when no enabled subscriber handles the action. */
+  /** Resolves to false when no subscriber handles the action (after a warning) or the owner declined it. */
   public async dispatch<N extends ActionName>(
     name: N,
     context: ActionContext,
@@ -52,8 +53,6 @@ export class ActionRegistrar {
       return false;
     }
 
-    await registration.handler(context, request);
-
-    return true;
+    return await registration.handler(context, request);
   }
 }
