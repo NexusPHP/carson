@@ -54666,14 +54666,54 @@ var AppIdentity = class {
 };
 var appIdentity = new AppIdentity();
 
+// src/actions.ts
+var ActionRegistrar = class {
+  #handlers = /* @__PURE__ */ new Map();
+  // The same owner may re-register (run() is invoked per Probot instance).
+  on(name, subscriberId, handler2) {
+    const existing = this.#handlers.get(name);
+    if (existing !== void 0 && existing.subscriberId !== subscriberId) {
+      throw new Error(`Action "${name}" is already handled by "${existing.subscriberId}"`);
+    }
+    this.#handlers.set(name, { subscriberId, handler: handler2 });
+  }
+  has(name) {
+    return this.#handlers.has(name);
+  }
+  /** Resolves to false, after a warning, when no enabled subscriber handles the action. */
+  async dispatch(name, context, request2) {
+    const registration = this.#handlers.get(name);
+    if (registration === void 0) {
+      logger.for("carson").warn(`No enabled subscriber handles the "${name}" action, skipping`);
+      return false;
+    }
+    await registration.handler(context, request2);
+    return true;
+  }
+};
+
 // src/subscriber.ts
 var Subscriber = class {
+  #actions = null;
   register(_probot) {
   }
   registerScheduled(_registrar) {
   }
+  registerActions(_registrar) {
+  }
+  bindActions(registrar) {
+    this.#actions = registrar;
+  }
   log(context) {
     return context.log.child({ name: this.id });
+  }
+  /** Resolves to false when no router is bound or no enabled subscriber owns the action. */
+  async dispatch(name, context, request2) {
+    if (this.#actions === null) {
+      this.log(context).warn(`No action router bound, cannot dispatch "${name}"`);
+      return false;
+    }
+    return await this.#actions.dispatch(name, context, request2);
   }
   async loadEnabledConfig(context) {
     const config3 = await loadConfig(context);
@@ -54969,6 +55009,7 @@ var Carson = class _Carson {
   static DISPLAY_NAME = "Carson";
   #subscribers;
   #scheduled = new ScheduledRegistrar();
+  #actions = new ActionRegistrar();
   constructor(subscribers) {
     this.#subscribers = subscribers;
   }
@@ -54982,8 +55023,10 @@ var Carson = class _Carson {
         continue;
       }
       log.info(`Registering subscriber: ${subscriber.id}`);
+      subscriber.bindActions(this.#actions);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);
+      subscriber.registerActions(this.#actions);
     }
   }
   get app() {
@@ -54993,6 +55036,9 @@ var Carson = class _Carson {
   }
   get scheduled() {
     return this.#scheduled;
+  }
+  get actions() {
+    return this.#actions;
   }
   get knownIds() {
     return this.#subscribers.map((s) => s.id);
@@ -55375,6 +55421,26 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     registrar.on(async (context) => {
       await this.#run(context);
     });
+  }
+  registerActions(registrar) {
+    registrar.on("lock", this.id, async (context, request2) => {
+      await this.#lock(context, request2.number);
+    });
+  }
+  // The requesting subscriber has already commented, so no comment is posted.
+  async #lock(context, number4) {
+    const enabled = await this.loadEnabledSettings(context, Settings4);
+    if (enabled === null) {
+      return;
+    }
+    const { owner, repo } = context.repo();
+    await context.octokit.rest.issues.lock({
+      owner,
+      repo,
+      issue_number: number4,
+      lock_reason: enabled.settings.reason ?? DEFAULT_REASON
+    });
+    this.log(context).info(`Locked #${number4} on request`);
   }
   async #run(scheduled) {
     const enabled = await this.loadEnabledSettings(scheduled, Settings4);

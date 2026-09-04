@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
+import { ActionRegistrar } from '../../src/actions.js';
 import { LockOldIssuesSubscriber } from '../../src/subscribers/lock-old-issues.js';
 import { logger } from '../../src/logger.js';
 import { resetConfigCache } from '../../src/configuration/cache.js';
@@ -73,6 +74,14 @@ const runScheduled = async (context: ScheduledContext): Promise<void> => {
   for (const handler of registrar.handlers) {
     await handler(context);
   }
+};
+
+const dispatchLock = async (context: ScheduledContext, number: number): Promise<boolean> => {
+  const subscriber = new LockOldIssuesSubscriber();
+  const registrar = new ActionRegistrar();
+  subscriber.registerActions(registrar);
+
+  return await registrar.dispatch('lock', context, { number });
 };
 
 describe('lock-old-issues subscriber', () => {
@@ -223,6 +232,39 @@ describe('lock-old-issues subscriber', () => {
     );
 
     await runScheduled(context);
+
+    expect(lockMock).not.toHaveBeenCalled();
+  });
+
+  it('locks on request with the configured reason and without commenting', async () => {
+    const { context, lockMock, commentMock } = makeHarness(
+      [],
+      { ...ENABLED_CONFIG, settings: { 'lock-old-issues': { reason: 'off-topic' } } },
+    );
+
+    await expect(dispatchLock(context, 12)).resolves.toBe(true);
+
+    expect(lockMock).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'widgets',
+      issue_number: 12,
+      lock_reason: 'off-topic',
+    });
+    expect(commentMock).not.toHaveBeenCalled();
+  });
+
+  it('locks on request with the default reason when none is configured', async () => {
+    const { context, lockMock } = makeHarness([], ENABLED_CONFIG);
+
+    await dispatchLock(context, 12);
+
+    expect(lockMock).toHaveBeenCalledWith(expect.objectContaining({ lock_reason: 'resolved' }));
+  });
+
+  it('ignores a lock request when the subscriber is not enabled', async () => {
+    const { context, lockMock } = makeHarness([], { version: 1, subscribers: ['welcome'] });
+
+    await dispatchLock(context, 12);
 
     expect(lockMock).not.toHaveBeenCalled();
   });

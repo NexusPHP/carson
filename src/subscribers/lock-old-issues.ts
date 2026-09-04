@@ -1,3 +1,4 @@
+import type { ActionContext, ActionRegistrar } from '../actions.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
@@ -30,6 +31,32 @@ export class LockOldIssuesSubscriber extends Subscriber {
     registrar.on(async (context) => {
       await this.#run(context);
     });
+  }
+
+  public override registerActions(registrar: ActionRegistrar): void {
+    registrar.on('lock', this.id, async (context, request) => {
+      await this.#lock(context, request.number);
+    });
+  }
+
+  // The requesting subscriber has already commented, so no comment is posted.
+  async #lock(context: ActionContext, number: number): Promise<void> {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null) {
+      return;
+    }
+
+    const { owner, repo } = context.repo();
+
+    await context.octokit.rest.issues.lock({
+      owner,
+      repo,
+      issue_number: number,
+      lock_reason: enabled.settings.reason ?? DEFAULT_REASON,
+    });
+
+    this.log(context).info(`Locked #${number} on request`);
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {

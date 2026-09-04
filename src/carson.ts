@@ -2,6 +2,7 @@ import type { ApplicationFunction, Probot } from 'probot';
 import { dirname, resolve } from 'node:path';
 import { findMissingPermissions, type MissingPermission } from './preflight.js';
 import type { PermissionLevel, Subscriber } from './subscriber.js';
+import { ActionRegistrar } from './actions.js';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
 import { readFileSync } from 'node:fs';
@@ -19,6 +20,7 @@ export class Carson {
   public static readonly DISPLAY_NAME: string = 'Carson';
   readonly #subscribers: readonly Subscriber[];
   readonly #scheduled = new ScheduledRegistrar();
+  readonly #actions = new ActionRegistrar();
 
   public constructor(subscribers: readonly Subscriber[]) {
     this.#subscribers = subscribers;
@@ -36,8 +38,10 @@ export class Carson {
       }
 
       log.info(`Registering subscriber: ${subscriber.id}`);
+      subscriber.bindActions(this.#actions);
       subscriber.register(probot);
       subscriber.registerScheduled(this.#scheduled);
+      subscriber.registerActions(this.#actions);
     }
   }
 
@@ -49,6 +53,10 @@ export class Carson {
 
   public get scheduled(): ScheduledRegistrar {
     return this.#scheduled;
+  }
+
+  public get actions(): ActionRegistrar {
+    return this.#actions;
   }
 
   public get knownIds(): readonly string[] {

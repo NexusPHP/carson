@@ -57,7 +57,12 @@ A `probot.onError` handler flips a `handlerFailed` flag so the action fails the 
 - `requiredPermissions: RequiredPermissions`: the GitHub App permissions this subscriber needs at runtime (e.g. `{ issues: 'write', pull_requests: 'write' }`). Used by [src/preflight.ts](src/preflight.ts) to fail the workflow with a clear error when the App is under-permissioned. Must match the per-subscriber row in [SUBSCRIBERS.md](SUBSCRIBERS.md) and the actual API calls in the handler. Note: posting a comment on a pull request via `octokit.rest.issues.createComment` requires `pull_requests: write`. The GitHub REST docs for the endpoint say either `issues: write` or `pull_requests: write` suffices, but in practice the API only honors `pull_requests: write` when the target is a PR. The `issues: write` permission still applies to comments on real issues and to other issue actions (labeling, locking, closing).
 - `register(probot)`: attach webhook handlers via `probot.on('event.action', handler)`.
 - `registerScheduled(registrar)` (optional): attach a `ScheduledHandler` for cron runs.
+- `registerActions(registrar)` (optional): claim ownership of a cross-subscriber action (see below).
 - `loadEnabledConfig(context)`: inherited helper that returns the parsed `CarsonConfig` only if the subscriber's `id` is listed under `subscribers:`. Returns `null` (and the handler should bail) if the config is missing, invalid, or doesn't enable this subscriber.
+
+### Cross-subscriber actions
+
+Subscribers do one job each. When one needs another's job done (a mirror guard that closes a PR and wants it locked), it does not call the API itself: it dispatches an action through the router in [src/actions.ts](src/actions.ts), and the subscriber that owns that job handles it. Owners claim an action in `registerActions(registrar)` via `registrar.on('lock', this.id, handler)`. Exactly one owner per action, enforced at registration. Requesters call the inherited `this.dispatch('lock', context, { number })`, which resolves `false` after a warning when no enabled subscriber owns the action, so a missing owner degrades rather than fails the run. The action vocabulary is the `ActionRequests` interface: add a key there to introduce a new action. Today `lock-old-issues` owns `lock` (locks with its configured `reason`, no comment, no age check).
 
 All registered subscriber IDs are pushed into [src/configuration/cache.ts](src/configuration/cache.ts) via `setRegisteredSubscribers` so the cache layer can warn about unknown IDs in user config.
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Cross-subscriber action routing. `lock-old-issues` owns the `lock` action, so other subscribers request locks through it instead of locking themselves.
+
 ### Changed
 
 - `lock-old-issues` now posts a default comment before locking when `comment` is not configured, matching `stale`'s behavior.
