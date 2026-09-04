@@ -261,6 +261,14 @@ describe('lock-old-issues subscriber', () => {
     expect(lockMock).toHaveBeenCalledWith(expect.objectContaining({ lock_reason: 'resolved' }));
   });
 
+  it('locks on request even when the triggering sender is a bot', async () => {
+    const { context, lockMock } = makeHarness([], ENABLED_CONFIG);
+
+    await dispatchLock({ ...context, isBot: true } as ScheduledContext, 12);
+
+    expect(lockMock).toHaveBeenCalledOnce();
+  });
+
   it('ignores a lock request when the subscriber is not enabled', async () => {
     const { context, lockMock } = makeHarness([], { version: 1, subscribers: ['welcome'] });
 

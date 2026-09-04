@@ -153,6 +153,9 @@ describe('pr-title-linter subscriber (via app)', () => {
   });
 
   it('does nothing when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-bot',
       name: 'pull_request',

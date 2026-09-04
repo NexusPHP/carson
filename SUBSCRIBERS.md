@@ -16,6 +16,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [lock-old-issues](#lock-old-issues)
   - [no-response-closer](#no-response-closer)
   - [pr-title-linter](#pr-title-linter)
+  - [read-only](#read-only)
   - [signed-commits](#signed-commits)
   - [stale](#stale)
   - [template-enforcer](#template-enforcer)
@@ -448,6 +449,51 @@ settings:
         description: 'Avoid WIP/TODO/DRAFT prefixes'
         mode: forbid
         level: warning
+```
+
+---
+
+## read-only
+
+Closes issues and pull requests the moment they are opened on a read-only repository (a mirror, a subtree split), leaving a comment that points contributors upstream, then locks the thread so the conversation cannot continue in the wrong place.
+
+**Triggers**: `issues.opened`, `pull_request.opened`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+Bot senders are not exempt: an automated PR against a mirror is exactly what should be closed. Issues are closed as `not_planned`. Locking is delegated to [lock-old-issues](#lock-old-issues) through Carson's action routing, so that subscriber must also be enabled for `lock` to take effect (its configured `reason` applies, no extra comment is posted). When it is not enabled, the item is still closed and a warning is logged.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `upstream` | `owner/repo` of the canonical repository | (none) |
+| `message` | template string | `This repository is read-only, so this {{type}} has been closed.` |
+| `lock` | boolean | `true` |
+| `issues` | boolean, guard issues | `true` |
+| `pull_requests` | boolean, guard pull requests | `true` |
+
+### Context
+
+| Key | Value |
+| --- | --- |
+| `{{user}}` | GitHub login of the opener (left verbatim if the user is a ghost) |
+| `{{number}}` | Issue or PR number |
+| `{{repo}}` | Repository name |
+| `{{type}}` | `issue` or `pull request` |
+| `{{upstream}}` | Markdown link to the `upstream` repository, e.g. `[acme/monorepo](https://github.com/acme/monorepo)` (left verbatim when unset) |
+| `{{upstream_url}}` | Bare URL of the `upstream` repository, for composing your own link (left verbatim when unset) |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - read-only
+  - lock-old-issues
+settings:
+  read-only:
+    upstream: acme/monorepo
+    message: "This repository is a read-only split of {{upstream}}. Please open this {{type}} there instead."
 ```
 
 ---

@@ -455,6 +455,9 @@ describe('welcome subscriber (via app)', () => {
   });
 
   it('does nothing on pull_request.opened when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-bot-pr',
       name: 'pull_request',
@@ -465,6 +468,9 @@ describe('welcome subscriber (via app)', () => {
   });
 
   it('does nothing on issues.opened when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-bot-issue',
       name: 'issues',
@@ -475,6 +481,9 @@ describe('welcome subscriber (via app)', () => {
   });
 
   it('does nothing on issues.opened when the issue has no user (ghost)', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-ghost',
       name: 'issues',

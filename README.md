@@ -152,6 +152,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
 - [**no-response-closer**](SUBSCRIBERS.md#no-response-closer): closes open issues and PRs carrying a configurable label whose activity has been stale past a threshold.
 - [**pr-title-linter**](SUBSCRIBERS.md#pr-title-linter): validates PR titles against a configurable set of regex rules and reports the result as a check run.
+- [**read-only**](SUBSCRIBERS.md#read-only): closes (and locks) issues and pull requests opened on a read-only mirror, pointing contributors upstream.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**template-enforcer**](SUBSCRIBERS.md#template-enforcer): comments on and labels issues or PRs whose description does not match the configured template, and clears the label when fixed.

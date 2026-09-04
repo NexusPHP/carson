@@ -55427,18 +55427,20 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       await this.#lock(context, request2.number);
     });
   }
-  // The requesting subscriber has already commented, so no comment is posted.
+  // The requester has already commented and already decided the sender is
+  // legitimate, so this posts nothing and applies no bot-sender guard.
   async #lock(context, number4) {
-    const enabled = await this.loadEnabledSettings(context, Settings4);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
+    const settings = subscriberSettings(config3, this.id, Settings4, this.log(context));
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.lock({
       owner,
       repo,
       issue_number: number4,
-      lock_reason: enabled.settings.reason ?? DEFAULT_REASON
+      lock_reason: settings?.reason ?? DEFAULT_REASON
     });
     this.log(context).info(`Locked #${number4} on request`);
   }
@@ -55700,8 +55702,74 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
 };
 
-// src/subscribers/signed-commits.ts
+// src/subscribers/read-only.ts
+var DEFAULT_MESSAGE2 = "This repository is read-only, so this {{type}} has been closed.";
 var Settings7 = external_exports.object({
+  upstream: external_exports.string().regex(/^[\w.-]+\/[\w.-]+$/, "upstream must be owner/repo").optional(),
+  message: external_exports.string().min(1).default(DEFAULT_MESSAGE2),
+  lock: external_exports.boolean().default(true),
+  issues: external_exports.boolean().default(true),
+  pull_requests: external_exports.boolean().default(true)
+});
+var ReadOnlySubscriber = class extends Subscriber {
+  id = "read-only";
+  description = "Closes issues and pull requests opened on a read-only repository, pointing to the upstream.";
+  requiredPermissions = { issues: "write", pull_requests: "write" };
+  register(probot) {
+    probot.on(["issues.opened", "pull_request.opened"], async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config3, this.id, Settings7, log) ?? Settings7.parse({});
+    const payload = context.payload;
+    const isIssue = "issue" in payload;
+    const item = "issue" in payload ? payload.issue : payload.pull_request;
+    if (isIssue ? !settings.issues : !settings.pull_requests) {
+      log.debug(`#${item.number}: ${isIssue ? "Issues" : "Pull requests"} not guarded, skipping`);
+      return;
+    }
+    const { owner, repo } = context.repo();
+    const templateContext = {
+      number: item.number,
+      repo,
+      type: isIssue ? "issue" : "pull request"
+    };
+    if (item.user !== null) {
+      templateContext["user"] = item.user.login;
+    }
+    if (settings.upstream !== void 0) {
+      const url2 = `https://github.com/${settings.upstream}`;
+      templateContext["upstream"] = `[${settings.upstream}](${url2})`;
+      templateContext["upstream_url"] = url2;
+    }
+    await context.octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: item.number,
+      body: interpolate(settings.message, templateContext)
+    });
+    await context.octokit.rest.issues.update({
+      owner,
+      repo,
+      issue_number: item.number,
+      state: "closed",
+      ...isIssue ? { state_reason: "not_planned" } : {}
+    });
+    log.info(`Closed ${templateContext["type"]} #${item.number}`);
+    if (settings.lock) {
+      await this.dispatch("lock", context, { number: item.number });
+    }
+  }
+};
+
+// src/subscribers/signed-commits.ts
+var Settings8 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
@@ -55725,7 +55793,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings7);
+    const enabled = await this.loadEnabledSettings(context, Settings8);
     if (enabled === null) {
       return;
     }
@@ -55768,7 +55836,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -55806,7 +55874,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -55845,7 +55913,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings8);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings9);
     if (enabled === null) {
       return;
     }
@@ -55960,7 +56028,7 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule3).optional()
 });
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
@@ -55968,7 +56036,7 @@ var Settings9 = external_exports.object({
 });
 var COMMENT_MARKER3 = "<!-- carson:template-enforcer -->";
 var DEFAULT_LABEL2 = "needs-template";
-var DEFAULT_MESSAGE2 = [
+var DEFAULT_MESSAGE3 = [
   "Thanks for opening this {{type}}, @{{user}}! The description doesn't match the template:",
   "",
   "{{violations}}",
@@ -56057,7 +56125,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #apply(context, kind, item) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings9);
+    const enabled = await this.loadEnabledSettings(context, Settings10);
     if (enabled === null) {
       return;
     }
@@ -56068,7 +56136,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       return;
     }
     const label = settings.label ?? DEFAULT_LABEL2;
-    const messageTemplate = settings.message ?? DEFAULT_MESSAGE2;
+    const messageTemplate = settings.message ?? DEFAULT_MESSAGE3;
     const violations = collectViolations(item.body, typeRules, log);
     const hasLabel = item.labels.includes(label);
     const { owner, repo } = context.repo();
@@ -56126,10 +56194,10 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   message: external_exports.string().optional()
 });
-var DEFAULT_MESSAGE3 = "Thanks for the contribution, @{{user}}!";
+var DEFAULT_MESSAGE4 = "Thanks for the contribution, @{{user}}!";
 var ThanksSubscriber = class extends Subscriber {
   id = "thanks";
   description = "Posts a thank-you comment when a pull request is merged by someone other than its author. Skips bot and ghost authors.";
@@ -56153,11 +56221,11 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings10);
+      const enabled = await this.loadEnabledSettings(context, Settings11);
       if (enabled === null) {
         return;
       }
-      const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, {
+      const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE4, {
         user: pr.user.login,
         repo: context.payload.repository.name,
         number: pr.number,
@@ -56171,7 +56239,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -56242,7 +56310,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings11);
+    const enabled = await this.loadEnabledSettings(context, Settings12);
     if (enabled === null) {
       return;
     }
@@ -56336,7 +56404,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -56358,7 +56426,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings12, log);
+    const settings = subscriberSettings(config3, this.id, Settings13, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -56430,7 +56498,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings13 = external_exports.object({
+var Settings14 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -56470,7 +56538,7 @@ var WelcomeSubscriber = class extends Subscriber {
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings13);
+      const enabled = await this.loadEnabledSettings(context, Settings14);
       if (enabled === null) {
         return;
       }
@@ -56498,7 +56566,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings13);
+      const enabled = await this.loadEnabledSettings(context, Settings14);
       if (enabled === null) {
         return;
       }
@@ -56530,6 +56598,7 @@ var carson = new Carson([
   new LockOldIssuesSubscriber(),
   new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),
+  new ReadOnlySubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
   new TemplateEnforcerSubscriber(),

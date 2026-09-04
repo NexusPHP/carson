@@ -484,6 +484,9 @@ describe('template-enforcer subscriber (via app)', () => {
   });
 
   it('does nothing when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-bot',
       name: 'issues',
@@ -543,6 +546,9 @@ describe('template-enforcer subscriber (via app)', () => {
   });
 
   it('does nothing when the issue has no user (ghost)', async () => {
+    mockInstallationToken();
+    mockConfig(null);
+
     await probot.receive({
       id: 'evt-ghost',
       name: 'issues',

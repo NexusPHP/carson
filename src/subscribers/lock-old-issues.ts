@@ -5,6 +5,7 @@ import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { searchTimestamp } from '../github/search.js';
+import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const LOCK_REASONS = ['off-topic', 'too heated', 'resolved', 'spam'] as const;
@@ -39,21 +40,23 @@ export class LockOldIssuesSubscriber extends Subscriber {
     });
   }
 
-  // The requesting subscriber has already commented, so no comment is posted.
+  // The requester has already commented and already decided the sender is
+  // legitimate, so this posts nothing and applies no bot-sender guard.
   async #lock(context: ActionContext, number: number): Promise<void> {
-    const enabled = await this.loadEnabledSettings(context, Settings);
+    const config = await this.loadEnabledConfig(context);
 
-    if (enabled === null) {
+    if (config === null) {
       return;
     }
 
+    const settings = subscriberSettings(config, this.id, Settings, this.log(context));
     const { owner, repo } = context.repo();
 
     await context.octokit.rest.issues.lock({
       owner,
       repo,
       issue_number: number,
-      lock_reason: enabled.settings.reason ?? DEFAULT_REASON,
+      lock_reason: settings?.reason ?? DEFAULT_REASON,
     });
 
     this.log(context).info(`Locked #${number} on request`);

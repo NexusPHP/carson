@@ -5,6 +5,7 @@ import { IssueIntakeSubscriber } from './subscribers/issue-intake.js';
 import { LockOldIssuesSubscriber } from './subscribers/lock-old-issues.js';
 import { NoResponseCloserSubscriber } from './subscribers/no-response-closer.js';
 import { PrTitleLinterSubscriber } from './subscribers/pr-title-linter.js';
+import { ReadOnlySubscriber } from './subscribers/read-only.js';
 import { SignedCommitsSubscriber } from './subscribers/signed-commits.js';
 import { StaleSubscriber } from './subscribers/stale.js';
 import { TemplateEnforcerSubscriber } from './subscribers/template-enforcer.js';
@@ -20,6 +21,7 @@ export const carson = new Carson([
   new LockOldIssuesSubscriber(),
   new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),
+  new ReadOnlySubscriber(),
   new SignedCommitsSubscriber(),
   new StaleSubscriber(),
   new TemplateEnforcerSubscriber(),
