@@ -55364,6 +55364,7 @@ var Settings4 = external_exports.object({
 });
 var DEFAULT_DAYS = 90;
 var DEFAULT_REASON = "resolved";
+var DEFAULT_COMMENT = "This issue has been locked after {{days}} days of inactivity since it was closed. Please open a new issue if the problem persists.";
 var MS_PER_DAY = 24 * 60 * 60 * 1e3;
 var CONCURRENCY2 = 5;
 var LockOldIssuesSubscriber = class extends Subscriber {
@@ -55383,6 +55384,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     const { settings } = enabled;
     const days = settings.days ?? DEFAULT_DAYS;
     const reason = settings.reason ?? DEFAULT_REASON;
+    const comment = settings.comment ?? DEFAULT_COMMENT;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - days * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
@@ -55417,22 +55419,20 @@ var LockOldIssuesSubscriber = class extends Subscriber {
         log.debug(`#${issue3.number}: Exempt label, skipping`);
         return;
       }
-      if (settings.comment !== void 0) {
-        const context = {
-          number: issue3.number,
-          repo,
-          days
-        };
-        if (issue3.user !== null) {
-          context["user"] = issue3.user.login;
-        }
-        await scheduled.octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: issue3.number,
-          body: interpolate(settings.comment, context)
-        });
+      const context = {
+        number: issue3.number,
+        repo,
+        days
+      };
+      if (issue3.user !== null) {
+        context["user"] = issue3.user.login;
       }
+      await scheduled.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issue3.number,
+        body: interpolate(comment, context)
+      });
       await scheduled.octokit.rest.issues.lock({
         owner,
         repo,

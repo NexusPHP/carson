@@ -293,9 +293,9 @@ on:
 | `days` | positive integer | `90` |
 | `reason` | one of `off-topic`, `too heated`, `resolved`, `spam` | `resolved` |
 | `exempt_labels` | array of strings | `[]` |
-| `comment` | string | (no comment posted) |
+| `comment` | string | `This issue has been locked after {{days}} days of inactivity since it was closed. Please open a new issue if the problem persists.` |
 
-If `comment` is set, Carson posts it on the issue *before* locking (you can't comment after the lock). The comment supports template interpolation.
+Carson posts the comment on the issue *before* locking (you can't comment after the lock). The comment supports template interpolation.
 
 ### Context (for `comment`)
 

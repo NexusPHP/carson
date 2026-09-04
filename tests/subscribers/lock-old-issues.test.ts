@@ -234,7 +234,7 @@ describe('lock-old-issues subscriber', () => {
     expect(onSpy).not.toHaveBeenCalled();
   });
 
-  it('does not post a comment when no comment setting is provided', async () => {
+  it('posts the default comment before locking when no comment setting is provided', async () => {
     const { context, lockMock, commentMock } = makeHarness(
       [{ number: 1, closed_at: DAYS_AGO(100) }],
       ENABLED_CONFIG,
@@ -242,8 +242,13 @@ describe('lock-old-issues subscriber', () => {
 
     await runScheduled(context);
 
+    expect(commentMock).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'widgets',
+      issue_number: 1,
+      body: 'This issue has been locked after 90 days of inactivity since it was closed. Please open a new issue if the problem persists.',
+    });
     expect(lockMock).toHaveBeenCalledTimes(1);
-    expect(commentMock).not.toHaveBeenCalled();
   });
 
   it('posts an interpolated comment before locking when configured', async () => {
