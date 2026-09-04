@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `lock-old-issues` now posts a default comment before locking when `comment` is not configured, matching `stale`'s behavior.
+- `no-response-closer` now posts a default comment before closing when `close_message` is not configured.
 
 ## [v1.0.0](https://github.com/NexusPHP/carson/releases/tag/v1.0.0) - 2026-08-28
 

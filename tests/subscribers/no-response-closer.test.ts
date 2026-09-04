@@ -168,7 +168,7 @@ describe('no-response-closer subscriber', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('does not post a comment when close_message is not configured', async () => {
+  it('posts the default close message before closing when close_message is not configured', async () => {
     const { context, updateMock, commentMock } = makeHarness(
       [{ number: 5, updated_at: DAYS_AGO(20) }],
       ENABLED_CONFIG,
@@ -176,8 +176,13 @@ describe('no-response-closer subscriber', () => {
 
     await runScheduled(context);
 
+    expect(commentMock).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'widgets',
+      issue_number: 5,
+      body: 'Closing this issue: no response for 14 days after information was requested. Comment with the requested details and it can be reopened.',
+    });
     expect(updateMock).toHaveBeenCalledOnce();
-    expect(commentMock).not.toHaveBeenCalled();
   });
 
   it('posts an interpolated close_message before closing when configured', async () => {

@@ -55523,6 +55523,7 @@ var Settings5 = external_exports.object({
 });
 var DEFAULT_LABEL = "needs-info";
 var DEFAULT_DAYS_UNTIL_CLOSE = 14;
+var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.";
 var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY3 = 5;
 var NoResponseCloserSubscriber = class extends Subscriber {
@@ -55545,6 +55546,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     const { settings } = enabled;
     const label = settings.label ?? DEFAULT_LABEL;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE;
+    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
     const { owner, repo } = scheduled.repo();
@@ -55568,24 +55570,22 @@ var NoResponseCloserSubscriber = class extends Subscriber {
         return;
       }
       const isPr = item.pull_request !== void 0;
-      if (settings.close_message !== void 0) {
-        const context = {
-          number: item.number,
-          repo,
-          title: item.title,
-          type: isPr ? "pull request" : "issue",
-          days_until_close: daysUntilClose
-        };
-        if (item.user !== null) {
-          context["user"] = item.user.login;
-        }
-        await scheduled.octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: item.number,
-          body: interpolate(settings.close_message, context)
-        });
+      const context = {
+        number: item.number,
+        repo,
+        title: item.title,
+        type: isPr ? "pull request" : "issue",
+        days_until_close: daysUntilClose
+      };
+      if (item.user !== null) {
+        context["user"] = item.user.login;
       }
+      await scheduled.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: item.number,
+        body: interpolate(closeMessage, context)
+      });
       await scheduled.octokit.rest.issues.update({
         owner,
         repo,
@@ -55848,7 +55848,7 @@ var DEFAULT_DAYS_STALE = 60;
 var DEFAULT_DAYS_CLOSE = 7;
 var DEFAULT_STALE_LABEL = "stale";
 var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
-var DEFAULT_CLOSE_MESSAGE = "Closing this {{type}} due to extended inactivity.";
+var DEFAULT_CLOSE_MESSAGE2 = "Closing this {{type}} due to extended inactivity.";
 var COMMENT_MARKER2 = "<!-- carson:stale -->";
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY4 = 5;
@@ -55922,7 +55922,7 @@ var StaleSubscriber = class extends Subscriber {
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_CLOSE;
     const staleLabel = settings.stale_label ?? DEFAULT_STALE_LABEL;
     const staleMessage = settings.stale_message ?? DEFAULT_STALE_MESSAGE;
-    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE;
+    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE2;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY3;
     const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY3;

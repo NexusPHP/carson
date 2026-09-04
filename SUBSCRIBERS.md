@@ -339,7 +339,7 @@ On each scheduled run the subscriber:
 
 1. Searches open items carrying the configured `label` (default `needs-info`) whose `updated_at` is older than `days_until_close` ago, server-side and oldest first.
 2. Skips items carrying any of `exempt_labels`.
-3. If `close_message` is set, posts it as a comment before closing.
+3. Posts `close_message` as a comment before closing.
 5. Closes the item. Issues are closed with `state_reason: 'not_planned'` (rendered in GitHub's UI as the gray "not planned" close icon). PRs are closed without a state reason.
 
 The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
@@ -367,7 +367,7 @@ They are complementary. A repo can enable both, with non-overlapping label scope
 | --- | --- | --- |
 | `label` | string | `needs-info` |
 | `days_until_close` | positive integer | `14` |
-| `close_message` | string | (no comment posted) |
+| `close_message` | string | `Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.` |
 | `exempt_labels` | array of strings | `[]` |
 
 ### Context (for `close_message`)

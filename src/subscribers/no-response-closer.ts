@@ -15,6 +15,7 @@ const Settings = z.object({
 
 const DEFAULT_LABEL = 'needs-info';
 const DEFAULT_DAYS_UNTIL_CLOSE = 14;
+const DEFAULT_CLOSE_MESSAGE = 'Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 5;
 
@@ -42,6 +43,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
     const { settings } = enabled;
     const label = settings.label ?? DEFAULT_LABEL;
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE;
+    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
     const cutoff = Date.now() - daysUntilClose * MS_PER_DAY;
     const { owner, repo } = scheduled.repo();
@@ -74,26 +76,24 @@ export class NoResponseCloserSubscriber extends Subscriber {
 
       const isPr = item.pull_request !== undefined;
 
-      if (settings.close_message !== undefined) {
-        const context: Record<string, string | number> = {
-          number: item.number,
-          repo,
-          title: item.title,
-          type: isPr ? 'pull request' : 'issue',
-          days_until_close: daysUntilClose,
-        };
+      const context: Record<string, string | number> = {
+        number: item.number,
+        repo,
+        title: item.title,
+        type: isPr ? 'pull request' : 'issue',
+        days_until_close: daysUntilClose,
+      };
 
-        if (item.user !== null) {
-          context['user'] = item.user.login;
-        }
-
-        await scheduled.octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: item.number,
-          body: interpolate(settings.close_message, context),
-        });
+      if (item.user !== null) {
+        context['user'] = item.user.login;
       }
+
+      await scheduled.octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: item.number,
+        body: interpolate(closeMessage, context),
+      });
 
       await scheduled.octokit.rest.issues.update({
         owner,
