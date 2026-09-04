@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.1.0](https://github.com/NexusPHP/carson/compare/v1.0.0...v1.1.0) - 2026-09-04
+
 ### Added
 
 - Cross-subscriber action routing. `lock-old-issues` owns the `lock` action, so other subscribers request locks through it instead of locking themselves.
