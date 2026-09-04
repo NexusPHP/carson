@@ -78,7 +78,7 @@ on:
     types: [submitted]
   push:
   issues:
-    types: [opened, edited, closed, reopened]
+    types: [opened, edited, closed, reopened, labeled]
   issue_comment:
     types: [created]
   schedule:

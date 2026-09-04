@@ -277,11 +277,97 @@ describe('lock-old-issues subscriber', () => {
     expect(lockMock).not.toHaveBeenCalled();
   });
 
-  it('registers no webhook handlers', () => {
+  const receiveLabeled = async (
+    context: ScheduledContext,
+    label: string | undefined,
+    overrides: { locked?: boolean; senderType?: string } = {},
+  ): Promise<void> => {
     const subscriber = new LockOldIssuesSubscriber();
-    const onSpy = vi.fn();
-    subscriber.register({ on: onSpy } as never);
-    expect(onSpy).not.toHaveBeenCalled();
+    let handler: ((ctx: unknown) => Promise<void>) | undefined;
+    subscriber.register({
+      on: (event: string, fn: (ctx: unknown) => Promise<void>) => {
+        expect(event).toBe('issues.labeled');
+        handler = fn;
+      },
+    } as never);
+    expect(handler).toBeDefined();
+
+    await handler?.({
+      ...context,
+      payload: {
+        action: 'labeled',
+        issue: { number: 12, locked: overrides.locked ?? false },
+        ...(label === undefined ? {} : { label: { name: label } }),
+        sender: { type: overrides.senderType ?? 'User' },
+      },
+    });
+  };
+
+  it('locks immediately when a lock_on_labels label is applied', async () => {
+    const { context, lockMock, commentMock } = makeHarness(
+      [],
+      { ...ENABLED_CONFIG, settings: { 'lock-old-issues': { lock_on_labels: ['spam'], reason: 'spam' } } },
+    );
+
+    await receiveLabeled(context, 'spam');
+
+    expect(lockMock).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'widgets',
+      issue_number: 12,
+      lock_reason: 'spam',
+    });
+    expect(commentMock).not.toHaveBeenCalled();
+  });
+
+  it('locks on label even when the labeler is a bot', async () => {
+    const { context, lockMock } = makeHarness(
+      [],
+      { ...ENABLED_CONFIG, settings: { 'lock-old-issues': { lock_on_labels: ['spam'] } } },
+    );
+
+    await receiveLabeled({ ...context, isBot: true } as ScheduledContext, 'spam', { senderType: 'Bot' });
+
+    expect(lockMock).toHaveBeenCalledWith(expect.objectContaining({ lock_reason: 'resolved' }));
+  });
+
+  it('ignores labels outside lock_on_labels', async () => {
+    const { context, lockMock } = makeHarness(
+      [],
+      { ...ENABLED_CONFIG, settings: { 'lock-old-issues': { lock_on_labels: ['spam'] } } },
+    );
+
+    await receiveLabeled(context, 'bug');
+
+    expect(lockMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores labeled events when lock_on_labels is not configured', async () => {
+    const { context, lockMock } = makeHarness([], ENABLED_CONFIG);
+
+    await receiveLabeled(context, 'spam');
+
+    expect(lockMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores labeled events on already-locked issues and events without a label', async () => {
+    const { context, lockMock } = makeHarness(
+      [],
+      { ...ENABLED_CONFIG, settings: { 'lock-old-issues': { lock_on_labels: ['spam'] } } },
+    );
+
+    await receiveLabeled(context, 'spam', { locked: true });
+    await receiveLabeled(context, undefined);
+
+    expect(lockMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores labeled events when the subscriber is not enabled', async () => {
+    const { context, lockMock } = makeHarness([], { version: 1, subscribers: ['welcome'] });
+
+    await receiveLabeled(context, 'spam');
+
+    expect(lockMock).not.toHaveBeenCalled();
   });
 
   it('posts the default comment before locking when no comment setting is provided', async () => {

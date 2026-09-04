@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-subscriber action routing. `lock-old-issues` owns the `lock` action, so other subscribers request locks through it instead of locking themselves.
 - [read-only](SUBSCRIBERS.md#read-only) subscriber: closes issues and pull requests opened on a read-only mirror and requests a lock from `lock-old-issues`.
 - `auto-labeler` labels issues too, via `issue_rules` (title and body regex).
+- `lock-old-issues` locks an issue immediately when a label listed in `lock_on_labels` is applied.
 
 ### Changed
 

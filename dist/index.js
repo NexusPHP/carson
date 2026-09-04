@@ -55447,7 +55447,8 @@ var Settings4 = external_exports.object({
   days: external_exports.number().int().positive().optional(),
   reason: external_exports.enum(LOCK_REASONS).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
-  comment: external_exports.string().optional()
+  comment: external_exports.string().optional(),
+  lock_on_labels: external_exports.array(external_exports.string().min(1)).optional()
 });
 var DEFAULT_DAYS = 90;
 var DEFAULT_REASON = "resolved";
@@ -55458,6 +55459,11 @@ var LockOldIssuesSubscriber = class extends Subscriber {
   id = "lock-old-issues";
   description = "Locks closed issues that have been inactive past a configurable threshold.";
   requiredPermissions = { issues: "write" };
+  register(probot) {
+    probot.on("issues.labeled", async (context) => {
+      await this.#handleLabeled(context);
+    });
+  }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
       await this.#run(context);
@@ -55476,14 +55482,38 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       return;
     }
     const settings = subscriberSettings(config3, this.id, Settings4, this.log(context));
+    await this.#applyLock(context, number4, settings?.reason ?? DEFAULT_REASON);
+    this.log(context).info(`Locked #${number4} on request`);
+  }
+  // A label applied by another bot (auto-labeler, say) must still lock, so
+  // this applies no bot-sender guard either.
+  async #handleLabeled(context) {
+    const log = this.log(context);
+    const issue3 = context.payload.issue;
+    const label = context.payload.label?.name;
+    if (label === void 0 || issue3.locked === true) {
+      return;
+    }
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
+      return;
+    }
+    const settings = subscriberSettings(config3, this.id, Settings4, log);
+    if (!(settings?.lock_on_labels ?? []).includes(label)) {
+      log.debug(`#${issue3.number}: Label "${label}" not in lock_on_labels, skipping`);
+      return;
+    }
+    await this.#applyLock(context, issue3.number, settings?.reason ?? DEFAULT_REASON);
+    log.info(`Locked #${issue3.number} on label "${label}"`);
+  }
+  async #applyLock(context, number4, reason) {
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.lock({
       owner,
       repo,
       issue_number: number4,
-      lock_reason: settings?.reason ?? DEFAULT_REASON
+      lock_reason: reason
     });
-    this.log(context).info(`Locked #${number4} on request`);
   }
   async #run(scheduled) {
     const enabled = await this.loadEnabledSettings(scheduled, Settings4);

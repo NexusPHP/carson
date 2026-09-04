@@ -278,12 +278,16 @@ on:
 
 ## lock-old-issues
 
-Locks closed issues that have been inactive past a configurable age, preventing necro-comments on resolved threads.
+Locks closed issues that have been inactive past a configurable age, preventing necro-comments on resolved threads. Optionally locks an issue the moment one of `lock_on_labels` is applied.
 
-**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
+**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow), `issues.labeled`
 **Permissions**: `issues: write`
 
 On each scheduled run, the subscriber searches the repository for closed, unlocked issues whose `closed_at` is older than the configured threshold (server-side, oldest first), skips issues carrying any of the exempt labels, and locks the rest using GitHub's lock reason classifier. The search API caps a query at 1000 results, so a larger backlog converges over successive runs.
+
+On `issues.labeled`, when the applied label is listed in `lock_on_labels`, the issue is locked immediately with the configured `reason` and no comment. Labels applied by bots count too, so an `auto-labeler` rule that applies `spam` chains into an immediate lock.
+
+This subscriber also owns Carson's `lock` action: other subscribers (such as [read-only](#read-only)) request locks through it rather than locking themselves, so `reason` is configured once.
 
 The action runner needs to receive `schedule` events for this to run. Add a cron schedule to your `.github/workflows/carson.yml`:
 
@@ -301,6 +305,7 @@ on:
 | `reason` | one of `off-topic`, `too heated`, `resolved`, `spam` | `resolved` |
 | `exempt_labels` | array of strings | `[]` |
 | `comment` | string | `This issue has been locked after {{days}} days of inactivity since it was closed. Please open a new issue if the problem persists.` |
+| `lock_on_labels` | array of label names that lock the issue immediately when applied | `[]` |
 
 Carson posts the comment on the issue *before* locking (you can't comment after the lock). The comment supports template interpolation.
 

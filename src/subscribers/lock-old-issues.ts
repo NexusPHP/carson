@@ -1,4 +1,5 @@
 import type { ActionContext, ActionRegistrar } from '../actions.js';
+import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
@@ -15,6 +16,7 @@ const Settings = z.object({
   reason: z.enum(LOCK_REASONS).optional(),
   exempt_labels: z.array(z.string()).optional(),
   comment: z.string().optional(),
+  lock_on_labels: z.array(z.string().min(1)).optional(),
 });
 
 const DEFAULT_DAYS = 90;
@@ -27,6 +29,12 @@ export class LockOldIssuesSubscriber extends Subscriber {
   public readonly id = 'lock-old-issues';
   public readonly description = 'Locks closed issues that have been inactive past a configurable threshold.';
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write' };
+
+  public override register(probot: Probot): void {
+    probot.on('issues.labeled', async (context: Context<'issues.labeled'>): Promise<void> => {
+      await this.#handleLabeled(context);
+    });
+  }
 
   public override registerScheduled(registrar: ScheduledRegistrar): void {
     registrar.on(async (context) => {
@@ -50,16 +58,48 @@ export class LockOldIssuesSubscriber extends Subscriber {
     }
 
     const settings = subscriberSettings(config, this.id, Settings, this.log(context));
+
+    await this.#applyLock(context, number, settings?.reason ?? DEFAULT_REASON);
+    this.log(context).info(`Locked #${number} on request`);
+  }
+
+  // A label applied by another bot (auto-labeler, say) must still lock, so
+  // this applies no bot-sender guard either.
+  async #handleLabeled(context: Context<'issues.labeled'>): Promise<void> {
+    const log = this.log(context);
+    const issue = context.payload.issue;
+    const label = context.payload.label?.name;
+
+    if (label === undefined || issue.locked === true) {
+      return;
+    }
+
+    const config = await this.loadEnabledConfig(context);
+
+    if (config === null) {
+      return;
+    }
+
+    const settings = subscriberSettings(config, this.id, Settings, log);
+
+    if (!(settings?.lock_on_labels ?? []).includes(label)) {
+      log.debug(`#${issue.number}: Label "${label}" not in lock_on_labels, skipping`);
+      return;
+    }
+
+    await this.#applyLock(context, issue.number, settings?.reason ?? DEFAULT_REASON);
+    log.info(`Locked #${issue.number} on label "${label}"`);
+  }
+
+  async #applyLock(context: ActionContext, number: number, reason: (typeof LOCK_REASONS)[number]): Promise<void> {
     const { owner, repo } = context.repo();
 
     await context.octokit.rest.issues.lock({
       owner,
       repo,
       issue_number: number,
-      lock_reason: settings?.reason ?? DEFAULT_REASON,
+      lock_reason: reason,
     });
-
-    this.log(context).info(`Locked #${number} on request`);
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {
