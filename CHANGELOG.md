@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `conflicts-notifier` applies a configurable `label` while a PR conflicts and removes it once the PR is clean.
+- `auto-labeler` owns the `label` and `unlabel` actions, so `conflicts-notifier` and `commands` label through it.
+
+### Changed
+
+- `/label` and `/unlabel` in `commands` now require `auto-labeler` to be enabled.
+
 ## [v1.1.0](https://github.com/NexusPHP/carson/compare/v1.0.0...v1.1.0) - 2026-09-04
 
 ### Added

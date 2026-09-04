@@ -1,6 +1,8 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { type ActionContext, ActionRegistrar } from '../../src/actions.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Probot, ProbotOctokit } from 'probot';
 import app from '../../src/app.js';
+import { AutoLabelerSubscriber } from '../../src/subscribers/auto-labeler.js';
 import { generateKeyPairSync } from 'node:crypto';
 import nock from 'nock';
 import { resetConfigCache } from '../../src/configuration/cache.js';
@@ -675,5 +677,72 @@ describe('auto-labeler subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+});
+
+describe('auto-labeler label actions', () => {
+  const makeContext = (config: unknown): { context: ActionContext; addLabels: ReturnType<typeof vi.fn>; removeLabel: ReturnType<typeof vi.fn> } => {
+    const addLabels = vi.fn().mockResolvedValue({});
+    const removeLabel = vi.fn().mockResolvedValue({});
+    const log: Record<string, unknown> = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    log['child'] = vi.fn().mockReturnValue(log);
+
+    return {
+      addLabels,
+      removeLabel,
+      context: {
+        octokit: { rest: { issues: { addLabels, removeLabel } } } as never,
+        log: log as never,
+        repo: () => ({ owner: 'acme', repo: 'widgets' }),
+        config: async <T>(): Promise<T | null> => {
+          await Promise.resolve();
+          return config as T;
+        },
+      },
+    };
+  };
+
+  const registrar = (): ActionRegistrar => {
+    const out = new ActionRegistrar();
+    new AutoLabelerSubscriber().registerActions(out);
+
+    return out;
+  };
+
+  const ENABLED = { version: 1, subscribers: ['auto-labeler'] };
+
+  beforeEach(() => {
+    resetConfigCache();
+  });
+
+  it('adds the requested labels', async () => {
+    const { context, addLabels } = makeContext(ENABLED);
+
+    await expect(registrar().dispatch('label', context, { number: 5, labels: ['bug', 'help'] })).resolves.toBe(true);
+    expect(addLabels).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 5, labels: ['bug', 'help'] });
+  });
+
+  it('removes the requested labels and tolerates ones already absent', async () => {
+    const { context, removeLabel } = makeContext(ENABLED);
+    removeLabel.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }));
+
+    await expect(registrar().dispatch('unlabel', context, { number: 5, labels: ['gone', 'bug'] })).resolves.toBe(true);
+    expect(removeLabel).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates removal failures other than 404', async () => {
+    const { context, removeLabel } = makeContext(ENABLED);
+    removeLabel.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
+
+    await expect(registrar().dispatch('unlabel', context, { number: 5, labels: ['bug'] })).rejects.toThrow('Forbidden');
+  });
+
+  it('declines both actions when not enabled', async () => {
+    const { context, addLabels, removeLabel } = makeContext({ version: 1, subscribers: ['welcome'] });
+
+    await expect(registrar().dispatch('label', context, { number: 5, labels: ['bug'] })).resolves.toBe(false);
+    await expect(registrar().dispatch('unlabel', context, { number: 5, labels: ['bug'] })).resolves.toBe(false);
+    expect(addLabels).not.toHaveBeenCalled();
+    expect(removeLabel).not.toHaveBeenCalled();
   });
 });

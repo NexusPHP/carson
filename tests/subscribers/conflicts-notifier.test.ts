@@ -31,6 +31,7 @@ interface PRFetchOverrides {
   user?: { login: string } | null;
   title?: string;
   base?: string;
+  labels?: string[];
 }
 
 const mockGetPR = (mergeable: boolean | null, overrides: PRFetchOverrides = {}): nock.Scope => {
@@ -44,8 +45,20 @@ const mockGetPR = (mergeable: boolean | null, overrides: PRFetchOverrides = {}):
       title: overrides.title ?? 'Fix the thing',
       base: { ref: overrides.base ?? 'main' },
       head: { ref: 'feature/widget' },
+      labels: (overrides.labels ?? []).map((name) => ({ name })),
     });
 };
+
+const CONFIG_WITH_LABEL = [
+  'version: 1',
+  'subscribers:',
+  '  - conflicts-notifier',
+  '  - auto-labeler',
+  'settings:',
+  '  conflicts-notifier:',
+  '    label: needs-rebase',
+  '',
+].join('\n');
 
 interface GraphqlBody {
   query: string;
@@ -302,6 +315,61 @@ describe('conflicts-notifier subscriber (via app)', () => {
     });
 
     expect(minimizeScope.isDone()).toBe(true);
+  });
+
+  it('requests the conflict label from auto-labeler when a conflict is detected', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_WITH_LABEL);
+    mockGetPR(false);
+    mockCommentsQuery([]);
+    nock('https://api.github.com').post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
+    const labelScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/labels`, (body: { labels: string[] }) => {
+        expect(body.labels).toEqual(['needs-rebase']);
+        return true;
+      })
+      .reply(200, []);
+
+    await probot.receive({
+      id: 'evt-conflict-label',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(labelScope.isDone()).toBe(true);
+  });
+
+  it('does not re-request the conflict label when the PR already carries it', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_WITH_LABEL);
+    mockGetPR(false, { labels: ['needs-rebase'] });
+    mockCommentsQuery([{ id: 'C_1', body: `notice\n\n<!-- carson:conflicts-notifier -->`, isMinimized: false, author: { __typename: 'Bot' } }]);
+
+    await probot.receive({
+      id: 'evt-conflict-label-present',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('requests removal of the conflict label once the conflict is resolved', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_WITH_LABEL);
+    mockGetPR(true, { labels: ['needs-rebase', 'keep-me'] });
+    mockCommentsQuery([]);
+    const unlabelScope = nock('https://api.github.com')
+      .delete(`/repos/acme/widgets/issues/${PR_NUMBER}/labels/needs-rebase`)
+      .reply(200, []);
+
+    await probot.receive({
+      id: 'evt-resolved-unlabel',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(unlabelScope.isDone()).toBe(true);
   });
 
   it('does nothing when there is no conflict and no existing comment', async () => {

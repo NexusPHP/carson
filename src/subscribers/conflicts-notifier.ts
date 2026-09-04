@@ -9,7 +9,10 @@ import { z } from 'zod';
 
 const Settings = z.object({
   message: z.string().optional(),
+  label: z.string().min(1).optional(),
 });
+
+type ParsedSettings = z.infer<typeof Settings>;
 
 const DEFAULT_MESSAGE = '@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.';
 const COMMENT_MARKER = '<!-- carson:conflicts-notifier -->';
@@ -147,12 +150,32 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     }
 
     const hasConflict = pr.mergeable === false;
+    const settings = subscriberSettings(config, this.id, Settings, this.log(context)) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
 
     if (hasConflict) {
-      await this.#handleConflict(context, pr, config, existing);
+      await this.#handleConflict(context, pr, settings, existing);
     } else {
       await this.#handleNoConflict(context, prNumber, existing);
+    }
+
+    if (settings.label !== undefined) {
+      await this.#syncLabel(context, pr.number, pr.labels.some((l) => l.name === settings.label), hasConflict, settings.label);
+    }
+  }
+
+  // Labeling is delegated to auto-labeler through the action router.
+  async #syncLabel(
+    context: SubscriberContext,
+    prNumber: number,
+    hasLabel: boolean,
+    hasConflict: boolean,
+    label: string,
+  ): Promise<void> {
+    if (hasConflict && !hasLabel) {
+      await this.dispatch('label', context, { number: prNumber, labels: [label] });
+    } else if (!hasConflict && hasLabel) {
+      await this.dispatch('unlabel', context, { number: prNumber, labels: [label] });
     }
   }
 
@@ -164,13 +187,12 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       user: { login: string };
       base: { ref: string };
     },
-    config: CarsonConfig,
+    settings: ParsedSettings,
     existing: ExistingComment | null,
   ): Promise<void> {
     const { owner, repo } = context.repo();
 
     if (existing === null) {
-      const settings = subscriberSettings(config, this.id, Settings, this.log(context)) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,

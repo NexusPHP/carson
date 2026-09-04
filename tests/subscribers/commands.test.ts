@@ -31,7 +31,10 @@ interface SettingsOverrides {
 }
 
 // JSON is valid YAML, so configs are served as JSON strings.
-const configFor = (settings: SettingsOverrides | null = {}, subscribers: string[] = ['commands']): string =>
+const configFor = (
+  settings: SettingsOverrides | null = {},
+  subscribers: string[] = ['commands', 'auto-labeler'],
+): string =>
   JSON.stringify({
     version: 1,
     subscribers,
@@ -283,6 +286,16 @@ describe('commands subscriber (via app)', () => {
     expect(update.isDone()).toBe(true);
   });
 
+  it('treats /label and /unlabel as failed when auto-labeler is not enabled', async () => {
+    mockInstallationToken();
+    mockConfig(configFor({}, ['commands']));
+    mockRole('write');
+
+    await receive(probot, '/label bug\n/unlabel bug');
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   it('removes labels one by one', async () => {
     arrange();
     const a = mockRemoveLabel('bug');
@@ -297,7 +310,7 @@ describe('commands subscriber (via app)', () => {
 
   it('does not react when every command failed', async () => {
     arrange();
-    mockRemoveLabel('missing', 404);
+    mockRemoveLabel('missing', 500);
 
     await receive(probot, '/unlabel missing\n/unlabel\n/label');
 

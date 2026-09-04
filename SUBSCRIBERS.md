@@ -76,6 +76,8 @@ Each rule pairs a single `label` with one or more *criteria*. A rule matches whe
 
 The `pulls.listFiles` API call is only made when at least one rule uses `files`. PRs whose rules are purely title/body/branch-based avoid the extra round trip.
 
+This subscriber also owns Carson's `label` and `unlabel` actions: other subscribers ([conflicts-notifier](#conflicts-notifier), [commands](#commands)) apply and remove labels through it rather than calling the API themselves. It can be enabled with no rules purely to serve those requests.
+
 ### Overlap with `actions/labeler`
 
 GitHub publishes [`actions/labeler`](https://github.com/actions/labeler) for the same use case. Differences worth knowing before choosing:
@@ -162,8 +164,8 @@ Runs slash commands posted as comments on issues and pull requests, so maintaine
 
 | Command | Effect |
 | --- | --- |
-| `/label a, b` | Adds the labels |
-| `/unlabel a, b` | Removes the labels |
+| `/label a, b` | Adds the labels, via [auto-labeler](#auto-labeler) (which must be enabled) |
+| `/unlabel a, b` | Removes the labels, via [auto-labeler](#auto-labeler) (which must be enabled) |
 | `/close [not_planned]` | Closes (issues as `completed`, or `not_planned` when given) |
 | `/reopen` | Reopens |
 | `/lock` | Locks, via [lock-old-issues](#lock-old-issues) (which must be enabled) |
@@ -226,6 +228,9 @@ If GitHub has not yet computed the PR's mergeable state (transient `mergeable: n
 | Key | Type | Default |
 | --- | --- | --- |
 | `message` | string | ``@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.`` |
+| `label` | string, applied while the PR conflicts and removed once it is clean | (no label) |
+
+Labeling is delegated to [auto-labeler](#auto-labeler) through Carson's action routing, so that subscriber must also be enabled for `label` to take effect (no rules are needed). When it is not enabled, the notice is still posted and a warning is logged.
 
 ### Context
 

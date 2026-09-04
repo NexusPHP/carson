@@ -1,3 +1,4 @@
+import type { ActionContext, ActionRegistrar } from '../actions.js';
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { labelNames } from '../github/labels.js';
@@ -188,6 +189,47 @@ export class AutoLabelerSubscriber extends Subscriber {
     probot.on(ISSUE_EVENTS, async (context): Promise<void> => {
       await this.#handleIssue(context as IssueContext);
     });
+  }
+
+  public override registerActions(registrar: ActionRegistrar): void {
+    registrar.on('label', this.id, async (context, request) => {
+      if (await this.loadEnabledConfig(context) === null) {
+        return false;
+      }
+
+      const { owner, repo } = context.repo();
+      await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request.number, labels: request.labels });
+      this.log(context).info(`Added ${request.labels.length} label(s) to #${request.number} on request`);
+
+      return true;
+    });
+
+    registrar.on('unlabel', this.id, async (context, request) => {
+      if (await this.loadEnabledConfig(context) === null) {
+        return false;
+      }
+
+      for (const name of request.labels) {
+        await this.#removeLabel(context, request.number, name);
+      }
+
+      this.log(context).info(`Removed ${request.labels.length} label(s) from #${request.number} on request`);
+
+      return true;
+    });
+  }
+
+  // A label that is already absent is the requested end state, not a failure.
+  async #removeLabel(context: ActionContext, number: number, name: string): Promise<void> {
+    const { owner, repo } = context.repo();
+
+    try {
+      await context.octokit.rest.issues.removeLabel({ owner, repo, issue_number: number, name });
+    } catch (error) {
+      if ((error as { status?: unknown }).status !== 404) {
+        throw error;
+      }
+    }
   }
 
   async #handlePullRequest(context: LabelContext): Promise<void> {

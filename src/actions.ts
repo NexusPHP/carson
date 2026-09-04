@@ -5,6 +5,8 @@ export type ActionContext = Omit<ScheduledContext, 'payload'>;
 
 export interface ActionRequests {
   lock: { number: number };
+  label: { number: number; labels: string[] };
+  unlabel: { number: number; labels: string[] };
 }
 
 export type ActionName = keyof ActionRequests;

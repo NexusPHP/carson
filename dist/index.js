@@ -54860,6 +54860,38 @@ var AutoLabelerSubscriber = class extends Subscriber {
       await this.#handleIssue(context);
     });
   }
+  registerActions(registrar) {
+    registrar.on("label", this.id, async (context, request2) => {
+      if (await this.loadEnabledConfig(context) === null) {
+        return false;
+      }
+      const { owner, repo } = context.repo();
+      await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request2.number, labels: request2.labels });
+      this.log(context).info(`Added ${request2.labels.length} label(s) to #${request2.number} on request`);
+      return true;
+    });
+    registrar.on("unlabel", this.id, async (context, request2) => {
+      if (await this.loadEnabledConfig(context) === null) {
+        return false;
+      }
+      for (const name of request2.labels) {
+        await this.#removeLabel(context, request2.number, name);
+      }
+      this.log(context).info(`Removed ${request2.labels.length} label(s) from #${request2.number} on request`);
+      return true;
+    });
+  }
+  // A label that is already absent is the requested end state, not a failure.
+  async #removeLabel(context, number4, name) {
+    const { owner, repo } = context.repo();
+    try {
+      await context.octokit.rest.issues.removeLabel({ owner, repo, issue_number: number4, name });
+    } catch (error52) {
+      if (error52.status !== 404) {
+        throw error52;
+      }
+    }
+  }
   async #handlePullRequest(context) {
     const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
@@ -55214,15 +55246,17 @@ var CommandsSubscriber = class extends Subscriber {
         if (labels.length === 0) {
           throw new Error("no allowed labels given");
         }
-        await context.octokit.rest.issues.addLabels({ ...target, labels });
+        if (!await this.dispatch("label", context, { number: issue3.number, labels })) {
+          throw new Error("no enabled subscriber handles label");
+        }
         break;
       }
       case "unlabel": {
         if (command.args.length === 0) {
           throw new Error("no labels given");
         }
-        for (const name of command.args) {
-          await context.octokit.rest.issues.removeLabel({ ...target, name });
+        if (!await this.dispatch("unlabel", context, { number: issue3.number, labels: command.args })) {
+          throw new Error("no enabled subscriber handles unlabel");
         }
         break;
       }
@@ -55312,7 +55346,8 @@ var interpolate = (template, context) => {
 
 // src/subscribers/conflicts-notifier.ts
 var Settings3 = external_exports.object({
-  message: external_exports.string().optional()
+  message: external_exports.string().optional(),
+  label: external_exports.string().min(1).optional()
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
 var COMMENT_MARKER = "<!-- carson:conflicts-notifier -->";
@@ -55403,17 +55438,28 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       return;
     }
     const hasConflict = pr.mergeable === false;
+    const settings = subscriberSettings(config3, this.id, Settings3, this.log(context)) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
     if (hasConflict) {
-      await this.#handleConflict(context, pr, config3, existing);
+      await this.#handleConflict(context, pr, settings, existing);
     } else {
       await this.#handleNoConflict(context, prNumber, existing);
     }
+    if (settings.label !== void 0) {
+      await this.#syncLabel(context, pr.number, pr.labels.some((l) => l.name === settings.label), hasConflict, settings.label);
+    }
   }
-  async #handleConflict(context, pr, config3, existing) {
+  // Labeling is delegated to auto-labeler through the action router.
+  async #syncLabel(context, prNumber, hasLabel, hasConflict, label) {
+    if (hasConflict && !hasLabel) {
+      await this.dispatch("label", context, { number: prNumber, labels: [label] });
+    } else if (!hasConflict && hasLabel) {
+      await this.dispatch("unlabel", context, { number: prNumber, labels: [label] });
+    }
+  }
+  async #handleConflict(context, pr, settings, existing) {
     const { owner, repo } = context.repo();
     if (existing === null) {
-      const settings = subscriberSettings(config3, this.id, Settings3, this.log(context)) ?? {};
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
         repo,

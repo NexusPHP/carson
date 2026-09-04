@@ -181,7 +181,9 @@ export class CommandsSubscriber extends Subscriber {
           throw new Error('no allowed labels given');
         }
 
-        await context.octokit.rest.issues.addLabels({ ...target, labels });
+        if (!(await this.dispatch('label', context, { number: issue.number, labels }))) {
+          throw new Error('no enabled subscriber handles label');
+        }
         break;
       }
       case 'unlabel': {
@@ -189,8 +191,8 @@ export class CommandsSubscriber extends Subscriber {
           throw new Error('no labels given');
         }
 
-        for (const name of command.args) {
-          await context.octokit.rest.issues.removeLabel({ ...target, name });
+        if (!(await this.dispatch('unlabel', context, { number: issue.number, labels: command.args }))) {
+          throw new Error('no enabled subscriber handles unlabel');
         }
         break;
       }
