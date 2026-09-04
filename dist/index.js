@@ -54738,6 +54738,11 @@ var Subscriber = class {
   }
 };
 
+// src/github/labels.ts
+var labelNames = (labels) => {
+  return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
+};
+
 // src/subscribers/auto-labeler.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
 var StringArray = external_exports.array(external_exports.string());
@@ -54756,9 +54761,11 @@ var Rule = external_exports.object({
   head_branch: StringArray.optional(),
   base_branch: StringArray.optional()
 });
+var IssueRule = Rule.pick({ label: true, title: true, body: true });
 var Settings = external_exports.object({
   sync_labels: external_exports.boolean().optional(),
-  rules: external_exports.array(Rule).optional()
+  rules: external_exports.array(Rule).optional(),
+  issue_rules: external_exports.array(IssueRule).optional()
 });
 var PR_EVENTS = [
   "pull_request.opened",
@@ -54766,6 +54773,7 @@ var PR_EVENTS = [
   "pull_request.synchronize",
   "pull_request.edited"
 ];
+var ISSUE_EVENTS = ["issues.opened", "issues.edited"];
 var compileAnyMatcher = (globs) => {
   if (globs.length === 0) {
     return null;
@@ -54840,17 +54848,20 @@ var ruleMatches = (rule, fields, files) => {
 };
 var AutoLabelerSubscriber = class extends Subscriber {
   id = "auto-labeler";
-  description = "Adds labels to pull requests based on path globs, title or body regex, and branch name patterns. Optional sync mode removes managed labels that no longer match.";
+  description = "Adds labels to pull requests and issues based on path globs, title or body regex, and branch name patterns. Optional sync mode removes managed labels that no longer match.";
   requiredPermissions = {
     issues: "write",
     pull_requests: "write"
   };
   register(probot) {
     probot.on(PR_EVENTS, async (context) => {
-      await this.#handle(context);
+      await this.#handlePullRequest(context);
+    });
+    probot.on(ISSUE_EVENTS, async (context) => {
+      await this.#handleIssue(context);
     });
   }
-  async #handle(context) {
+  async #handlePullRequest(context) {
     const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
     if (enabled === null) {
@@ -54882,37 +54893,72 @@ var AutoLabelerSubscriber = class extends Subscriber {
       head: pr.head.ref,
       base: pr.base.ref
     };
+    await this.#reconcile(context, {
+      kind: "PR",
+      number: pr.number,
+      current: labelNames(pr.labels),
+      compiled,
+      fields,
+      filenames,
+      syncLabels: settings.sync_labels ?? false
+    });
+  }
+  async #handleIssue(context) {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const rawRules = settings.issue_rules ?? [];
+    if (rawRules.length === 0) {
+      log.debug("No issue rules configured, skipping");
+      return;
+    }
+    const issue3 = context.payload.issue;
+    await this.#reconcile(context, {
+      kind: "issue",
+      number: issue3.number,
+      current: labelNames(issue3.labels),
+      compiled: rawRules.map((r) => compileRule(r, log)),
+      fields: { title: issue3.title, body: issue3.body ?? "", head: "", base: "" },
+      filenames: [],
+      syncLabels: settings.sync_labels ?? false
+    });
+  }
+  async #reconcile(context, target) {
+    const log = this.log(context);
+    const { owner, repo } = context.repo();
     const matched = /* @__PURE__ */ new Set();
     const managed = /* @__PURE__ */ new Set();
-    for (const rule of compiled) {
+    for (const rule of target.compiled) {
       managed.add(rule.label);
-      if (ruleMatches(rule, fields, filenames)) {
+      if (ruleMatches(rule, target.fields, target.filenames)) {
         matched.add(rule.label);
       }
     }
-    const current = new Set(pr.labels.map((l) => l.name));
+    const current = new Set(target.current);
     const toAdd = Array.from(matched).filter((l) => !current.has(l));
-    const syncLabels = settings.sync_labels ?? false;
-    const toRemove = syncLabels ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l)) : [];
+    const toRemove = target.syncLabels ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l)) : [];
     if (toAdd.length > 0) {
       await context.octokit.rest.issues.addLabels({
         owner,
         repo,
-        issue_number: pr.number,
+        issue_number: target.number,
         labels: toAdd
       });
-      log.info(`Added ${toAdd.length} label(s) to PR #${pr.number}: ${toAdd.join(", ")}`);
+      log.info(`Added ${toAdd.length} label(s) to ${target.kind} #${target.number}: ${toAdd.join(", ")}`);
     }
     for (const label of toRemove) {
       await context.octokit.rest.issues.removeLabel({
         owner,
         repo,
-        issue_number: pr.number,
+        issue_number: target.number,
         name: label
       });
     }
     if (toRemove.length > 0) {
-      log.info(`Removed ${toRemove.length} label(s) from PR #${pr.number}: ${toRemove.join(", ")}`);
+      log.info(`Removed ${toRemove.length} label(s) from ${target.kind} #${target.number}: ${toRemove.join(", ")}`);
     }
   }
 };
@@ -55390,11 +55436,6 @@ ${marker}`;
     });
     log.info(`Created issue #${issue3.number} for ${eventType} ref ${ref}`);
   }
-};
-
-// src/github/labels.ts
-var labelNames = (labels) => {
-  return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
 };
 
 // src/github/search.ts
@@ -56043,7 +56084,7 @@ var DEFAULT_MESSAGE3 = [
   "",
   "Please update the description. The `{{label}}` label will be removed automatically."
 ].join("\n");
-var ISSUE_EVENTS = ["issues.opened", "issues.edited"];
+var ISSUE_EVENTS2 = ["issues.opened", "issues.edited"];
 var PR_EVENTS5 = ["pull_request.opened", "pull_request.edited"];
 var compileRules2 = (rules, log) => {
   const compiled = [];
@@ -56090,7 +56131,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(ISSUE_EVENTS, async (context) => {
+    probot.on(ISSUE_EVENTS2, async (context) => {
       await this.#handleIssue(context);
     });
     probot.on(PR_EVENTS5, async (context) => {

@@ -146,7 +146,7 @@ Carson reads its configuration from the **default branch only**, so pull request
 
 See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
 
-- [**auto-labeler**](SUBSCRIBERS.md#auto-labeler): adds labels to PRs based on path globs, title/body regex, or branch name patterns, with optional sync mode.
+- [**auto-labeler**](SUBSCRIBERS.md#auto-labeler): adds labels to PRs based on path globs, title/body regex, or branch name patterns, and to issues by title/body regex, with optional sync mode.
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**issue-intake**](SUBSCRIBERS.md#issue-intake): turns `repository_dispatch` events from an external system into labeled issues carrying a correlation marker.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.

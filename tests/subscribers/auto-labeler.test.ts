@@ -86,6 +86,39 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
   ...(overrides.action === 'edited' ? { changes: { title: { from: 'old' } } } : {}),
 });
 
+interface IssueOverrides {
+  action?: 'opened' | 'edited';
+  title?: string;
+  body?: string | null;
+  labels?: string[];
+}
+
+const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> => ({
+  action: overrides.action ?? 'opened',
+  installation: { id: INSTALLATION_ID },
+  issue: {
+    number: PR_NUMBER,
+    user: { login: 'octocat' },
+    title: overrides.title ?? 'Something is broken',
+    body: overrides.body === undefined ? '' : overrides.body,
+    labels: (overrides.labels ?? []).map((name) => ({ name })),
+  },
+  repository: { owner: { login: 'acme' }, name: 'widgets' },
+  sender: { type: 'User' },
+});
+
+const configWithIssueRules = (rulesYaml: string, syncLabels = false): string => [
+  'version: 1',
+  'subscribers:',
+  '  - auto-labeler',
+  'settings:',
+  '  auto-labeler:',
+  ...(syncLabels ? ['    sync_labels: true'] : []),
+  '    issue_rules:',
+  rulesYaml,
+  '',
+].join('\n');
+
 const configWithRules = (rulesYaml: string, syncLabels = false): string => [
   'version: 1',
   'subscribers:',
@@ -536,6 +569,86 @@ describe('auto-labeler subscriber (via app)', () => {
     });
 
     expect(addScope.isDone()).toBe(true);
+  });
+
+  it('labels an issue when a title regex in issue_rules matches', async () => {
+    mockInstallationToken();
+    mockConfig(configWithIssueRules([
+      '      - label: bug',
+      '        title: ["[Cc]rash", "\\\\bbroken\\\\b"]',
+    ].join('\n')));
+    const addScope = mockAddLabels(['bug']);
+
+    await probot.receive({
+      id: 'evt-issue-title',
+      name: 'issues',
+      payload: issuePayload({ title: 'Export is broken' }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('labels an issue when a body regex matches and treats a null body as empty', async () => {
+    mockInstallationToken();
+    mockConfig(configWithIssueRules([
+      '      - label: needs-repro',
+      '        body: ["^$"]',
+    ].join('\n')));
+    const addScope = mockAddLabels(['needs-repro']);
+
+    await probot.receive({
+      id: 'evt-issue-body',
+      name: 'issues',
+      payload: issuePayload({ body: null }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('does not re-add an issue label that is already present', async () => {
+    mockInstallationToken();
+    mockConfig(configWithIssueRules([
+      '      - label: bug',
+      '        title: ["broken"]',
+    ].join('\n')));
+
+    await probot.receive({
+      id: 'evt-issue-present',
+      name: 'issues',
+      payload: issuePayload({ title: 'still broken', labels: ['bug'] }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('removes a managed issue label that no longer matches when sync_labels is on', async () => {
+    mockInstallationToken();
+    mockConfig(configWithIssueRules([
+      '      - label: bug',
+      '        title: ["broken"]',
+    ].join('\n'), true));
+    const removeScope = mockRemoveLabel('bug');
+
+    await probot.receive({
+      id: 'evt-issue-sync',
+      name: 'issues',
+      payload: issuePayload({ action: 'edited', title: 'works now', labels: ['bug', 'keep-me'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('does nothing on issues when no issue_rules are configured', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules('      - label: any\n        title: ["x"]'));
+
+    await probot.receive({
+      id: 'evt-issue-no-rules',
+      name: 'issues',
+      payload: issuePayload({ title: 'x' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing when the sender is a bot', async () => {

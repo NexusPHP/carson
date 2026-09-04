@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
 import { z } from 'zod';
@@ -23,9 +24,12 @@ const Rule = z.object({
   base_branch: StringArray.optional(),
 });
 
+const IssueRule = Rule.pick({ label: true, title: true, body: true });
+
 const Settings = z.object({
   sync_labels: z.boolean().optional(),
   rules: z.array(Rule).optional(),
+  issue_rules: z.array(IssueRule).optional(),
 });
 
 type ParsedRule = z.infer<typeof Rule>;
@@ -38,12 +42,17 @@ type LabelEvent
     | 'pull_request.edited';
 type LabelContext = Context<LabelEvent>;
 
+type IssueEvent = 'issues.opened' | 'issues.edited';
+type IssueContext = Context<IssueEvent>;
+
 const PR_EVENTS: LabelEvent[] = [
   'pull_request.opened',
   'pull_request.reopened',
   'pull_request.synchronize',
   'pull_request.edited',
 ];
+
+const ISSUE_EVENTS: IssueEvent[] = ['issues.opened', 'issues.edited'];
 
 type FilesPredicate = (files: readonly string[]) => boolean;
 
@@ -165,7 +174,7 @@ const ruleMatches = (rule: CompiledRule, fields: PrFields, files: readonly strin
 
 export class AutoLabelerSubscriber extends Subscriber {
   public readonly id = 'auto-labeler';
-  public readonly description = 'Adds labels to pull requests based on path globs, title or body regex, and branch name patterns. Optional sync mode removes managed labels that no longer match.';
+  public readonly description = 'Adds labels to pull requests and issues based on path globs, title or body regex, and branch name patterns. Optional sync mode removes managed labels that no longer match.';
   public readonly requiredPermissions: RequiredPermissions = {
     issues: 'write',
     pull_requests: 'write',
@@ -173,11 +182,15 @@ export class AutoLabelerSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as LabelContext);
+      await this.#handlePullRequest(context as LabelContext);
+    });
+
+    probot.on(ISSUE_EVENTS, async (context): Promise<void> => {
+      await this.#handleIssue(context as IssueContext);
     });
   }
 
-  async #handle(context: LabelContext): Promise<void> {
+  async #handlePullRequest(context: LabelContext): Promise<void> {
     const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
 
@@ -218,21 +231,72 @@ export class AutoLabelerSubscriber extends Subscriber {
       base: pr.base.ref,
     };
 
+    await this.#reconcile(context, {
+      kind: 'PR',
+      number: pr.number,
+      current: labelNames(pr.labels),
+      compiled,
+      fields,
+      filenames,
+      syncLabels: settings.sync_labels ?? false,
+    });
+  }
+
+  async #handleIssue(context: IssueContext): Promise<void> {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null) {
+      return;
+    }
+
+    const { settings } = enabled;
+    const rawRules = settings.issue_rules ?? [];
+
+    if (rawRules.length === 0) {
+      log.debug('No issue rules configured, skipping');
+
+      return;
+    }
+
+    const issue = context.payload.issue;
+
+    await this.#reconcile(context, {
+      kind: 'issue',
+      number: issue.number,
+      current: labelNames(issue.labels),
+      compiled: rawRules.map((r) => compileRule(r, log)),
+      fields: { title: issue.title, body: issue.body ?? '', head: '', base: '' },
+      filenames: [],
+      syncLabels: settings.sync_labels ?? false,
+    });
+  }
+
+  async #reconcile(context: Pick<IssueContext, 'octokit' | 'log' | 'repo'>, target: {
+    kind: 'PR' | 'issue';
+    number: number;
+    current: readonly string[];
+    compiled: readonly CompiledRule[];
+    fields: PrFields;
+    filenames: readonly string[];
+    syncLabels: boolean;
+  }): Promise<void> {
+    const log = this.log(context);
+    const { owner, repo } = context.repo();
     const matched = new Set<string>();
     const managed = new Set<string>();
 
-    for (const rule of compiled) {
+    for (const rule of target.compiled) {
       managed.add(rule.label);
 
-      if (ruleMatches(rule, fields, filenames)) {
+      if (ruleMatches(rule, target.fields, target.filenames)) {
         matched.add(rule.label);
       }
     }
 
-    const current = new Set(pr.labels.map((l) => l.name));
+    const current = new Set(target.current);
     const toAdd = Array.from(matched).filter((l) => !current.has(l));
-    const syncLabels = settings.sync_labels ?? false;
-    const toRemove = syncLabels
+    const toRemove = target.syncLabels
       ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l))
       : [];
 
@@ -240,23 +304,23 @@ export class AutoLabelerSubscriber extends Subscriber {
       await context.octokit.rest.issues.addLabels({
         owner,
         repo,
-        issue_number: pr.number,
+        issue_number: target.number,
         labels: toAdd,
       });
-      log.info(`Added ${toAdd.length} label(s) to PR #${pr.number}: ${toAdd.join(', ')}`);
+      log.info(`Added ${toAdd.length} label(s) to ${target.kind} #${target.number}: ${toAdd.join(', ')}`);
     }
 
     for (const label of toRemove) {
       await context.octokit.rest.issues.removeLabel({
         owner,
         repo,
-        issue_number: pr.number,
+        issue_number: target.number,
         name: label,
       });
     }
 
     if (toRemove.length > 0) {
-      log.info(`Removed ${toRemove.length} label(s) from PR #${pr.number}: ${toRemove.join(', ')}`);
+      log.info(`Removed ${toRemove.length} label(s) from ${target.kind} #${target.number}: ${toRemove.join(', ')}`);
     }
   }
 }

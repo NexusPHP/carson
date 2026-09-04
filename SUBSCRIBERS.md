@@ -66,12 +66,12 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 
 ## auto-labeler
 
-Adds labels to pull requests based on path globs, title or body regex, or branch name patterns. Rules are evaluated on every PR event, and (optionally) labels Carson added that no longer match are removed.
+Adds labels to pull requests based on path globs, title or body regex, or branch name patterns, and to issues based on title or body regex. Rules are evaluated on every PR or issue event, and (optionally) labels Carson added that no longer match are removed.
 
-**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`, `issues.opened`, `issues.edited`
 **Permissions**: `issues: write`, `pull_requests: write`
 
-Each rule pairs a single `label` with one or more *criteria*. A rule matches when **any** criterion matches (OR semantic across criteria within the same rule). The label is added when at least one rule for that label matches.
+Each rule pairs a single `label` with one or more *criteria*. A rule matches when **any** criterion matches (OR semantic across criteria within the same rule). The label is added when at least one rule for that label matches. PR rules live under `rules`, issue rules under `issue_rules`, and the two lists are independent.
 
 The `pulls.listFiles` API call is only made when at least one rule uses `files`. PRs whose rules are purely title/body/branch-based avoid the extra round trip.
 
@@ -89,9 +89,10 @@ GitHub publishes [`actions/labeler`](https://github.com/actions/labeler) for the
 | Key | Type | Default |
 | --- | --- | --- |
 | `sync_labels` | boolean | `false` |
-| `rules` | array of rule objects (see below) | `[]` (subscriber bails silently when empty) |
+| `rules` | array of PR rule objects (see below) | `[]` (PR events are ignored when empty) |
+| `issue_rules` | array of issue rule objects: `label`, `title`, `body` only | `[]` (issue events are ignored when empty) |
 
-Each rule object:
+Each PR rule object:
 
 | Key | Type | Default |
 | --- | --- | --- |
@@ -142,6 +143,11 @@ settings:
         base_branch: ["^release/"]
       - label: needs-discussion
         body: ["NEEDS DISCUSSION"]
+    issue_rules:
+      - label: bug
+        title: ["[Cc]rash", "[Bb]roken"]
+      - label: feature-request
+        title: ["^\\[feature\\]"]
 ```
 
 ---
