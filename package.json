@@ -23,7 +23,7 @@
     "dev": "tsx watch src/dev.ts",
     "lint": "eslint --color src tests docs \"*.config.ts\"",
     "lint:fix": "eslint --color --fix src tests docs \"*.config.ts\"",
-    "release": "scripts/release.sh",
+    "release": ".github/scripts/release.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage"
   },
