@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { Logger } from 'pino';
+import { pluralize } from '../template.js';
 import { z } from 'zod';
 
 const Rule = z.object({
@@ -79,7 +80,7 @@ const outputFor = (
 ): { title: string; summary: string; text?: string } => {
   if (failures.length === 0) {
     return {
-      title: `Title passes all ${totalRules} rule(s)`,
+      title: `Title passes all ${pluralize(totalRules, 'rule')}`,
       summary: 'Every configured rule matched the pull request title.',
     };
   }
@@ -89,7 +90,7 @@ const outputFor = (
     .join('\n');
 
   return {
-    title: `${failures.length} of ${totalRules} rule(s) failed`,
+    title: `${failures.length} of ${pluralize(totalRules, 'rule')} failed`,
     summary: 'One or more title rules did not match. See details for the offending rules.',
     text,
   };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { escapeMarkdown, interpolate } from '../src/template.js';
+import { escapeMarkdown, interpolate, pluralize } from '../src/template.js';
 import { appIdentity } from '../src/app-identity.js';
 
 describe('interpolate', () => {
@@ -76,5 +76,16 @@ describe('escapeMarkdown', () => {
 
   it('leaves cosmetic markdown untouched', () => {
     expect(escapeMarkdown('*bold* _em_ ~strike~ plain')).toBe('*bold* _em_ ~strike~ plain');
+  });
+});
+
+describe('pluralize', () => {
+  it('uses the singular for exactly one', () => {
+    expect(pluralize(1, 'label')).toBe('1 label');
+  });
+
+  it('adds an s otherwise', () => {
+    expect(pluralize(0, 'label')).toBe('0 labels');
+    expect(pluralize(2, 'candidate issue')).toBe('2 candidate issues');
   });
 });

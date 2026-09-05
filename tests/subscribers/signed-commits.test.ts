@@ -144,7 +144,8 @@ describe('signed-commits subscriber (via app)', () => {
 
     const checkScope = mockCreateCheck((body) => {
       expect(body.conclusion).toBe('failure');
-      expect(body.output.title).toContain('1 unsigned commit');
+      expect(body.output.title).toBe('1 unsigned commit');
+      expect(body.output.summary).toContain('1 of 2 commits is unsigned');
       expect(body.output.text).toContain('bbbbbbb');
       expect(body.output.text).toContain('second one');
       expect(body.output.text).toContain('Anonymous');
@@ -203,10 +204,13 @@ describe('signed-commits subscriber (via app)', () => {
     ].join('\n'));
     mockListCommits([
       { sha: 'cccccccccccccccccccccccccccccccccccccccc', verified: false },
+      { sha: 'dddddddddddddddddddddddddddddddddddddddd', verified: false },
     ]);
 
     const checkScope = mockCreateCheck((body) => {
       expect(body.conclusion).toBe('neutral');
+      expect(body.output.title).toBe('2 unsigned commits');
+      expect(body.output.summary).toContain('2 of 2 commits are unsigned');
       return true;
     });
 

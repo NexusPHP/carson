@@ -1,7 +1,7 @@
+import { interpolate, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
-import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
@@ -59,7 +59,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
     let closed = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${items.length} candidate item(s) labeled "${label}"`);
+    log.debug(`Scanning ${pluralize(items.length, 'candidate item')} labeled "${label}"`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
@@ -107,6 +107,6 @@ export class NoResponseCloserSubscriber extends Subscriber {
       closed += 1;
     });
 
-    log.info(`Closed ${closed} item(s) labeled "${label}" with no activity for ${daysUntilClose} day(s)`);
+    log.info(`Closed ${pluralize(closed, 'item')} labeled "${label}" with no activity for ${pluralize(daysUntilClose, 'day')}`);
   }
 }

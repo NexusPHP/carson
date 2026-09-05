@@ -173,7 +173,7 @@ describe('pr-title-linter subscriber (via app)', () => {
       expect(body.name).toBe('Carson / pr-title-linter');
       expect(body.head_sha).toBe(HEAD_SHA);
       expect(body.conclusion).toBe('success');
-      expect(body.output.title).toBe('Title passes all 1 rule(s)');
+      expect(body.output.title).toBe('Title passes all 1 rule');
       expect(body.output.text).toBeUndefined();
       return true;
     });
@@ -193,7 +193,7 @@ describe('pr-title-linter subscriber (via app)', () => {
 
     const checkScope = mockCreateCheck((body) => {
       expect(body.conclusion).toBe('failure');
-      expect(body.output.title).toBe('1 of 1 rule(s) failed');
+      expect(body.output.title).toBe('1 of 1 rule failed');
       expect(body.output.text).toContain('error');
       expect(body.output.text).toContain('Follow conventional commits');
       return true;
@@ -257,7 +257,7 @@ describe('pr-title-linter subscriber (via app)', () => {
 
     const checkScope = mockCreateCheck((body) => {
       expect(body.conclusion).toBe('failure');
-      expect(body.output.title).toBe('2 of 2 rule(s) failed');
+      expect(body.output.title).toBe('2 of 2 rules failed');
       expect(body.output.text).toContain('error');
       expect(body.output.text).toContain('warning');
       return true;
@@ -281,7 +281,7 @@ describe('pr-title-linter subscriber (via app)', () => {
     ].join('\n')));
 
     const checkScope = mockCreateCheck((body) => {
-      expect(body.output.title).toBe('Title passes all 1 rule(s)');
+      expect(body.output.title).toBe('Title passes all 1 rule');
       expect(body.conclusion).toBe('success');
       return true;
     });

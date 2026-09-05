@@ -54744,6 +54744,25 @@ var labelNames = (labels) => {
 
 // src/subscribers/auto-labeler.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
+
+// src/template.ts
+var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
+var universalContext = () => ({
+  app_name: appIdentity.name,
+  app_slug: appIdentity.slug,
+  app_login: appIdentity.login
+});
+var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
+var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+var interpolate = (template, context) => {
+  const merged = { ...universalContext(), ...context };
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+    const value = merged[key];
+    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+  });
+};
+
+// src/subscribers/auto-labeler.ts
 var StringArray = external_exports.array(external_exports.string());
 var FilesMatcher = external_exports.union([
   StringArray,
@@ -54867,7 +54886,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       }
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request2.number, labels: request2.labels });
-      this.log(context).info(`Added ${request2.labels.length} label(s) to #${request2.number} on request`);
+      this.log(context).info(`Added ${pluralize(request2.labels.length, "label")} to #${request2.number} on request`);
       return true;
     });
     registrar.on("unlabel", this.id, async (context, request2) => {
@@ -54877,7 +54896,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       for (const name of request2.labels) {
         await this.#removeLabel(context, request2.number, name);
       }
-      this.log(context).info(`Removed ${request2.labels.length} label(s) from #${request2.number} on request`);
+      this.log(context).info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request`);
       return true;
     });
   }
@@ -54978,7 +54997,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
         issue_number: target.number,
         labels: toAdd
       });
-      log.info(`Added ${toAdd.length} label(s) to ${target.kind} #${target.number}: ${toAdd.join(", ")}`);
+      log.info(`Added ${pluralize(toAdd.length, "label")} to ${target.kind} #${target.number}: ${toAdd.join(", ")}`);
     }
     for (const label of toRemove) {
       await context.octokit.rest.issues.removeLabel({
@@ -54989,7 +55008,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       });
     }
     if (toRemove.length > 0) {
-      log.info(`Removed ${toRemove.length} label(s) from ${target.kind} #${target.number}: ${toRemove.join(", ")}`);
+      log.info(`Removed ${pluralize(toRemove.length, "label")} from ${target.kind} #${target.number}: ${toRemove.join(", ")}`);
     }
   }
 };
@@ -55326,22 +55345,6 @@ var forEachConcurrent = async (items, concurrency, fn) => {
   for (let i = 0; i < items.length; i += concurrency) {
     await Promise.all(items.slice(i, i + concurrency).map(fn));
   }
-};
-
-// src/template.ts
-var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
-var universalContext = () => ({
-  app_name: appIdentity.name,
-  app_slug: appIdentity.slug,
-  app_login: appIdentity.login
-});
-var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
-var interpolate = (template, context) => {
-  const merged = { ...universalContext(), ...context };
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-    const value = merged[key];
-    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
-  });
 };
 
 // src/subscribers/conflicts-notifier.ts
@@ -55750,7 +55753,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
     let locked = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${issues.length} candidate issue(s)`);
+    log.debug(`Scanning ${pluralize(issues.length, "candidate issue")}`);
     await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
       if (issue3.pull_request !== void 0) {
         log.debug(`#${issue3.number}: Pull request, skipping`);
@@ -55795,7 +55798,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       log.debug(`#${issue3.number}: Locked`);
       locked += 1;
     });
-    log.info(`Locked ${locked} issue(s) older than ${days} day(s)`);
+    log.info(`Locked ${pluralize(locked, "issue")} older than ${pluralize(days, "day")}`);
   }
 };
 
@@ -55844,7 +55847,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
     let closed = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${items.length} candidate item(s) labeled "${label}"`);
+    log.debug(`Scanning ${pluralize(items.length, "candidate item")} labeled "${label}"`);
     await forEachConcurrent(items, CONCURRENCY3, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
@@ -55881,7 +55884,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
       log.debug(`#${item.number}: Closed`);
       closed += 1;
     });
-    log.info(`Closed ${closed} item(s) labeled "${label}" with no activity for ${daysUntilClose} day(s)`);
+    log.info(`Closed ${pluralize(closed, "item")} labeled "${label}" with no activity for ${pluralize(daysUntilClose, "day")}`);
   }
 };
 
@@ -55929,13 +55932,13 @@ var conclusionFor = (failures) => {
 var outputFor = (failures, totalRules) => {
   if (failures.length === 0) {
     return {
-      title: `Title passes all ${totalRules} rule(s)`,
+      title: `Title passes all ${pluralize(totalRules, "rule")}`,
       summary: "Every configured rule matched the pull request title."
     };
   }
   const text = failures.map((f) => `- **${f.level}** (${f.mode}): ${f.description}`).join("\n");
   return {
-    title: `${failures.length} of ${totalRules} rule(s) failed`,
+    title: `${failures.length} of ${pluralize(totalRules, "rule")} failed`,
     summary: "One or more title rules did not match. See details for the offending rules.",
     text
   };
@@ -56100,11 +56103,11 @@ var SignedCommitsSubscriber = class extends Subscriber {
     }));
     const conclusion = unsigned.length === 0 ? "success" : treatment;
     const output = unsigned.length === 0 ? {
-      title: `All ${commits.length} commit(s) signed`,
+      title: `All ${pluralize(commits.length, "commit")} signed`,
       summary: `Every commit in this pull request has a verified signature.`
     } : {
-      title: `${unsigned.length} unsigned commit(s)`,
-      summary: `${unsigned.length} of ${commits.length} commit(s) are unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
+      title: pluralize(unsigned.length, "unsigned commit"),
+      summary: `${unsigned.length} of ${pluralize(commits.length, "commit")} ${unsigned.length === 1 ? "is" : "are"} unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
       text: unsigned.map((c) => `- \`${c.sha.slice(0, 7)}\` ${escapeMarkdown(c.subject)} (${escapeMarkdown(c.author)})`).join("\n")
     };
     await context.octokit.rest.checks.create({
@@ -56237,7 +56240,7 @@ var StaleSubscriber = class extends Subscriber {
     let staled = 0;
     let closed = 0;
     const log = this.log(scheduled);
-    log.debug(`Scanning ${staleItems.length} stale and ${freshItems.length} newly inactive item(s)`);
+    log.debug(`Scanning ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
     await forEachConcurrent(items, CONCURRENCY4, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {

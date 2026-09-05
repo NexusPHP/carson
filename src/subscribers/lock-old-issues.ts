@@ -1,9 +1,9 @@
 import type { ActionContext, ActionRegistrar } from '../actions.js';
 import type { Context, Probot } from 'probot';
+import { interpolate, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
-import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { searchTimestamp } from '../github/search.js';
 import { subscriberSettings } from '../configuration/schema.js';
@@ -128,7 +128,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
     let locked = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${issues.length} candidate issue(s)`);
+    log.debug(`Scanning ${pluralize(issues.length, 'candidate issue')}`);
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.pull_request !== undefined) {
@@ -183,6 +183,6 @@ export class LockOldIssuesSubscriber extends Subscriber {
       locked += 1;
     });
 
-    log.info(`Locked ${locked} issue(s) older than ${days} day(s)`);
+    log.info(`Locked ${pluralize(locked, 'issue')} older than ${pluralize(days, 'day')}`);
   }
 }

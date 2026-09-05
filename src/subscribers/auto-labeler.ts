@@ -4,6 +4,7 @@ import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
+import { pluralize } from '../template.js';
 import { z } from 'zod';
 
 const StringArray = z.array(z.string());
@@ -199,7 +200,7 @@ export class AutoLabelerSubscriber extends Subscriber {
 
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request.number, labels: request.labels });
-      this.log(context).info(`Added ${request.labels.length} label(s) to #${request.number} on request`);
+      this.log(context).info(`Added ${pluralize(request.labels.length, 'label')} to #${request.number} on request`);
 
       return true;
     });
@@ -213,7 +214,7 @@ export class AutoLabelerSubscriber extends Subscriber {
         await this.#removeLabel(context, request.number, name);
       }
 
-      this.log(context).info(`Removed ${request.labels.length} label(s) from #${request.number} on request`);
+      this.log(context).info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request`);
 
       return true;
     });
@@ -349,7 +350,7 @@ export class AutoLabelerSubscriber extends Subscriber {
         issue_number: target.number,
         labels: toAdd,
       });
-      log.info(`Added ${toAdd.length} label(s) to ${target.kind} #${target.number}: ${toAdd.join(', ')}`);
+      log.info(`Added ${pluralize(toAdd.length, 'label')} to ${target.kind} #${target.number}: ${toAdd.join(', ')}`);
     }
 
     for (const label of toRemove) {
@@ -362,7 +363,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     }
 
     if (toRemove.length > 0) {
-      log.info(`Removed ${toRemove.length} label(s) from ${target.kind} #${target.number}: ${toRemove.join(', ')}`);
+      log.info(`Removed ${pluralize(toRemove.length, 'label')} from ${target.kind} #${target.number}: ${toRemove.join(', ')}`);
     }
   }
 }

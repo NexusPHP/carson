@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
+import { escapeMarkdown, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { escapeMarkdown } from '../template.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -72,12 +72,12 @@ export class SignedCommitsSubscriber extends Subscriber {
     const conclusion = unsigned.length === 0 ? 'success' : treatment;
     const output = unsigned.length === 0
       ? {
-          title: `All ${commits.length} commit(s) signed`,
+          title: `All ${pluralize(commits.length, 'commit')} signed`,
           summary: `Every commit in this pull request has a verified signature.`,
         }
       : {
-          title: `${unsigned.length} unsigned commit(s)`,
-          summary: `${unsigned.length} of ${commits.length} commit(s) are unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
+          title: pluralize(unsigned.length, 'unsigned commit'),
+          summary: `${unsigned.length} of ${pluralize(commits.length, 'commit')} ${unsigned.length === 1 ? 'is' : 'are'} unsigned. Sign your commits with GPG or SSH and force-push to clear this check.`,
           text: unsigned
             .map((c) => `- \`${c.sha.slice(0, 7)}\` ${escapeMarkdown(c.subject)} (${escapeMarkdown(c.author)})`)
             .join('\n'),

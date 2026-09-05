@@ -1,9 +1,9 @@
 import type { Context, Probot } from 'probot';
 import { findCarsonComment, minimizeComment } from '../github/comments.js';
+import { interpolate, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
-import { interpolate } from '../template.js';
 import { labelNames } from '../github/labels.js';
 import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
@@ -150,7 +150,7 @@ export class StaleSubscriber extends Subscriber {
     let closed = 0;
     const log = this.log(scheduled);
 
-    log.debug(`Scanning ${staleItems.length} stale and ${freshItems.length} newly inactive item(s)`);
+    log.debug(`Scanning ${pluralize(staleItems.length, 'stale item')} and ${pluralize(freshItems.length, 'newly inactive item')}`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);
