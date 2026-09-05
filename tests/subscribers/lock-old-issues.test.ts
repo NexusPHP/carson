@@ -10,7 +10,6 @@ interface IssueShape {
   locked?: boolean;
   closed_at: string | null;
   labels?: ({ name: string } | string)[];
-  pull_request?: { url: string };
   user?: { login: string } | null;
 }
 
@@ -41,7 +40,6 @@ const makeHarness = (issues: IssueShape[], config: unknown): Harness => {
     locked: i.locked ?? false,
     closed_at: i.closed_at,
     labels: i.labels ?? [],
-    pull_request: i.pull_request,
     user: i.user === undefined ? { login: 'octocat' } : i.user,
   })));
 
@@ -162,17 +160,6 @@ describe('lock-old-issues subscriber', () => {
   it('skips already-locked issues', async () => {
     const { context, lockMock } = makeHarness(
       [{ number: 1, closed_at: DAYS_AGO(400), locked: true }],
-      ENABLED_CONFIG,
-    );
-
-    await runScheduled(context);
-
-    expect(lockMock).not.toHaveBeenCalled();
-  });
-
-  it('skips pull requests', async () => {
-    const { context, lockMock } = makeHarness(
-      [{ number: 1, closed_at: DAYS_AGO(400), pull_request: { url: 'https://example/1' } }],
       ENABLED_CONFIG,
     );
 

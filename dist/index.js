@@ -55755,10 +55755,6 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     const log = this.log(scheduled);
     log.debug(`Scanning ${pluralize(issues.length, "candidate issue")}`);
     await forEachConcurrent(issues, CONCURRENCY2, async (issue3) => {
-      if (issue3.pull_request !== void 0) {
-        log.debug(`#${issue3.number}: Pull request, skipping`);
-        return;
-      }
       if (issue3.locked) {
         log.debug(`#${issue3.number}: Already locked, skipping`);
         return;

@@ -131,11 +131,6 @@ export class LockOldIssuesSubscriber extends Subscriber {
     log.debug(`Scanning ${pluralize(issues.length, 'candidate issue')}`);
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
-      if (issue.pull_request !== undefined) {
-        log.debug(`#${issue.number}: Pull request, skipping`);
-        return;
-      }
-
       if (issue.locked) {
         log.debug(`#${issue.number}: Already locked, skipping`);
         return;
