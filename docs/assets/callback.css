@@ -58,7 +58,9 @@ button:disabled { cursor: default; opacity: 0.85; }
 dl.identity { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.75rem; margin: 0.5rem 0; }
 dl.identity dt { color: var(--muted); font-size: 0.9rem; font-weight: 600; }
 dl.identity dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; word-break: break-all; }
-ol { padding-left: 1.25rem; }
-ol li { margin: 0.4rem 0; }
+#result { counter-reset: step; }
+section.step h2::before { counter-increment: step; content: counter(step) '. '; }
+details { margin-top: 0.75rem; }
+summary { cursor: pointer; color: var(--muted); }
 a { color: var(--link); }
 .status { color: var(--muted); font-style: italic; }

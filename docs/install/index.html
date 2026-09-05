@@ -32,41 +32,43 @@
       <p class="status">Carson posts comments and check runs as the bot login above. Treat this as the App's GitHub handle.</p>
     </section>
 
-    <section>
-      <h2>App ID</h2>
+    <p>Follow the steps in order. Each step shows the value it needs and where it goes.</p>
+
+    <section class="step">
+      <h2>Add the App ID as a repository secret</h2>
+      <p class="status">In the repository or organisation where Carson will run, go to <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong> and add a secret named <code>CARSON_APP_ID</code> with this value.</p>
       <div class="field">
         <input type="text" id="app-id" readonly placeholder="1234567">
         <button type="button" id="copy-app-id" class="secondary">Copy</button>
       </div>
     </section>
 
-    <section>
-      <h2>Private key</h2>
-      <p class="status">Download the <code>.pem</code> file or copy the contents.</p>
+    <section class="step">
+      <h2>Add the private key as a repository secret</h2>
+      <p class="status">On the same page, add a secret named <code>CARSON_PRIVATE_KEY</code> with the full PEM contents, including the <code>-----BEGIN</code> and <code>-----END</code> lines. Download the <code>.pem</code> file to keep a copy, or copy the contents straight into the secret.</p>
       <button type="button" id="download-pem">Download .pem</button>
       <button type="button" id="copy-pem" class="secondary">Copy</button>
       <button type="button" id="reveal-pem" class="secondary">Reveal</button>
       <pre id="pem-display" hidden></pre>
     </section>
 
-    <section>
-      <h2>Open the App settings</h2>
-      <p class="status">From the App settings page you can install Carson on repositories, regenerate the private key, or review the App's permissions.</p>
+    <section class="step">
+      <h2>Install the App on your repositories</h2>
+      <p class="status">From the App settings page, choose <strong>Install App</strong> and select the repositories Carson should act on. The same page lets you regenerate the private key or review the App's permissions later.</p>
       <a id="app-settings-link" class="button" target="_blank" rel="noopener">Open App settings on GitHub</a>
+      <details>
+        <summary>Optional: set the App icon</summary>
+        <p class="status">Carson ships with a butler icon you can use as your App's avatar. Save the image, then upload it under <strong>Display information &rarr; Logo</strong> on the App settings page. GitHub does not expose an API for App avatars, so this is the only way to set it.</p>
+        <div class="icon-preview">
+          <img src="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" alt="Carson butler icon" width="96" height="96">
+          <a href="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" download="butler-logo.png" class="button secondary" target="_blank" rel="noopener">Download butler icon</a>
+        </div>
+      </details>
     </section>
 
-    <section>
-      <h2>Optional: set the App icon</h2>
-      <p class="status">Carson ships with a butler icon you can use as your App's avatar. Save the image, then upload it under <strong>Display information &rarr; Logo</strong> on the App settings page above. GitHub does not expose an API for App avatars, so this is the only way to set it.</p>
-      <div class="icon-preview">
-        <img src="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" alt="Carson butler icon" width="96" height="96">
-        <a href="https://raw.githubusercontent.com/NexusPHP/carson/HEAD/butler-logo.png" download="butler-logo.png" class="button secondary" target="_blank" rel="noopener">Download butler icon</a>
-      </div>
-    </section>
-
-    <section>
-      <h2>Workflow file</h2>
-      <p class="status">Save as <code>.github/workflows/carson.yml</code> in each repository where Carson should run. Trim triggers you do not need.</p>
+    <section class="step">
+      <h2>Commit the workflow file</h2>
+      <p class="status">Save as <code>.github/workflows/carson.yml</code> in each repository where Carson should run. It reads the two secrets from steps 1 and 2. Trim triggers you do not need.</p>
       <pre id="workflow-yaml">name: Carson
 
 on:
@@ -76,7 +78,7 @@ on:
     types: [submitted]
   push:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, closed, reopened, labeled]
   issue_comment:
     types: [created]
   schedule:
@@ -94,25 +96,13 @@ jobs:
       <button type="button" id="copy-workflow" class="secondary">Copy</button>
     </section>
 
-    <section>
-      <h2>Configuration file</h2>
-      <p class="status">Save as <code>.github/carson.yml</code> on the default branch. Carson reads its config from the default branch only, so pull requests cannot alter the bot's behaviour.</p>
+    <section class="step">
+      <h2>Commit the configuration file</h2>
+      <p class="status">Save as <code>.github/carson.yml</code> on the default branch and list the subscribers you want enabled. See <a href="https://github.com/NexusPHP/carson/blob/1.x/SUBSCRIBERS.md" target="_blank" rel="noopener">SUBSCRIBERS.md</a> for the full list. Carson reads its config from the default branch only, so pull requests cannot alter the bot's behaviour.</p>
       <pre id="carson-yaml">version: 1
 subscribers: []
 </pre>
       <button type="button" id="copy-carson" class="secondary">Copy</button>
-    </section>
-
-    <section>
-      <h2>Next steps</h2>
-      <ol>
-        <li>In the repository or organisation where Carson will run, go to <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong>.</li>
-        <li>Add a secret named <code>CARSON_APP_ID</code> with the value above.</li>
-        <li>Add a secret named <code>CARSON_PRIVATE_KEY</code> with the full PEM contents, including the <code>-----BEGIN</code> and <code>-----END</code> lines.</li>
-        <li>Install the App on the repositories you want Carson to act on.</li>
-        <li>Commit the workflow file above to your repository.</li>
-        <li>Commit the configuration file above to your default branch and list the subscribers you want enabled. See <a href="https://github.com/NexusPHP/carson/blob/1.x/SUBSCRIBERS.md" target="_blank" rel="noopener">SUBSCRIBERS.md</a> for the full list.</li>
-      </ol>
     </section>
   </div>
 
