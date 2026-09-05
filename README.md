@@ -88,7 +88,7 @@ jobs:
   carson:
     runs-on: ubuntu-latest
     steps:
-      - uses: NexusPHP/carson@<commit-sha>  # v1.0.0
+      - uses: NexusPHP/carson@<commit-sha>  # v1.2.0
         with:
           app_id: ${{ secrets.CARSON_APP_ID }}
           private_key: ${{ secrets.CARSON_PRIVATE_KEY }}
@@ -99,7 +99,7 @@ The trigger list above covers every event Carson's bundled subscribers register.
 > [!IMPORTANT]
 > Carson uses `pull_request_target` so that secrets (and the App's PEM) are available on pull requests opened from forks. Under `pull_request_target`, GitHub Actions runs the workflow file **from the base branch**, so changes to `.github/workflows/carson.yml` in a pull request will not take effect until that PR is merged. Carson never checks out or executes PR code, so the usual `pull_request_target` footgun (running untrusted code with secrets) does not apply. The action treats `pull_request_target` and `pull_request` as the same event internally, so you can use either trigger.
 
-Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.0.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
+Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.2.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
 
 ### External triggers (`repository_dispatch`)
 

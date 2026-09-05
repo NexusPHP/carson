@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.2.0](https://github.com/NexusPHP/carson/compare/v1.1.0...v1.2.0) - 2026-09-05
+
 ### Added
 
 - `conflicts-notifier` applies a configurable `label` while a PR conflicts and removes it once the PR is clean.
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `/label` and `/unlabel` in `commands` now require `auto-labeler` to be enabled.
+- Counted nouns in log lines and check-run titles are inflected (`1 unsigned commit`, `2 of 2 rules failed`) instead of using `(s)`.
+- The App installer page presents the App ID, private key, workflow, and configuration as numbered setup steps.
 
 ## [v1.1.0](https://github.com/NexusPHP/carson/compare/v1.0.0...v1.1.0) - 2026-09-04
 
