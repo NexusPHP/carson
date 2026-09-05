@@ -20,6 +20,7 @@
   },
   "include": [
     "src",
+    ".github/scripts",
     "tests",
     "*.config.ts"
   ]

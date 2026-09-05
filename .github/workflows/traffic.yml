@@ -20,9 +20,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 24
+
       - name: Switch to the traffic branch
         run: |
           set -euo pipefail
+          cp .github/scripts/traffic.ts /tmp/traffic.ts
           if git fetch origin traffic 2>/dev/null; then
             git checkout traffic
           else
@@ -39,33 +45,7 @@ jobs:
           gh api "repos/$REPO/traffic/clones" > /tmp/window.json
 
       - name: Merge into the cumulative store
-        run: |
-          set -euo pipefail
-          node - <<'EOF'
-          const fs = require('fs');
-          const window_ = JSON.parse(fs.readFileSync('/tmp/window.json', 'utf8'));
-          const data = fs.existsSync('clones.json')
-            ? JSON.parse(fs.readFileSync('clones.json', 'utf8'))
-            : { days: {} };
-
-          for (const day of window_.clones) {
-            const date = day.timestamp.slice(0, 10);
-            data.days[date] = { count: day.count, uniques: day.uniques };
-          }
-
-          const total = Object.values(data.days).reduce((sum, d) => sum + d.count, 0);
-          const message = total >= 1e6 ? `${(total / 1e6).toFixed(1)}M`
-            : total >= 1e3 ? `${(total / 1e3).toFixed(1)}k`
-            : String(total);
-
-          fs.writeFileSync('clones.json', JSON.stringify(data, null, 2) + '\n');
-          fs.writeFileSync('badge.json', JSON.stringify({
-            schemaVersion: 1,
-            label: 'action runs',
-            message,
-            color: 'blue',
-          }, null, 2) + '\n');
-          EOF
+        run: node /tmp/traffic.ts /tmp/window.json clones.json badge.json
 
       - name: Commit and push
         run: |
