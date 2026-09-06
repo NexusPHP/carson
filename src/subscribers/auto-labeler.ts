@@ -5,6 +5,7 @@ import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
 import { pluralize } from '../template.js';
+import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const StringArray = z.array(z.string());
@@ -235,13 +236,14 @@ export class AutoLabelerSubscriber extends Subscriber {
 
   async #handlePullRequest(context: LabelContext): Promise<void> {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings);
+    // Bot-opened PRs (Dependabot) need labels too, so this skips loadEnabledSettings' bot-sender guard on purpose.
+    const config = await this.loadEnabledConfig(context);
 
-    if (enabled === null) {
+    if (config === null) {
       return;
     }
 
-    const { settings } = enabled;
+    const settings = subscriberSettings(config, this.id, Settings, log) ?? {};
     const rawRules = settings.rules ?? [];
 
     if (rawRules.length === 0) {
@@ -287,13 +289,14 @@ export class AutoLabelerSubscriber extends Subscriber {
 
   async #handleIssue(context: IssueContext): Promise<void> {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings);
+    // Issues filed by issue-intake arrive with a Bot sender, so this skips loadEnabledSettings' bot-sender guard on purpose.
+    const config = await this.loadEnabledConfig(context);
 
-    if (enabled === null) {
+    if (config === null) {
       return;
     }
 
-    const { settings } = enabled;
+    const settings = subscriberSettings(config, this.id, Settings, log) ?? {};
     const rawRules = settings.issue_rules ?? [];
 
     if (rawRules.length === 0) {

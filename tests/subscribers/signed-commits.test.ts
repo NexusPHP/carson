@@ -263,9 +263,14 @@ describe('signed-commits subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when the sender is a bot', async () => {
+  it('checks a PR opened by a bot', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
+    mockListCommits([{ sha: 'aaaaaaa1111111111111111111111111111aaaaa', verified: true }]);
+    const checkScope = mockCreateCheck((body) => {
+      expect(body.conclusion).toBe('success');
+      return true;
+    });
 
     await probot.receive({
       id: 'evt-sc-bot',
@@ -273,7 +278,7 @@ describe('signed-commits subscriber (via app)', () => {
       payload: prPayload({ senderType: 'Bot' }) as never,
     });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(checkScope.isDone()).toBe(true);
   });
 
   it('fires on pull_request.opened', async () => {

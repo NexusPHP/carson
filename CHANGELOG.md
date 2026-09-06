@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `triage-labeler` now labels pull requests opened or updated by bots such as Dependabot.
+- `auto-labeler`, `conflicts-notifier`, `pr-title-linter`, and `signed-commits` now run for bot senders, so bot-opened pull requests get labels, conflict notices, and check runs.
 
 ## [v1.2.0](https://github.com/NexusPHP/carson/compare/v1.1.0...v1.2.0) - 2026-09-05
 

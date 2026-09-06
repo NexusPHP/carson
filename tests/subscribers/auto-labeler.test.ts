@@ -188,6 +188,19 @@ describe('auto-labeler subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
+  it('does nothing on issues when no settings are configured', async () => {
+    mockInstallationToken();
+    mockConfig('version: 1\nsubscribers:\n  - auto-labeler\n');
+
+    await probot.receive({
+      id: 'evt-issue-no-settings',
+      name: 'issues',
+      payload: issuePayload() as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   it('does not fetch files when no rule uses files', async () => {
     mockInstallationToken();
     mockConfig(configWithRules([
@@ -653,9 +666,14 @@ describe('auto-labeler subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when the sender is a bot', async () => {
+  it('labels a PR opened by a bot', async () => {
     mockInstallationToken();
-    mockConfig(null);
+    mockConfig(configWithRules([
+      '      - label: "area:api"',
+      '        files: ["src/api/**"]',
+    ].join('\n')));
+    mockListFiles(['src/api/users.ts']);
+    const addScope = mockAddLabels(['area:api']);
 
     await probot.receive({
       id: 'evt-bot',
@@ -663,7 +681,7 @@ describe('auto-labeler subscriber (via app)', () => {
       payload: prPayload({ senderType: 'Bot' }) as never,
     });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(addScope.isDone()).toBe(true);
   });
 
   it('does nothing when carson.yml is missing', async () => {

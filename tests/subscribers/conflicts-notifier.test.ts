@@ -505,9 +505,14 @@ describe('conflicts-notifier subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when the sender is a bot', async () => {
+  it('notifies on a PR opened by a bot', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([]);
+
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
 
     await probot.receive({
       id: 'evt-bot',
@@ -515,7 +520,7 @@ describe('conflicts-notifier subscriber (via app)', () => {
       payload: { ...prPayload(), sender: { type: 'Bot' } } as never,
     });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('also fires on pull_request.opened', async () => {
@@ -630,14 +635,23 @@ describe('conflicts-notifier subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('skips push events when the sender is a bot', async () => {
+  it('scans open PRs on a push by a bot', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockListPRsForBase('main', [{ number: 101, user: { login: 'octocat' } }]);
+    mockGetPRByNumber(101, false);
+    mockCommentsQuery([]);
+
+    const createScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/101/comments').reply(201, {});
+
     await probot.receive({
       id: 'evt-push-bot',
       name: 'push',
       payload: pushPayload({ senderType: 'Bot' }) as never,
     });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('skips push events when conflicts-notifier is not enabled', async () => {

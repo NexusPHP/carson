@@ -54913,11 +54913,11 @@ var AutoLabelerSubscriber = class extends Subscriber {
   }
   async #handlePullRequest(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
-    const { settings } = enabled;
+    const settings = subscriberSettings(config3, this.id, Settings, log) ?? {};
     const rawRules = settings.rules ?? [];
     if (rawRules.length === 0) {
       log.debug("No rules configured, skipping");
@@ -54955,11 +54955,11 @@ var AutoLabelerSubscriber = class extends Subscriber {
   }
   async #handleIssue(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
-    const { settings } = enabled;
+    const settings = subscriberSettings(config3, this.id, Settings, log) ?? {};
     const rawRules = settings.issue_rules ?? [];
     if (rawRules.length === 0) {
       log.debug("No issue rules configured, skipping");
@@ -55392,9 +55392,6 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     });
   }
   async #handlePrEvent(context) {
-    if (context.isBot) {
-      return;
-    }
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return;
@@ -55402,9 +55399,6 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     await this.#checkPr(context, context.payload.pull_request.number, config3);
   }
   async #handlePushEvent(context) {
-    if (context.isBot) {
-      return;
-    }
     const ref = context.payload.ref;
     if (!ref.startsWith("refs/heads/")) {
       return;
@@ -55953,11 +55947,11 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings7);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
-    const { settings } = enabled;
+    const settings = subscriberSettings(config3, this.id, Settings7, log) ?? {};
     const rules = settings.rules ?? [];
     if (rules.length === 0) {
       log.debug("No rules configured, skipping");
@@ -56077,11 +56071,11 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings9);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
-    const { settings } = enabled;
+    const settings = subscriberSettings(config3, this.id, Settings9, this.log(context)) ?? {};
     const checkName = settings.name ?? DEFAULT_NAME2;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
     const pr = context.payload.pull_request;

@@ -152,17 +152,21 @@ describe('pr-title-linter subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when the sender is a bot', async () => {
+  it('checks a PR opened by a bot', async () => {
     mockInstallationToken();
-    mockConfig(null);
+    mockConfig(configWithRules(CONVENTIONAL_RULE));
+    const checkScope = mockCreateCheck((body) => {
+      expect(body.conclusion).toBe('success');
+      return true;
+    });
 
     await probot.receive({
       id: 'evt-bot',
       name: 'pull_request',
-      payload: prPayload({ senderType: 'Bot' }) as never,
+      payload: prPayload({ title: 'feat: add widget', senderType: 'Bot' }) as never,
     });
 
-    expect(nock.pendingMocks()).toEqual([]);
+    expect(checkScope.isDone()).toBe(true);
   });
 
   it('posts a success check when every rule matches', async () => {

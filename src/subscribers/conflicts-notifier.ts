@@ -87,10 +87,6 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   }
 
   async #handlePrEvent(context: Context<PrEvent>): Promise<void> {
-    if (context.isBot) {
-      return;
-    }
-
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {
@@ -101,10 +97,6 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   }
 
   async #handlePushEvent(context: Context<'push'>): Promise<void> {
-    if (context.isBot) {
-      return;
-    }
-
     const ref = context.payload.ref;
 
     if (!ref.startsWith('refs/heads/')) {
