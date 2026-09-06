@@ -12,19 +12,14 @@ interface TrafficWindow {
 interface Store {
   total?: number;
   since?: string;
-  days?: Record<string, Day | [count: number, uniques: number]>;
+  days?: Record<string, Day>;
 }
 
 const [windowPath, storePath, badgePath] = process.argv.slice(2) as [string, string, string];
 const window_ = JSON.parse(fs.readFileSync(windowPath, 'utf8')) as TrafficWindow;
 const store = (fs.existsSync(storePath) ? JSON.parse(fs.readFileSync(storePath, 'utf8')) : {}) as Store;
 
-const days: Record<string, Day> = Object.fromEntries(
-  Object.entries(store.days ?? {}).map(([date, day]) => [
-    date,
-    Array.isArray(day) ? { count: day[0], uniques: day[1] } : day,
-  ]),
-);
+const days: Record<string, Day> = { ...store.days };
 
 for (const { timestamp, count, uniques } of window_.clones) {
   days[timestamp.slice(0, 10)] = { count, uniques };
