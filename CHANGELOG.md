@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.3.0](https://github.com/NexusPHP/carson/compare/v1.2.0...v1.3.0) - 2026-09-06
+
 ### Changed
 
 - `triage-labeler` qualifies reviewers by repository role (`qualifying_roles`, default `[admin, maintain, write]`) instead of `author_association`, which hid private organization members from the App. A leftover `qualifying_associations` setting is ignored with a warning.
