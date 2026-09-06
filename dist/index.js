@@ -54725,9 +54725,6 @@ var Subscriber = class {
     return config3;
   }
   async loadEnabledSettings(context, schema) {
-    if (context.isBot === true) {
-      return null;
-    }
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return null;
@@ -54913,11 +54910,11 @@ var AutoLabelerSubscriber = class extends Subscriber {
   }
   async #handlePullRequest(context) {
     const log = this.log(context);
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings, log) ?? {};
+    const { settings } = enabled;
     const rawRules = settings.rules ?? [];
     if (rawRules.length === 0) {
       log.debug("No rules configured, skipping");
@@ -54955,11 +54952,11 @@ var AutoLabelerSubscriber = class extends Subscriber {
   }
   async #handleIssue(context) {
     const log = this.log(context);
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings, log) ?? {};
+    const { settings } = enabled;
     const rawRules = settings.issue_rules ?? [];
     if (rawRules.length === 0) {
       log.debug("No issue rules configured, skipping");
@@ -55947,11 +55944,11 @@ var PrTitleLinterSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(context, Settings7);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings7, log) ?? {};
+    const { settings } = enabled;
     const rules = settings.rules ?? [];
     if (rules.length === 0) {
       log.debug("No rules configured, skipping");
@@ -56071,11 +56068,11 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(context, Settings9);
+    if (enabled === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings9, this.log(context)) ?? {};
+    const { settings } = enabled;
     const checkName = settings.name ?? DEFAULT_NAME2;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
     const pr = context.payload.pull_request;
@@ -56152,6 +56149,9 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
+    if (context.isBot) {
+      return;
+    }
     const enabled = await this.loadEnabledSettings(context, Settings10);
     if (enabled === null) {
       return;
@@ -56402,6 +56402,9 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     });
   }
   async #apply(context, kind, item) {
+    if (context.isBot) {
+      return;
+    }
     const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
@@ -56484,7 +56487,7 @@ var ThanksSubscriber = class extends Subscriber {
     probot.on("pull_request.closed", async (context) => {
       const log = this.log(context);
       const pr = context.payload.pull_request;
-      if (!pr.merged) {
+      if (context.isBot || !pr.merged) {
         return;
       }
       if (pr.user === null) {
@@ -56594,11 +56597,11 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const config3 = await this.loadEnabledConfig(context);
-    if (config3 === null) {
+    const enabled = await this.loadEnabledSettings(context, Settings13);
+    if (enabled === null) {
       return;
     }
-    const raw = subscriberSettings(config3, this.id, Settings13, log) ?? {};
+    const raw = enabled.settings;
     if (raw.qualifying_associations !== void 0) {
       log.warn("qualifying_associations is no longer supported, use qualifying_roles instead");
     }
@@ -56832,6 +56835,9 @@ var WelcomeSubscriber = class extends Subscriber {
   requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
     probot.on("pull_request.opened", async (context) => {
+      if (context.isBot) {
+        return;
+      }
       const log = this.log(context);
       const enabled = await this.loadEnabledSettings(context, Settings15);
       if (enabled === null) {
@@ -56855,6 +56861,9 @@ var WelcomeSubscriber = class extends Subscriber {
       log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
+      if (context.isBot) {
+        return;
+      }
       const log = this.log(context);
       const issue3 = context.payload.issue;
       if (issue3.user === null) {

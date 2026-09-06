@@ -834,7 +834,7 @@ Draft PRs are never labeled. A PR converted to draft has its triage label remove
 
 A reviewer "qualifies" when their repository role, looked up via `repos.getCollaboratorPermissionLevel`, is in the configured `qualifying_roles` set. The default and maximum set is `{admin, maintain, write}`. The set cannot be widened to include `triage` or `read`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label. The role lookup replaces `author_association`, which reports private organization members to an App as `CONTRIBUTOR` or `NONE` unless the App holds the organization `members: read` permission. A leftover `qualifying_associations` setting is ignored with a warning.
 
-Unlike most subscribers, this one runs for bot senders too, so pull requests opened by Dependabot and similar bots are triaged.
+Bot senders are not skipped, so pull requests opened by Dependabot and similar bots are triaged.
 
 Labels are auto-created by GitHub on first use with a random color. To control the colors, create the labels manually in the repository's label settings before enabling the subscriber.
 

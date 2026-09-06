@@ -1,7 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { escapeMarkdown, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -42,14 +41,13 @@ export class SignedCommitsSubscriber extends Subscriber {
   }
 
   async #handle(context: SignedCommitsContext): Promise<void> {
-    // A required check must run on bot PRs too, so this skips loadEnabledSettings' bot-sender guard on purpose.
-    const config = await this.loadEnabledConfig(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
 
-    if (config === null) {
+    if (enabled === null) {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings, this.log(context)) ?? {};
+    const { settings } = enabled;
     const checkName = settings.name ?? DEFAULT_NAME;
     const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
 

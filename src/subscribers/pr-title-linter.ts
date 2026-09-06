@@ -2,7 +2,6 @@ import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { Logger } from 'pino';
 import { pluralize } from '../template.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const Rule = z.object({
@@ -113,14 +112,13 @@ export class PrTitleLinterSubscriber extends Subscriber {
 
   async #handle(context: PrTitleContext): Promise<void> {
     const log = this.log(context);
-    // A required check must run on bot PRs too, so this skips loadEnabledSettings' bot-sender guard on purpose.
-    const config = await this.loadEnabledConfig(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
 
-    if (config === null) {
+    if (enabled === null) {
       return;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings, log) ?? {};
+    const { settings } = enabled;
     const rules = settings.rules ?? [];
 
     if (rules.length === 0) {

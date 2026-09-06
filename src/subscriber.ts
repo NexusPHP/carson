@@ -67,13 +67,9 @@ export abstract class Subscriber {
   }
 
   protected async loadEnabledSettings<T>(
-    context: ConfigLoadable & { isBot?: boolean },
+    context: ConfigLoadable,
     schema: z.ZodSchema<T>,
   ): Promise<EnabledSettings<T> | null> {
-    if (context.isBot === true) {
-      return null;
-    }
-
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {

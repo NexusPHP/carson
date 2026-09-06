@@ -56,6 +56,10 @@ export class StaleSubscriber extends Subscriber {
     issueNumber: number,
     rawLabels: { name?: string }[] | undefined,
   ): Promise<void> {
+    if (context.isBot) {
+      return;
+    }
+
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {

@@ -69,6 +69,10 @@ export class WelcomeSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {
+      if (context.isBot) {
+        return;
+      }
+
       const log = this.log(context);
       const enabled = await this.loadEnabledSettings(context, Settings);
 
@@ -100,6 +104,10 @@ export class WelcomeSubscriber extends Subscriber {
     });
 
     probot.on('issues.opened', async (context: Context<'issues.opened'>): Promise<void> => {
+      if (context.isBot) {
+        return;
+      }
+
       const log = this.log(context);
       const issue = context.payload.issue;
 

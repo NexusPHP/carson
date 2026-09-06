@@ -1,6 +1,5 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const QUALIFYING_ROLES = ['admin', 'maintain', 'write'] as const;
@@ -128,14 +127,13 @@ export class TriageLabelerSubscriber extends Subscriber {
 
   async #handle(context: TriageContext): Promise<void> {
     const log = this.log(context);
-    // Bot-opened PRs (Dependabot) need triage too, so this skips loadEnabledSettings' bot-sender guard on purpose.
-    const config = await this.loadEnabledConfig(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
 
-    if (config === null) {
+    if (enabled === null) {
       return;
     }
 
-    const raw = subscriberSettings(config, this.id, Settings, log) ?? {};
+    const raw = enabled.settings;
 
     if (raw.qualifying_associations !== undefined) {
       log.warn('qualifying_associations is no longer supported, use qualifying_roles instead');

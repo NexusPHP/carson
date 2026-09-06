@@ -158,6 +158,10 @@ export class TemplateEnforcerSubscriber extends Subscriber {
   }
 
   async #apply(context: Context<IssueEvent | PrEvent>, kind: ItemKind, item: Item): Promise<void> {
+    if (context.isBot) {
+      return;
+    }
+
     const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
 

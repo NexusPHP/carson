@@ -19,7 +19,7 @@ export class ThanksSubscriber extends Subscriber {
       const log = this.log(context);
       const pr = context.payload.pull_request;
 
-      if (!pr.merged) {
+      if (context.isBot || !pr.merged) {
         return;
       }
 

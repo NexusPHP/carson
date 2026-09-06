@@ -91,8 +91,6 @@ export class IssueIntakeSubscriber extends Subscriber {
 
   async #handle(context: IntakeContext): Promise<void> {
     const log = this.log(context);
-    // Dispatch senders are machines (an App-minted token has a Bot sender),
-    // so this skips loadEnabledSettings' bot-sender guard on purpose.
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {
