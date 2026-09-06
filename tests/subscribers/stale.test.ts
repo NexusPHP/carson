@@ -589,6 +589,9 @@ describe('stale subscriber (webhook un-stale)', () => {
   });
 
   it('skips when the sender is a bot (Dependabot rebase etc.)', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+
     await probot.receive({
       id: 'evt-bot-sender',
       name: 'pull_request',

@@ -56522,12 +56522,13 @@ var ThanksSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/triage-labeler.ts
-var QUALIFYING_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"];
+var QUALIFYING_ROLES = ["admin", "maintain", "write"];
 var Settings13 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
-  qualifying_associations: external_exports.array(external_exports.enum(QUALIFYING_ASSOCIATIONS)).optional()
+  qualifying_roles: external_exports.array(external_exports.enum(QUALIFYING_ROLES)).optional(),
+  qualifying_associations: external_exports.unknown().optional()
 });
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
@@ -56543,15 +56544,12 @@ var resolveSettings = (raw) => ({
   needsReviewLabel: raw.needs_review_label ?? DEFAULT_NEEDS_REVIEW,
   needsReworkLabel: raw.needs_rework_label ?? DEFAULT_NEEDS_REWORK,
   approvedLabel: raw.approved_label ?? DEFAULT_APPROVED,
-  qualifyingAssociations: new Set(raw.qualifying_associations ?? QUALIFYING_ASSOCIATIONS)
+  qualifyingRoles: new Set(raw.qualifying_roles ?? QUALIFYING_ROLES)
 });
-var computeDesired = (reviews, qualifying) => {
+var latestVerdicts = (reviews) => {
   const latest = /* @__PURE__ */ new Map();
   for (const review of reviews) {
     if (review.user === null) {
-      continue;
-    }
-    if (!qualifying.has(review.author_association)) {
       continue;
     }
     if (review.state !== "APPROVED" && review.state !== "CHANGES_REQUESTED") {
@@ -56559,7 +56557,15 @@ var computeDesired = (reviews, qualifying) => {
     }
     latest.set(review.user.login, review.state);
   }
-  const states = Array.from(latest.values());
+  return latest;
+};
+var computeDesired = async (reviews, qualifies) => {
+  const states = [];
+  for (const [login, verdict] of latestVerdicts(reviews)) {
+    if (await qualifies(login)) {
+      states.push(verdict);
+    }
+  }
   if (states.includes("CHANGES_REQUESTED")) {
     return "needs_rework";
   }
@@ -56579,7 +56585,7 @@ var labelFor = (desired, settings) => {
 };
 var TriageLabelerSubscriber = class extends Subscriber {
   id = "triage-labeler";
-  description = "Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from contributors without write access are ignored.";
+  description = "Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from users without write access are ignored.";
   requiredPermissions = {
     issues: "write",
     pull_requests: "write"
@@ -56594,11 +56600,15 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings13);
-    if (enabled === null) {
+    const config3 = await this.loadEnabledConfig(context);
+    if (config3 === null) {
       return;
     }
-    const settings = resolveSettings(enabled.settings);
+    const raw = subscriberSettings(config3, this.id, Settings13, log) ?? {};
+    if (raw.qualifying_associations !== void 0) {
+      log.warn("qualifying_associations is no longer supported, use qualifying_roles instead");
+    }
+    const settings = resolveSettings(raw);
     const pr = context.payload.pull_request;
     const { owner, repo } = context.repo();
     const managed = [settings.needsReviewLabel, settings.needsReworkLabel, settings.approvedLabel];
@@ -56611,10 +56621,8 @@ var TriageLabelerSubscriber = class extends Subscriber {
         pull_number: pr.number,
         per_page: 100
       });
-      desiredLabel = labelFor(
-        computeDesired(reviews, settings.qualifyingAssociations),
-        settings
-      );
+      const qualifies = async (username) => settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
+      desiredLabel = labelFor(await computeDesired(reviews, qualifies), settings);
     }
     for (const label of currentManaged) {
       if (label !== desiredLabel) {
@@ -56635,6 +56643,15 @@ var TriageLabelerSubscriber = class extends Subscriber {
       });
     }
     log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? "none"}`);
+  }
+  // author_association hides private org members from an App, so the gate is the reviewer's actual repository role.
+  async #roleOf(context, owner, repo, username) {
+    try {
+      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+      return data.role_name;
+    } catch {
+      return "none";
+    }
   }
 };
 

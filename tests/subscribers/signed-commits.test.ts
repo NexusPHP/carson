@@ -264,6 +264,9 @@ describe('signed-commits subscriber (via app)', () => {
   });
 
   it('does nothing when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+
     await probot.receive({
       id: 'evt-sc-bot',
       name: 'pull_request',

@@ -824,7 +824,7 @@ Labels pull requests with their current review state: `needs-review`, `needs-rew
 **Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`
 **Permissions**: `issues: write`, `pull_requests: write`
 
-For each event the subscriber paginates `pulls.listReviews`, reduces to the latest review per reviewer, ignores `COMMENTED` reviews and reviews from users without write access, then derives the target state:
+For each event the subscriber paginates `pulls.listReviews`, reduces to the latest review per reviewer, ignores `COMMENTED` reviews and reviews from users without a qualifying repository role, then derives the target state:
 
 - Any qualifying reviewer's latest review is `CHANGES_REQUESTED` → `needs-rework`
 - Otherwise any qualifying reviewer's latest review is `APPROVED` → `approved`
@@ -832,7 +832,9 @@ For each event the subscriber paginates `pulls.listReviews`, reduces to the late
 
 Draft PRs are never labeled. A PR converted to draft has its triage label removed. A PR moved out of draft via `ready_for_review` is re-evaluated.
 
-A reviewer "qualifies" when their `author_association` is in the configured `qualifying_associations` set. The default and maximum set is `{OWNER, MEMBER, COLLABORATOR}`. The set cannot be widened to include `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `NONE`, or `MANNEQUIN`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label.
+A reviewer "qualifies" when their repository role, looked up via `repos.getCollaboratorPermissionLevel`, is in the configured `qualifying_roles` set. The default and maximum set is `{admin, maintain, write}`. The set cannot be widened to include `triage` or `read`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label. The role lookup replaces `author_association`, which reports private organization members to an App as `CONTRIBUTOR` or `NONE` unless the App holds the organization `members: read` permission. A leftover `qualifying_associations` setting is ignored with a warning.
+
+Unlike most subscribers, this one runs for bot senders too, so pull requests opened by Dependabot and similar bots are triaged.
 
 Labels are auto-created by GitHub on first use with a random color. To control the colors, create the labels manually in the repository's label settings before enabling the subscriber.
 
@@ -845,7 +847,7 @@ If the existing managed label already matches the desired state, no label API ca
 | `needs_review_label` | string | `needs-review` |
 | `needs_rework_label` | string | `needs-rework` |
 | `approved_label` | string | `approved` |
-| `qualifying_associations` | array of `OWNER`, `MEMBER`, `COLLABORATOR` | `[OWNER, MEMBER, COLLABORATOR]` |
+| `qualifying_roles` | array of `admin`, `maintain`, `write` | `[admin, maintain, write]` |
 
 ### Example
 
@@ -858,7 +860,7 @@ settings:
     needs_review_label: "status: needs review"
     needs_rework_label: "status: changes requested"
     approved_label: "status: ready to merge"
-    qualifying_associations: [OWNER, MEMBER]   # tighten to org members and owner only
+    qualifying_roles: [admin, maintain]   # tighten to admins and maintainers only
 ```
 
 ---

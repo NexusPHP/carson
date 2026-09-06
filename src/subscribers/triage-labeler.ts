@@ -1,14 +1,16 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
-const QUALIFYING_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'] as const;
+const QUALIFYING_ROLES = ['admin', 'maintain', 'write'] as const;
 
 const Settings = z.object({
   needs_review_label: z.string().optional(),
   needs_rework_label: z.string().optional(),
   approved_label: z.string().optional(),
-  qualifying_associations: z.array(z.enum(QUALIFYING_ASSOCIATIONS)).optional(),
+  qualifying_roles: z.array(z.enum(QUALIFYING_ROLES)).optional(),
+  qualifying_associations: z.unknown().optional(),
 });
 
 const DEFAULT_NEEDS_REVIEW = 'needs-review';
@@ -36,36 +38,29 @@ interface ResolvedSettings {
   needsReviewLabel: string;
   needsReworkLabel: string;
   approvedLabel: string;
-  qualifyingAssociations: ReadonlySet<string>;
+  qualifyingRoles: ReadonlySet<string>;
 }
 
 const resolveSettings = (raw: z.infer<typeof Settings>): ResolvedSettings => ({
   needsReviewLabel: raw.needs_review_label ?? DEFAULT_NEEDS_REVIEW,
   needsReworkLabel: raw.needs_rework_label ?? DEFAULT_NEEDS_REWORK,
   approvedLabel: raw.approved_label ?? DEFAULT_APPROVED,
-  qualifyingAssociations: new Set<string>(raw.qualifying_associations ?? QUALIFYING_ASSOCIATIONS),
+  qualifyingRoles: new Set<string>(raw.qualifying_roles ?? QUALIFYING_ROLES),
 });
 
 type Desired = 'needs_review' | 'needs_rework' | 'approved';
+type Verdict = 'APPROVED' | 'CHANGES_REQUESTED';
 
 interface ReviewLike {
   state: string;
   user: { login: string } | null;
-  author_association: string;
 }
 
-const computeDesired = (
-  reviews: readonly ReviewLike[],
-  qualifying: ReadonlySet<string>,
-): Desired => {
-  const latest = new Map<string, 'APPROVED' | 'CHANGES_REQUESTED'>();
+const latestVerdicts = (reviews: readonly ReviewLike[]): Map<string, Verdict> => {
+  const latest = new Map<string, Verdict>();
 
   for (const review of reviews) {
     if (review.user === null) {
-      continue;
-    }
-
-    if (!qualifying.has(review.author_association)) {
       continue;
     }
 
@@ -76,7 +71,20 @@ const computeDesired = (
     latest.set(review.user.login, review.state);
   }
 
-  const states = Array.from(latest.values());
+  return latest;
+};
+
+const computeDesired = async (
+  reviews: readonly ReviewLike[],
+  qualifies: (login: string) => Promise<boolean>,
+): Promise<Desired> => {
+  const states: Verdict[] = [];
+
+  for (const [login, verdict] of latestVerdicts(reviews)) {
+    if (await qualifies(login)) {
+      states.push(verdict);
+    }
+  }
 
   if (states.includes('CHANGES_REQUESTED')) {
     return 'needs_rework';
@@ -103,7 +111,7 @@ const labelFor = (desired: Desired, settings: ResolvedSettings): string => {
 
 export class TriageLabelerSubscriber extends Subscriber {
   public readonly id = 'triage-labeler';
-  public readonly description = 'Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from contributors without write access are ignored.';
+  public readonly description = 'Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from users without write access are ignored.';
   public readonly requiredPermissions: RequiredPermissions = {
     issues: 'write',
     pull_requests: 'write',
@@ -120,13 +128,20 @@ export class TriageLabelerSubscriber extends Subscriber {
 
   async #handle(context: TriageContext): Promise<void> {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings);
+    // Bot-opened PRs (Dependabot) need triage too, so this skips loadEnabledSettings' bot-sender guard on purpose.
+    const config = await this.loadEnabledConfig(context);
 
-    if (enabled === null) {
+    if (config === null) {
       return;
     }
 
-    const settings = resolveSettings(enabled.settings);
+    const raw = subscriberSettings(config, this.id, Settings, log) ?? {};
+
+    if (raw.qualifying_associations !== undefined) {
+      log.warn('qualifying_associations is no longer supported, use qualifying_roles instead');
+    }
+
+    const settings = resolveSettings(raw);
     const pr = context.payload.pull_request;
     const { owner, repo } = context.repo();
     const managed = [settings.needsReviewLabel, settings.needsReworkLabel, settings.approvedLabel];
@@ -141,10 +156,9 @@ export class TriageLabelerSubscriber extends Subscriber {
         pull_number: pr.number,
         per_page: 100,
       });
-      desiredLabel = labelFor(
-        computeDesired(reviews as unknown as readonly ReviewLike[], settings.qualifyingAssociations),
-        settings,
-      );
+      const qualifies = async (username: string): Promise<boolean> =>
+        settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
+      desiredLabel = labelFor(await computeDesired(reviews as unknown as readonly ReviewLike[], qualifies), settings);
     }
 
     for (const label of currentManaged) {
@@ -168,5 +182,16 @@ export class TriageLabelerSubscriber extends Subscriber {
     }
 
     log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? 'none'}`);
+  }
+
+  // author_association hides private org members from an App, so the gate is the reviewer's actual repository role.
+  async #roleOf(context: TriageContext, owner: string, repo: string, username: string): Promise<string> {
+    try {
+      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+
+      return data.role_name;
+    } catch {
+      return 'none';
+    }
   }
 }

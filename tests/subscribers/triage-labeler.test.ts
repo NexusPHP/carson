@@ -39,7 +39,6 @@ const mockConfig = (yaml: string | null): void => {
 interface ReviewInput {
   user: string | null;
   state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
-  author_association?: string;
 }
 
 const mockListReviews = (reviews: ReviewInput[]): nock.Scope => {
@@ -50,8 +49,15 @@ const mockListReviews = (reviews: ReviewInput[]): nock.Scope => {
       id: 1000 + i,
       state: r.state,
       user: r.user === null ? null : { login: r.user },
-      author_association: r.author_association ?? 'COLLABORATOR',
     })));
+};
+
+const mockRole = (login: string, roleName: string | null): nock.Scope => {
+  const scope = nock('https://api.github.com').get(`/repos/acme/widgets/collaborators/${login}/permission`);
+
+  return roleName === null
+    ? scope.reply(404)
+    : scope.reply(200, { permission: 'write', role_name: roleName });
 };
 
 const mockAddLabels = (label: string): nock.Scope => {
@@ -95,7 +101,7 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
 const reviewPayload = (
   reviewState: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED',
   reviewer: string,
-  overrides: PayloadOverrides & { reviewerAssociation?: string } = {},
+  overrides: PayloadOverrides = {},
 ): Record<string, unknown> => ({
   action: 'submitted',
   installation: { id: INSTALLATION_ID },
@@ -111,7 +117,6 @@ const reviewPayload = (
   review: {
     state: reviewState.toLowerCase(),
     user: { login: reviewer },
-    author_association: overrides.reviewerAssociation ?? 'COLLABORATOR',
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User', login: reviewer },
@@ -226,7 +231,8 @@ describe('triage-labeler subscriber (via app)', () => {
   it('sets needs-rework when a qualifying reviewer requests changes', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
-    mockListReviews([{ user: 'alice', state: 'CHANGES_REQUESTED', author_association: 'COLLABORATOR' }]);
+    mockListReviews([{ user: 'alice', state: 'CHANGES_REQUESTED' }]);
+    mockRole('alice', 'write');
     const removeScope = mockRemoveLabel('needs-review');
     const addScope = mockAddLabels('needs-rework');
 
@@ -243,14 +249,15 @@ describe('triage-labeler subscriber (via app)', () => {
   it('sets approved when the only qualifying review is APPROVED', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
-    mockListReviews([{ user: 'alice', state: 'APPROVED', author_association: 'MEMBER' }]);
+    mockListReviews([{ user: 'alice', state: 'APPROVED' }]);
+    mockRole('alice', 'admin');
     const removeScope = mockRemoveLabel('needs-review');
     const addScope = mockAddLabels('approved');
 
     await probot.receive({
       id: 'evt-approved',
       name: 'pull_request_review',
-      payload: reviewPayload('APPROVED', 'alice', { labels: ['needs-review'], reviewerAssociation: 'MEMBER' }) as never,
+      payload: reviewPayload('APPROVED', 'alice', { labels: ['needs-review'] }) as never,
     });
 
     expect(removeScope.isDone()).toBe(true);
@@ -261,9 +268,11 @@ describe('triage-labeler subscriber (via app)', () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
     mockListReviews([
-      { user: 'alice', state: 'CHANGES_REQUESTED', author_association: 'COLLABORATOR' },
-      { user: 'bob', state: 'APPROVED', author_association: 'COLLABORATOR' },
+      { user: 'alice', state: 'CHANGES_REQUESTED' },
+      { user: 'bob', state: 'APPROVED' },
     ]);
+    mockRole('alice', 'maintain');
+    mockRole('bob', 'write');
 
     await probot.receive({
       id: 'evt-mixed',
@@ -278,9 +287,10 @@ describe('triage-labeler subscriber (via app)', () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
     mockListReviews([
-      { user: 'alice', state: 'CHANGES_REQUESTED', author_association: 'COLLABORATOR' },
-      { user: 'alice', state: 'APPROVED', author_association: 'COLLABORATOR' },
+      { user: 'alice', state: 'CHANGES_REQUESTED' },
+      { user: 'alice', state: 'APPROVED' },
     ]);
+    mockRole('alice', 'write');
     const removeScope = mockRemoveLabel('needs-rework');
     const addScope = mockAddLabels('approved');
 
@@ -294,21 +304,20 @@ describe('triage-labeler subscriber (via app)', () => {
     expect(addScope.isDone()).toBe(true);
   });
 
-  it('ignores reviews from non-qualifying associations', async () => {
+  it('ignores reviews from users without a qualifying role', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
     mockListReviews([
-      { user: 'eve', state: 'APPROVED', author_association: 'CONTRIBUTOR' },
-      { user: 'mallory', state: 'CHANGES_REQUESTED', author_association: 'NONE' },
+      { user: 'eve', state: 'APPROVED' },
+      { user: 'mallory', state: 'CHANGES_REQUESTED' },
     ]);
+    mockRole('eve', 'read');
+    mockRole('mallory', null);
 
     await probot.receive({
       id: 'evt-non-qualifying',
       name: 'pull_request_review',
-      payload: reviewPayload('APPROVED', 'eve', {
-        labels: ['needs-review'],
-        reviewerAssociation: 'CONTRIBUTOR',
-      }) as never,
+      payload: reviewPayload('APPROVED', 'eve', { labels: ['needs-review'] }) as never,
     });
 
     expect(nock.pendingMocks()).toEqual([]);
@@ -318,7 +327,7 @@ describe('triage-labeler subscriber (via app)', () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
     mockListReviews([
-      { user: null, state: 'APPROVED', author_association: 'COLLABORATOR' },
+      { user: null, state: 'APPROVED' },
     ]);
     const addScope = mockAddLabels('needs-review');
 
@@ -335,7 +344,7 @@ describe('triage-labeler subscriber (via app)', () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
     mockListReviews([
-      { user: 'alice', state: 'COMMENTED', author_association: 'COLLABORATOR' },
+      { user: 'alice', state: 'COMMENTED' },
     ]);
     const addScope = mockAddLabels('needs-review');
 
@@ -351,7 +360,8 @@ describe('triage-labeler subscriber (via app)', () => {
   it('does not touch unrelated labels', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
-    mockListReviews([{ user: 'alice', state: 'APPROVED', author_association: 'COLLABORATOR' }]);
+    mockListReviews([{ user: 'alice', state: 'APPROVED' }]);
+    mockRole('alice', 'write');
     const removeScope = mockRemoveLabel('needs-review');
     const addScope = mockAddLabels('approved');
 
@@ -390,9 +400,11 @@ describe('triage-labeler subscriber (via app)', () => {
     expect(addScope.isDone()).toBe(true);
   });
 
-  it('does nothing when the sender is a bot', async () => {
+  it('labels a PR opened by a bot', async () => {
     mockInstallationToken();
-    mockConfig(null);
+    mockConfig(CONFIG_ENABLED);
+    mockListReviews([]);
+    const addScope = mockAddLabels('needs-review');
 
     await probot.receive({
       id: 'evt-bot',
@@ -400,13 +412,63 @@ describe('triage-labeler subscriber (via app)', () => {
       payload: prPayload({ senderType: 'Bot' }) as never,
     });
 
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('honors a narrowed qualifying_roles set', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - triage-labeler',
+      'settings:',
+      '  triage-labeler:',
+      '    qualifying_roles: [admin]',
+      '',
+    ].join('\n'));
+    mockListReviews([{ user: 'alice', state: 'APPROVED' }]);
+    mockRole('alice', 'write');
+
+    await probot.receive({
+      id: 'evt-narrowed-roles',
+      name: 'pull_request_review',
+      payload: reviewPayload('APPROVED', 'alice', { labels: ['needs-review'] }) as never,
+    });
+
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores the removed qualifying_associations setting and warns', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - triage-labeler',
+      'settings:',
+      '  triage-labeler:',
+      '    qualifying_associations: [OWNER, MEMBER]',
+      '',
+    ].join('\n'));
+    mockListReviews([{ user: 'alice', state: 'APPROVED' }]);
+    mockRole('alice', 'write');
+    const removeScope = mockRemoveLabel('needs-review');
+    const addScope = mockAddLabels('approved');
+
+    await probot.receive({
+      id: 'evt-legacy-associations',
+      name: 'pull_request_review',
+      payload: reviewPayload('APPROVED', 'alice', { labels: ['needs-review'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(addScope.isDone()).toBe(true);
   });
 
   it('makes no label API calls when the existing managed label already matches desired', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
-    mockListReviews([{ user: 'alice', state: 'APPROVED', author_association: 'COLLABORATOR' }]);
+    mockListReviews([{ user: 'alice', state: 'APPROVED' }]);
+    mockRole('alice', 'write');
 
     await probot.receive({
       id: 'evt-idempotent',
