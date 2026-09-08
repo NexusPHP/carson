@@ -73,9 +73,9 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 
 ## auto-labeler
 
-Adds labels to pull requests based on path globs, title or body regex, or branch name patterns, and to issues based on title or body regex. Rules are evaluated on every PR or issue event, and (optionally) labels Carson added that no longer match are removed.
+Adds labels to pull requests based on path globs, title or body regex, or branch name patterns, and to issues based on title or body regex. Rules are evaluated on every PR or issue event, and (optionally) labels Carson added that no longer match are removed. A label can also imply others, applied whenever it is added.
 
-**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`, `issues.opened`, `issues.edited`
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`, `pull_request.labeled`, `issues.opened`, `issues.edited`, `issues.labeled`
 **Permissions**: `issues: write`, `pull_requests: write`
 
 Each rule pairs a single `label` with one or more *criteria*. A rule matches when **any** criterion matches (OR semantic across criteria within the same rule). The label is added when at least one rule for that label matches. PR rules live under `rules`, issue rules under `issue_rules`, and the two lists are independent.
@@ -100,6 +100,7 @@ GitHub publishes [`actions/labeler`](https://github.com/actions/labeler) for the
 | `sync_labels` | boolean | `false` |
 | `rules` | array of PR rule objects (see below) | `[]` (PR events are ignored when empty) |
 | `issue_rules` | array of issue rule objects: `label`, `title`, `body` only | `[]` (issue events are ignored when empty) |
+| `implied_labels` | map of label name to array of label names | `{}` (labeled events are ignored when empty) |
 
 Each PR rule object:
 
@@ -118,6 +119,16 @@ The `files` matcher accepts two shapes:
 - An object lets you compose `any` and `all`. `all` matches only when every changed file matches at least one of its globs. When both `any` and `all` are present, both must hold.
 
 Invalid globs and regexes are warning-logged and skipped, so one broken rule does not silence the others.
+
+### Implied labels
+
+`implied_labels` maps a label to the labels it implies. On `issues.labeled` and `pull_request.labeled`, when the applied label is a key, any implied label not already present is added. Labels applied by bots count too, so a rule under `rules` or another subscriber can chain into an implication. Implications are one-way: removing the trigger label does not remove what it implied, and an implied label that maps back to its trigger is already present, so chains terminate.
+
+```yaml
+implied_labels:
+  bug: [needs review]
+  security: [bug, needs review]
+```
 
 ### Sync labels
 

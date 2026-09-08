@@ -59132,7 +59132,8 @@ var IssueRule = Rule.pick({ label: true, title: true, body: true });
 var Settings = external_exports.object({
   sync_labels: external_exports.boolean().optional(),
   rules: external_exports.array(Rule).optional(),
-  issue_rules: external_exports.array(IssueRule).optional()
+  issue_rules: external_exports.array(IssueRule).optional(),
+  implied_labels: external_exports.record(external_exports.string(), StringArray).optional()
 });
 var PR_EVENTS = [
   "pull_request.opened",
@@ -59141,6 +59142,7 @@ var PR_EVENTS = [
   "pull_request.edited"
 ];
 var ISSUE_EVENTS = ["issues.opened", "issues.edited"];
+var LABELED_EVENTS = ["pull_request.labeled", "issues.labeled"];
 var compileAnyMatcher = (globs) => {
   if (globs.length === 0) {
     return null;
@@ -59226,6 +59228,9 @@ var AutoLabelerSubscriber = class extends Subscriber {
     });
     probot.on(ISSUE_EVENTS, async (context) => {
       await this.#handleIssue(context);
+    });
+    probot.on(LABELED_EVENTS, async (context) => {
+      await this.#handleLabeled(context);
     });
   }
   registerActions(registrar) {
@@ -59324,6 +59329,22 @@ var AutoLabelerSubscriber = class extends Subscriber {
       filenames: [],
       syncLabels: settings.sync_labels ?? false
     });
+  }
+  async #handleLabeled(context) {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
+    if (enabled === null || context.payload.label === void 0) {
+      return;
+    }
+    const item = "pull_request" in context.payload ? context.payload.pull_request : context.payload.issue;
+    const current = labelNames(item.labels);
+    const implied = (enabled.settings.implied_labels?.[context.payload.label.name] ?? []).filter((l) => !current.includes(l));
+    if (implied.length === 0) {
+      return;
+    }
+    const { owner, repo } = context.repo();
+    await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
+    log.info(`Added ${pluralize(implied.length, "implied label")} to #${item.number} for "${context.payload.label.name}"`);
   }
   async #reconcile(context, target) {
     const log = this.log(context);

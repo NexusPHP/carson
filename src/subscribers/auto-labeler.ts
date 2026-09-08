@@ -32,6 +32,7 @@ const Settings = z.object({
   sync_labels: z.boolean().optional(),
   rules: z.array(Rule).optional(),
   issue_rules: z.array(IssueRule).optional(),
+  implied_labels: z.record(z.string(), StringArray).optional(),
 });
 
 type ParsedRule = z.infer<typeof Rule>;
@@ -47,6 +48,9 @@ type LabelContext = Context<LabelEvent>;
 type IssueEvent = 'issues.opened' | 'issues.edited';
 type IssueContext = Context<IssueEvent>;
 
+type LabeledEvent = 'pull_request.labeled' | 'issues.labeled';
+type LabeledContext = Context<LabeledEvent>;
+
 const PR_EVENTS: LabelEvent[] = [
   'pull_request.opened',
   'pull_request.reopened',
@@ -55,6 +59,7 @@ const PR_EVENTS: LabelEvent[] = [
 ];
 
 const ISSUE_EVENTS: IssueEvent[] = ['issues.opened', 'issues.edited'];
+const LABELED_EVENTS: LabeledEvent[] = ['pull_request.labeled', 'issues.labeled'];
 
 type FilesPredicate = (files: readonly string[]) => boolean;
 
@@ -190,6 +195,10 @@ export class AutoLabelerSubscriber extends Subscriber {
     probot.on(ISSUE_EVENTS, async (context): Promise<void> => {
       await this.#handleIssue(context as IssueContext);
     });
+
+    probot.on(LABELED_EVENTS, async (context): Promise<void> => {
+      await this.#handleLabeled(context as LabeledContext);
+    });
   }
 
   public override registerActions(registrar: ActionRegistrar): void {
@@ -313,6 +322,27 @@ export class AutoLabelerSubscriber extends Subscriber {
       filenames: [],
       syncLabels: settings.sync_labels ?? false,
     });
+  }
+
+  async #handleLabeled(context: LabeledContext): Promise<void> {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null || context.payload.label === undefined) {
+      return;
+    }
+
+    const item = 'pull_request' in context.payload ? context.payload.pull_request : context.payload.issue;
+    const current = labelNames(item.labels);
+    const implied = (enabled.settings.implied_labels?.[context.payload.label.name] ?? []).filter((l) => !current.includes(l));
+
+    if (implied.length === 0) {
+      return;
+    }
+
+    const { owner, repo } = context.repo();
+    await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
+    log.info(`Added ${pluralize(implied.length, 'implied label')} to #${item.number} for "${context.payload.label.name}"`);
   }
 
   async #reconcile(context: Pick<IssueContext, 'octokit' | 'log' | 'repo'>, target: {

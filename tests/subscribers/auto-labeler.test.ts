@@ -61,12 +61,13 @@ const mockRemoveLabel = (label: string): nock.Scope => {
 };
 
 interface PayloadOverrides {
-  action?: 'opened' | 'reopened' | 'synchronize' | 'edited';
+  action?: 'opened' | 'reopened' | 'synchronize' | 'edited' | 'labeled';
   title?: string;
   body?: string | null;
   headRef?: string;
   baseRef?: string;
   labels?: string[];
+  label?: string;
   senderType?: string;
 }
 
@@ -86,13 +87,16 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User' },
   ...(overrides.action === 'edited' ? { changes: { title: { from: 'old' } } } : {}),
+  ...(overrides.label === undefined ? {} : { label: { name: overrides.label } }),
 });
 
 interface IssueOverrides {
-  action?: 'opened' | 'edited';
+  action?: 'opened' | 'edited' | 'labeled';
   title?: string;
   body?: string | null;
   labels?: string[];
+  label?: string;
+  senderType?: string;
 }
 
 const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> => ({
@@ -106,8 +110,20 @@ const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> =
     labels: (overrides.labels ?? []).map((name) => ({ name })),
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
-  sender: { type: 'User' },
+  sender: { type: overrides.senderType ?? 'User' },
+  ...(overrides.label === undefined ? {} : { label: { name: overrides.label } }),
 });
+
+const configWithImpliedLabels = (mappingYaml: string[]): string => [
+  'version: 1',
+  'subscribers:',
+  '  - auto-labeler',
+  'settings:',
+  '  auto-labeler:',
+  '    implied_labels:',
+  ...mappingYaml,
+  '',
+].join('\n');
 
 const configWithIssueRules = (rulesYaml: string, syncLabels = false): string => [
   'version: 1',
@@ -183,6 +199,74 @@ describe('auto-labeler subscriber (via app)', () => {
       id: 'evt-no-rules',
       name: 'pull_request',
       payload: prPayload() as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('adds implied labels when a mapped label is applied to an issue', async () => {
+    mockInstallationToken();
+    mockConfig(configWithImpliedLabels(['      bug: [needs review, triage]']));
+    const addScope = mockAddLabels(['needs review', 'triage']);
+
+    await probot.receive({
+      id: 'evt-implied-issue',
+      name: 'issues',
+      payload: issuePayload({ action: 'labeled', label: 'bug', labels: ['bug'] }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('adds implied labels when a mapped label is applied to a PR, even by a bot', async () => {
+    mockInstallationToken();
+    mockConfig(configWithImpliedLabels(['      bug: [needs review]']));
+    const addScope = mockAddLabels(['needs review']);
+
+    await probot.receive({
+      id: 'evt-implied-pr',
+      name: 'pull_request',
+      payload: prPayload({ action: 'labeled', label: 'bug', labels: ['bug'], senderType: 'Bot' }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('only adds implied labels that are missing', async () => {
+    mockInstallationToken();
+    mockConfig(configWithImpliedLabels(['      bug: [needs review, triage]']));
+    const addScope = mockAddLabels(['triage']);
+
+    await probot.receive({
+      id: 'evt-implied-partial',
+      name: 'issues',
+      payload: issuePayload({ action: 'labeled', label: 'bug', labels: ['bug', 'needs review'] }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('does nothing when the applied label has no implications', async () => {
+    mockInstallationToken();
+    mockConfig(configWithImpliedLabels(['      bug: [needs review]']));
+
+    await probot.receive({
+      id: 'evt-implied-none',
+      name: 'issues',
+      payload: issuePayload({ action: 'labeled', label: 'question', labels: ['question'] }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing on a labeled event without a label in the payload', async () => {
+    mockInstallationToken();
+    mockConfig(configWithImpliedLabels(['      bug: [needs review]']));
+
+    await probot.receive({
+      id: 'evt-implied-no-label',
+      name: 'issues',
+      payload: issuePayload({ action: 'labeled', labels: ['bug'] }) as never,
     });
 
     expect(nock.pendingMocks()).toEqual([]);
