@@ -1,14 +1,12 @@
 import type { Context, Probot } from 'probot';
 import { interpolate, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { findCarsonComment } from '../github/comments.js';
+import { findNotice } from '../github/notices.js';
 import { z } from 'zod';
 
 const Settings = z.object({
   message: z.string().optional(),
 });
-
-const COMMENT_MARKER = '<!-- carson:maintainer-edits -->';
 
 const DEFAULT_MESSAGE = `Hey @{{user}}, it looks like "Allow edits from maintainers" is unchecked on this pull request.
 
@@ -54,10 +52,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
       issue_number: pr.number,
       per_page: 100,
     });
-    const notice = findCarsonComment(comments, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (c) => c.user?.type === 'Bot',
-    });
+    const notice = findNotice(comments, this.id, (c) => c.user?.type === 'Bot');
 
     if (notice !== undefined) {
       log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
@@ -71,12 +66,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
       number: pr.number,
     };
 
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext)}\n\n${COMMENT_MARKER}`,
-    });
+    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
     log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
   }
 }

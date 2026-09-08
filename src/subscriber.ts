@@ -1,6 +1,7 @@
 import { type ActionContext, type ActionName, type ActionRegistrar, type ActionRequests } from './actions.js';
 import { type CarsonConfig, subscriberSettings } from './configuration/schema.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
+import { type NoticeClient, postNotice } from './github/notices.js';
 import type { components } from '@octokit/openapi-types';
 import type { Logger } from 'pino';
 import type { Probot } from 'probot';
@@ -50,6 +51,15 @@ export abstract class Subscriber {
     }
 
     return await this.#actions.dispatch(name, context, request);
+  }
+
+  // A second notice on the same item in one event turns the first comment into a digest.
+  protected async notice(
+    context: { id: string; octokit: NoticeClient; repo: () => { owner: string; repo: string } },
+    number: number,
+    body: string,
+  ): Promise<void> {
+    await postNotice(context.octokit, context.id, { ...context.repo(), number }, { id: this.id, body });
   }
 
   protected async loadEnabledConfig(context: ConfigLoadable): Promise<CarsonConfig | null> {

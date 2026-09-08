@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findCarsonComment, minimizeComment } from '../github/comments.js';
+import { findNotice, resolveNotice } from '../github/notices.js';
 import { interpolate, pluralize, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
@@ -12,7 +12,6 @@ const Settings = z.object({
   close_message: z.string().optional(),
 });
 
-const COMMENT_MARKER = '<!-- carson:draft-policy -->';
 const DEFAULT_HOURS_UNTIL_CLOSE = 24;
 const MS_PER_HOUR = 60 * 60 * 1000;
 const CONCURRENCY = 5;
@@ -67,10 +66,16 @@ export class DraftPolicySubscriber extends Subscriber {
         issue_number: pr.number,
         per_page: 100,
       });
-      const notice = findCarsonComment(comments, { marker: COMMENT_MARKER, isBotAuthored: isBotComment });
+      const notice = findNotice(comments, this.id, isBotComment);
 
       if (notice !== undefined) {
-        await minimizeComment(context.octokit, notice.node_id, 'RESOLVED');
+        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
+          id: this.id,
+          commentId: notice.comment.id,
+          nodeId: notice.comment.node_id,
+          body: notice.comment.body,
+          inDigest: notice.inDigest,
+        }, 'RESOLVED');
         log.info(`Minimized draft notice on PR #${pr.number}`);
       }
 
@@ -87,12 +92,7 @@ export class DraftPolicySubscriber extends Subscriber {
       number: pr.number,
     };
 
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext)}\n\n${COMMENT_MARKER}`,
-    });
+    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
     log.info(`Posted draft notice on PR #${pr.number}`);
   }
 
@@ -129,9 +129,9 @@ export class DraftPolicySubscriber extends Subscriber {
         issue_number: item.number,
         per_page: 100,
       });
-      const notice = findCarsonComment(comments, { marker: COMMENT_MARKER, isBotAuthored: isBotComment });
+      const notice = findNotice(comments, this.id, isBotComment);
 
-      if (notice === undefined || new Date(notice.created_at).getTime() >= cutoff) {
+      if (notice === undefined || new Date(notice.comment.created_at).getTime() >= cutoff) {
         log.debug(`#${item.number}: ${notice === undefined ? 'no draft notice' : 'within grace period'}, skipping`);
 
         return;

@@ -65,12 +65,7 @@ export class ReadOnlySubscriber extends Subscriber {
       templateContext['upstream_url'] = url;
     }
 
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: item.number,
-      body: interpolate(settings.message, templateContext),
-    });
+    await this.notice(context, item.number, interpolate(settings.message, templateContext));
 
     await context.octokit.rest.issues.update({
       owner,

@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findCarsonComment, minimizeComment } from '../github/comments.js';
+import { findNotice, resolveNotice } from '../github/notices.js';
 import { interpolate, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { z } from 'zod';
@@ -8,8 +8,6 @@ const Settings = z.object({
   branches: z.array(z.string()).optional(),
   message: z.string().optional(),
 });
-
-const COMMENT_MARKER = '<!-- carson:unsupported-branch -->';
 
 const DEFAULT_MESSAGE = `Hey @{{user}}, thanks for the pull request!
 
@@ -72,14 +70,17 @@ export class UnsupportedBranchSubscriber extends Subscriber {
       issue_number: pr.number,
       per_page: 100,
     });
-    const notice = findCarsonComment(comments, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (c) => c.user?.type === 'Bot',
-    });
+    const notice = findNotice(comments, this.id, (c) => c.user?.type === 'Bot');
 
     if (supported) {
       if (notice !== undefined) {
-        await minimizeComment(context.octokit, notice.node_id, 'OUTDATED');
+        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
+          id: this.id,
+          commentId: notice.comment.id,
+          nodeId: notice.comment.node_id,
+          body: notice.comment.body,
+          inDigest: notice.inDigest,
+        }, 'OUTDATED');
         log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
       }
 
@@ -100,12 +101,7 @@ export class UnsupportedBranchSubscriber extends Subscriber {
       branches: branches.map((b) => `\`${b}\``).join(', '),
     };
 
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(settings.message ?? DEFAULT_MESSAGE, templateContext)}\n\n${COMMENT_MARKER}`,
-    });
+    await this.notice(context, pr.number, interpolate(settings.message ?? DEFAULT_MESSAGE, templateContext));
     log.info(`Posted unsupported-branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
   }
 }

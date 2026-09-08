@@ -102,7 +102,7 @@ describe('thanks subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for the contribution, @octocat!');
+        expect(body.body).toBe('Thanks for the contribution, @octocat!\n\n<!-- carson:thanks -->');
         return true;
       })
       .reply(201, {});
@@ -130,7 +130,7 @@ describe('thanks subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Cheers @octocat, merged!');
+        expect(body.body).toBe('Cheers @octocat, merged!\n\n<!-- carson:thanks -->');
         return true;
       })
       .reply(201, {});
@@ -158,7 +158,7 @@ describe('thanks subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('@octocat merged #42 (Fix the thing) into widgets');
+        expect(body.body).toBe('@octocat merged #42 (Fix the thing) into widgets\n\n<!-- carson:thanks -->');
         return true;
       })
       .reply(201, {});

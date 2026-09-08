@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `triage-labeler` gains `reset_on_push`: a change request made against an earlier head commit no longer counts, so a push returns the PR to `needs-review`.
 - [unsupported-branch](SUBSCRIBERS.md#unsupported-branch) subscriber: comments on pull requests that target a branch outside the maintained set and minimizes the notice once retargeted.
 
+### Changed
+
+- When two or more subscribers comment on the same issue or pull request during one event, the notices are folded into a single digest comment. A subscriber resolving its notice collapses its own section, and the whole comment is minimized once every section is resolved.
+
 ## [v1.3.0](https://github.com/NexusPHP/carson/compare/v1.2.0...v1.3.0) - 2026-09-06
 
 ### Changed

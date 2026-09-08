@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { findCarsonComment } from '../github/comments.js';
+import { findNotice } from '../github/notices.js';
 import { interpolate } from '../template.js';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -24,7 +24,6 @@ const Settings = z.object({
   pull_requests: TypeSettings.optional(),
 });
 
-const COMMENT_MARKER = '<!-- carson:template-enforcer -->';
 const DEFAULT_LABEL = 'needs-template';
 const DEFAULT_MESSAGE = [
   'Thanks for opening this {{type}}, @{{user}}! The description doesn\'t match the template:',
@@ -204,27 +203,19 @@ export class TemplateEnforcerSubscriber extends Subscriber {
       issue_number: item.number,
       per_page: 100,
     });
-    const priorComment = findCarsonComment(comments, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (c) => c.user?.type === 'Bot',
-    });
+    const priorComment = findNotice(comments, this.id, (c) => c.user?.type === 'Bot');
 
     if (priorComment === undefined) {
-      const body = `${interpolate(messageTemplate, {
+      const body = interpolate(messageTemplate, {
         user: item.user,
         type: typeLabel(kind),
         number: item.number,
         title: item.title,
         label,
         violations: renderViolations(violations),
-      })}\n\n${COMMENT_MARKER}`;
-
-      await context.octokit.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: item.number,
-        body,
       });
+
+      await this.notice(context, item.number, body);
       log.info(`Posted template-enforcer comment on #${item.number}`);
     }
 

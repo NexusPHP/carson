@@ -61,15 +61,21 @@ Subscribers that need to find their own prior comment on a PR or issue (to edit,
 
 Do not remove these markers from Carson comments. The subscriber relies on them to identify which comment is its own.
 
+When two or more subscribers post on the same issue or pull request during one event, the first comment is edited into a single digest instead of each subscriber posting its own. Sections are ordered by subscriber id, each wrapped in `<!-- carson:<id>:start -->` and `<!-- carson:<id> -->`, and the comment ends with `<!-- carson:digest -->`. A subscriber that later resolves its notice collapses its own section under a "Resolved" or "Outdated" toggle, and once every section is collapsed the whole comment is minimized. A lone notice is a plain comment and is minimized directly, as before.
+
 | Marker | Used by |
 | --- | --- |
+| `<!-- carson:digest -->` | any digest of two or more notices |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
 | `<!-- carson:draft-policy -->` | [draft-policy](#draft-policy) |
 | `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake), [webhook-notifier](#webhook-notifier) |
 | `<!-- carson:maintainer-edits -->` | [maintainer-edits](#maintainer-edits) |
+| `<!-- carson:read-only -->` | [read-only](#read-only) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
+| `<!-- carson:thanks -->` | [thanks](#thanks) |
 | `<!-- carson:unsupported-branch -->` | [unsupported-branch](#unsupported-branch) |
+| `<!-- carson:welcome -->` | [welcome](#welcome) |
 
 ---
 

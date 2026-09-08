@@ -113,7 +113,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for opening your first pull request, @octocat!');
+        expect(body.body).toBe('Thanks for opening your first pull request, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -133,7 +133,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for opening your first issue, @octocat!');
+        expect(body.body).toBe('Thanks for opening your first issue, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -169,7 +169,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for the pull request, @octocat!');
+        expect(body.body).toBe('Thanks for the pull request, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -189,7 +189,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for filing this, @octocat!');
+        expect(body.body).toBe('Thanks for filing this, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -218,7 +218,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Hi @octocat, first PR!');
+        expect(body.body).toBe('Hi @octocat, first PR!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -247,7 +247,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Hi @octocat, first issue!');
+        expect(body.body).toBe('Hi @octocat, first issue!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -276,7 +276,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Welcome back, @octocat!');
+        expect(body.body).toBe('Welcome back, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -305,7 +305,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks @octocat, we will take a look.');
+        expect(body.body).toBe('Thanks @octocat, we will take a look.\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -547,7 +547,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Thanks for opening your first pull request, @octocat!');
+        expect(body.body).toBe('Thanks for opening your first pull request, @octocat!\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -593,7 +593,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Hi @octocat, thanks for PR #42 (Fix the thing) on widgets');
+        expect(body.body).toBe('Hi @octocat, thanks for PR #42 (Fix the thing) on widgets\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});
@@ -622,7 +622,7 @@ describe('welcome subscriber (via app)', () => {
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/7/comments', (body: { body: string }) => {
-        expect(body.body).toBe('@octocat opened issue #7: Something is broken');
+        expect(body.body).toBe('@octocat opened issue #7: Something is broken\n\n<!-- carson:welcome -->');
         return true;
       })
       .reply(201, {});

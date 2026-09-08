@@ -74,9 +74,12 @@ const openedPayload = (kind: 'issue' | 'pull_request', overrides: ItemOverrides 
   sender: { type: overrides.senderType ?? 'User' },
 });
 
+let delivery = 0;
+
 const receive = async (probot: Probot, kind: 'issue' | 'pull_request', overrides: ItemOverrides = {}): Promise<void> => {
+  delivery += 1;
   await probot.receive({
-    id: 'evt-read-only',
+    id: `evt-read-only-${delivery}`,
     name: kind === 'issue' ? 'issues' : 'pull_request',
     payload: openedPayload(kind, overrides) as never,
   });
@@ -86,7 +89,7 @@ const mockComment = (expected?: string): nock.Scope =>
   nock('https://api.github.com')
     .post('/repos/acme/mirror/issues/42/comments', (body: { body: string }) => {
       if (expected !== undefined) {
-        expect(body.body).toBe(expected);
+        expect(body.body).toBe(`${expected}\n\n<!-- carson:read-only -->`);
       }
       return true;
     })

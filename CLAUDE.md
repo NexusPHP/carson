@@ -113,7 +113,7 @@ Per-subscriber settings are validated lazily by each subscriber with its own Zod
 
 ### Comment markers
 
-Subscribers that need to find their own prior comment (to minimize, unminimize, or edit it) embed a hidden HTML marker like `<!-- carson:conflicts-notifier -->`. When adding a subscriber that posts trackable comments, pick a unique marker and list it in the table in [SUBSCRIBERS.md](SUBSCRIBERS.md#comment-markers).
+Event-driven comments go through `this.notice(context, number, body)` ([src/subscriber.ts](src/subscriber.ts)), which appends `<!-- carson:<id> -->` and, when a second subscriber posts on the same item during one event, edits the first comment into a digest ending with `<!-- carson:digest -->` ([src/github/notices.ts](src/github/notices.ts)). Find a prior notice with `findNotice(comments, this.id, isBot)`, which matches both a standalone comment and a digest section, and resolve or reopen it with `resolveNotice` / `reopenNotice`, which collapse or expand the section and fall back to GitHub's minimize when the comment is standalone or every section is resolved. Scheduled passes that comment per item (`stale`, `no-response-closer`, `lock-old-issues`) post directly. When adding a subscriber that posts trackable comments, list its marker in the table in [SUBSCRIBERS.md](SUBSCRIBERS.md#comment-markers).
 
 ### docs/
 

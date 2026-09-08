@@ -22006,7 +22006,7 @@ var require_sonic_boom = __commonJS({
         fsWrite = () => fs2.write(this.fd, this._writingBuf, this.release);
       } else if (contentMode === void 0 || contentMode === kContentModeUtf8) {
         this._writingBuf = "";
-        this.write = write;
+        this.write = write2;
         this.flush = flush;
         this.flushSync = flushSync;
         this._actualWrite = actualWrite;
@@ -22139,7 +22139,7 @@ var require_sonic_boom = __commonJS({
       }
       return Buffer.concat(bufs, len);
     }
-    function write(data) {
+    function write2(data) {
       if (this.destroyed) {
         throw new Error("SonicBoom destroyed");
       }
@@ -22800,7 +22800,7 @@ var require_thread_stream = __commonJS({
             }
             return;
           }
-          write(stream, leftover, noop4);
+          write2(stream, leftover, noop4);
           continue;
         }
         if (leftover === 0) {
@@ -23104,7 +23104,7 @@ var require_thread_stream = __commonJS({
         });
       }
     }
-    function write(stream, maxBytes, cb) {
+    function write2(stream, maxBytes, cb) {
       const current = Atomics.load(stream[kImpl].state, WRITE_INDEX);
       let offset = current;
       let remaining = maxBytes;
@@ -23189,7 +23189,7 @@ var require_thread_stream = __commonJS({
         } else if (leftover < 0) {
           throw new Error("overwritten");
         }
-        write(stream, leftover, cb);
+        write2(stream, leftover, cb);
       }
     }
     function flushSync(stream) {
@@ -24072,7 +24072,7 @@ var require_proto = __commonJS({
         return "Pino";
       },
       [lsCacheSym]: initialLsCache,
-      [writeSym]: write,
+      [writeSym]: write2,
       [asJsonSym]: asJson,
       [getLevelSym]: getLevel,
       [setLevelSym]: setLevel
@@ -24175,7 +24175,7 @@ var require_proto = __commonJS({
     function defaultMixinMergeStrategy(mergeObject, mixinObject) {
       return Object.assign(mixinObject, mergeObject);
     }
-    function write(_obj, msg, num) {
+    function write2(_obj, msg, num) {
       const t = this[timeSym]();
       const mixin = this[mixinSym];
       const errorKey = this[errorKeySym];
@@ -24836,7 +24836,7 @@ var require_multistream = __commonJS({
         });
       }
       const res = {
-        write,
+        write: write2,
         add,
         remove,
         emit,
@@ -24856,7 +24856,7 @@ var require_multistream = __commonJS({
       }
       streamsArray = null;
       return res;
-      function write(data) {
+      function write2(data) {
         let dest;
         const level = this.lastLevel;
         const { streams } = this;
@@ -24958,7 +24958,7 @@ var require_multistream = __commonJS({
           };
         }
         return {
-          write,
+          write: write2,
           add,
           remove,
           minLevel: level,
@@ -59043,6 +59043,123 @@ var ActionRegistrar = class {
   }
 };
 
+// src/github/comments.ts
+var MINIMIZE_MUTATION = `mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
+  minimizeComment(input: { subjectId: $subjectId, classifier: $classifier }) {
+    minimizedComment { isMinimized }
+  }
+}`;
+var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
+  unminimizeComment(input: { subjectId: $subjectId }) {
+    unminimizedComment { ... on IssueComment { id } }
+  }
+}`;
+var minimizeComment = async (octokit, subjectId, classifier) => {
+  await octokit.graphql(MINIMIZE_MUTATION, { subjectId, classifier });
+};
+var unminimizeComment = async (octokit, subjectId) => {
+  await octokit.graphql(UNMINIMIZE_MUTATION, { subjectId });
+};
+var findCarsonComment = (comments, options2) => {
+  return comments.find(
+    (comment) => options2.isBotAuthored(comment) && comment.body?.endsWith(options2.marker) === true
+  );
+};
+
+// src/github/notices.ts
+var DIGEST_MARKER = "<!-- carson:digest -->";
+var noticeMarker = (id) => `<!-- carson:${id} -->`;
+var startMarker = (id) => `<!-- carson:${id}:start -->`;
+var LABELS = { RESOLVED: "Resolved", OUTDATED: "Outdated" };
+var WRAPPED = /^<details>\n<summary>(?:Resolved|Outdated)<\/summary>\n\n([\s\S]*)\n<\/details>$/;
+var threads = /* @__PURE__ */ new Map();
+var chain = Promise.resolve();
+var renderSection = ({ id, body }) => `${startMarker(id)}
+${body}
+${noticeMarker(id)}`;
+var renderDigest = (sections) => `${[...sections].sort((a, b) => a.id.localeCompare(b.id)).map(renderSection).join("\n\n---\n\n")}
+
+${DIGEST_MARKER}`;
+var write = async (client, eventId, target, section) => {
+  const key = `${eventId}:${target.owner}/${target.repo}#${target.number}`;
+  const thread = threads.get(key);
+  const { owner, repo, number: number4 } = target;
+  if (thread === void 0) {
+    const { data } = await client.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: number4,
+      body: `${section.body}
+
+${noticeMarker(section.id)}`
+    });
+    threads.set(key, { commentId: data.id, sections: [section] });
+    return;
+  }
+  thread.sections.push(section);
+  await client.rest.issues.updateComment({ owner, repo, comment_id: thread.commentId, body: renderDigest(thread.sections) });
+};
+var postNotice = async (client, eventId, target, section) => {
+  const run2 = chain.then(async () => {
+    await write(client, eventId, target, section);
+  });
+  chain = run2.catch(() => void 0);
+  await run2;
+};
+var hasBody = (comment) => typeof comment.body === "string";
+var findNotice = (comments, id, isBotAuthored) => {
+  for (const comment of comments) {
+    if (!isBotAuthored(comment) || !hasBody(comment)) {
+      continue;
+    }
+    if (comment.body.endsWith(noticeMarker(id))) {
+      return { comment, inDigest: false };
+    }
+    if (comment.body.endsWith(DIGEST_MARKER) && comment.body.includes(startMarker(id))) {
+      return { comment, inDigest: true };
+    }
+  }
+  return void 0;
+};
+var splitSection = (body, id) => {
+  const start = body.indexOf(startMarker(id)) + startMarker(id).length + 1;
+  const end = body.indexOf(noticeMarker(id), start) - 1;
+  return { before: body.slice(0, start), inner: body.slice(start, end), after: body.slice(end) };
+};
+var sectionIds = (body) => [...body.matchAll(/<!-- carson:([\w-]+):start -->/g)].map((m) => m[1]);
+var isWrapped = (body, id) => WRAPPED.test(splitSection(body, id).inner);
+var isNoticeResolved = (found, commentMinimized) => commentMinimized || found.inDigest && isWrapped(found.body, found.id);
+var resolveNotice = async (client, target, found, classifier) => {
+  if (!found.inDigest) {
+    await minimizeComment(client, found.nodeId, classifier);
+    return;
+  }
+  if (isWrapped(found.body, found.id)) {
+    return;
+  }
+  const { before, inner, after } = splitSection(found.body, found.id);
+  const body = `${before}<details>
+<summary>${LABELS[classifier]}</summary>
+
+${inner}
+</details>${after}`;
+  await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
+  if (sectionIds(body).every((id) => isWrapped(body, id))) {
+    await minimizeComment(client, found.nodeId, classifier);
+  }
+};
+var reopenNotice = async (client, target, found, commentMinimized) => {
+  if (commentMinimized) {
+    await unminimizeComment(client, found.nodeId);
+  }
+  if (!found.inDigest || !isWrapped(found.body, found.id)) {
+    return;
+  }
+  const { before, inner, after } = splitSection(found.body, found.id);
+  const body = `${before}${WRAPPED.exec(inner)[1]}${after}`;
+  await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
+};
+
 // src/subscriber.ts
 var Subscriber = class {
   #actions = null;
@@ -59065,6 +59182,10 @@ var Subscriber = class {
       return false;
     }
     return await this.#actions.dispatch(name, context, request2);
+  }
+  // A second notice on the same item in one event turns the first comment into a digest.
+  async notice(context, number4, body) {
+    await postNotice(context.octokit, context.id, { ...context.repo(), number: number4 }, { id: this.id, body });
   }
   async loadEnabledConfig(context) {
     const config3 = await loadConfig(context);
@@ -59687,29 +59808,6 @@ var CommandsSubscriber = class extends Subscriber {
   }
 };
 
-// src/github/comments.ts
-var MINIMIZE_MUTATION = `mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
-  minimizeComment(input: { subjectId: $subjectId, classifier: $classifier }) {
-    minimizedComment { isMinimized }
-  }
-}`;
-var UNMINIMIZE_MUTATION = `mutation($subjectId: ID!) {
-  unminimizeComment(input: { subjectId: $subjectId }) {
-    unminimizedComment { ... on IssueComment { id } }
-  }
-}`;
-var minimizeComment = async (octokit, subjectId, classifier) => {
-  await octokit.graphql(MINIMIZE_MUTATION, { subjectId, classifier });
-};
-var unminimizeComment = async (octokit, subjectId) => {
-  await octokit.graphql(UNMINIMIZE_MUTATION, { subjectId });
-};
-var findCarsonComment = (comments, options2) => {
-  return comments.find(
-    (comment) => options2.isBotAuthored(comment) && comment.body?.endsWith(options2.marker) === true
-  );
-};
-
 // src/concurrency.ts
 var forEachConcurrent = async (items, concurrency, fn) => {
   for (let i = 0; i < items.length; i += concurrency) {
@@ -59723,7 +59821,6 @@ var Settings3 = external_exports.object({
   label: external_exports.string().min(1).optional()
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
-var COMMENT_MARKER = "<!-- carson:conflicts-notifier -->";
 var CONCURRENCY = 5;
 var PR_EVENTS2 = [
   "pull_request.opened",
@@ -59736,6 +59833,7 @@ var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
       comments(last: 100) {
         nodes {
           id
+          databaseId
           body
           isMinimized
           author {
@@ -59834,20 +59932,12 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
         title: pr.title,
         base: pr.base.ref
       });
-      const body = `${message}
-
-${COMMENT_MARKER}`;
-      await context.octokit.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: pr.number,
-        body
-      });
+      await this.notice(context, pr.number, message);
       this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
-    if (existing.isMinimized) {
-      await unminimizeComment(context.octokit, existing.id);
+    if (isNoticeResolved(existing.found, existing.isMinimized)) {
+      await reopenNotice(context.octokit, { owner, repo, number: pr.number }, existing.found, existing.isMinimized);
       this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -59857,11 +59947,11 @@ ${COMMENT_MARKER}`;
       log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);
       return;
     }
-    if (existing.isMinimized) {
+    if (isNoticeResolved(existing.found, existing.isMinimized)) {
       log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
       return;
     }
-    await minimizeComment(context.octokit, existing.id, "RESOLVED");
+    await resolveNotice(context.octokit, { ...context.repo(), number: prNumber }, existing.found, "RESOLVED");
     log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
@@ -59871,14 +59961,15 @@ ${COMMENT_MARKER}`;
       repo,
       number: prNumber
     });
-    const match = findCarsonComment(response.repository.pullRequest.comments.nodes, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (node2) => node2.author?.__typename === "Bot"
-    });
+    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, (node2) => node2.author?.__typename === "Bot");
     if (match === void 0) {
       return null;
     }
-    return { id: match.id, isMinimized: match.isMinimized };
+    const { comment, inDigest } = match;
+    return {
+      found: { id: this.id, commentId: comment.databaseId, nodeId: comment.id, body: comment.body, inDigest },
+      isMinimized: comment.isMinimized
+    };
   }
 };
 
@@ -59888,7 +59979,6 @@ var Settings4 = external_exports.object({
   hours_until_close: external_exports.number().int().nonnegative().optional(),
   close_message: external_exports.string().optional()
 });
-var COMMENT_MARKER2 = "<!-- carson:draft-policy -->";
 var DEFAULT_HOURS_UNTIL_CLOSE = 24;
 var MS_PER_HOUR = 60 * 60 * 1e3;
 var CONCURRENCY2 = 5;
@@ -59929,9 +60019,15 @@ var DraftPolicySubscriber = class extends Subscriber {
         issue_number: pr.number,
         per_page: 100
       });
-      const notice = findCarsonComment(comments, { marker: COMMENT_MARKER2, isBotAuthored: isBotComment });
+      const notice = findNotice(comments, this.id, isBotComment);
       if (notice !== void 0) {
-        await minimizeComment(context.octokit, notice.node_id, "RESOLVED");
+        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
+          id: this.id,
+          commentId: notice.comment.id,
+          nodeId: notice.comment.node_id,
+          body: notice.comment.body,
+          inDigest: notice.inDigest
+        }, "RESOLVED");
         log.info(`Minimized draft notice on PR #${pr.number}`);
       }
       return;
@@ -59944,14 +60040,7 @@ var DraftPolicySubscriber = class extends Subscriber {
       repo: context.payload.repository.name,
       number: pr.number
     };
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, templateContext)}
-
-${COMMENT_MARKER2}`
-    });
+    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, templateContext));
     log.info(`Posted draft notice on PR #${pr.number}`);
   }
   async #run(scheduled) {
@@ -59981,8 +60070,8 @@ ${COMMENT_MARKER2}`
         issue_number: item.number,
         per_page: 100
       });
-      const notice = findCarsonComment(comments, { marker: COMMENT_MARKER2, isBotAuthored: isBotComment });
-      if (notice === void 0 || new Date(notice.created_at).getTime() >= cutoff) {
+      const notice = findNotice(comments, this.id, isBotComment);
+      if (notice === void 0 || new Date(notice.comment.created_at).getTime() >= cutoff) {
         log.debug(`#${item.number}: ${notice === void 0 ? "no draft notice" : "within grace period"}, skipping`);
         return;
       }
@@ -60290,7 +60379,6 @@ var LockOldIssuesSubscriber = class extends Subscriber {
 var Settings7 = external_exports.object({
   message: external_exports.string().optional()
 });
-var COMMENT_MARKER3 = "<!-- carson:maintainer-edits -->";
 var DEFAULT_MESSAGE3 = `Hey @{{user}}, it looks like "Allow edits from maintainers" is unchecked on this pull request.
 
 That is fine, but maintainers will not be able to rebase, squash, or apply small fixes for you before merging. If you would like them to, please [allow edits from maintainers](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork).`;
@@ -60324,10 +60412,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findCarsonComment(comments, {
-      marker: COMMENT_MARKER3,
-      isBotAuthored: (c) => c.user?.type === "Bot"
-    });
+    const notice = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
     if (notice !== void 0) {
       log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
       return;
@@ -60337,14 +60422,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       repo: context.payload.repository.name,
       number: pr.number
     };
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, templateContext)}
-
-${COMMENT_MARKER3}`
-    });
+    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, templateContext));
     log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
   }
 };
@@ -60815,12 +60893,7 @@ var ReadOnlySubscriber = class extends Subscriber {
       templateContext["upstream"] = `[${settings.upstream}](${url2})`;
       templateContext["upstream_url"] = url2;
     }
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: item.number,
-      body: interpolate(settings.message, templateContext)
-    });
+    await this.notice(context, item.number, interpolate(settings.message, templateContext));
     await context.octokit.rest.issues.update({
       owner,
       repo,
@@ -60916,7 +60989,7 @@ var DEFAULT_DAYS_CLOSE = 7;
 var DEFAULT_STALE_LABEL = "stale";
 var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
 var DEFAULT_CLOSE_MESSAGE3 = "Closing this {{type}} due to extended inactivity.";
-var COMMENT_MARKER4 = "<!-- carson:stale -->";
+var COMMENT_MARKER = "<!-- carson:stale -->";
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY5 = 5;
 var StaleSubscriber = class extends Subscriber {
@@ -60967,7 +61040,7 @@ var StaleSubscriber = class extends Subscriber {
       per_page: 100
     });
     const stalePost = findCarsonComment(comments, {
-      marker: COMMENT_MARKER4,
+      marker: COMMENT_MARKER,
       isBotAuthored: (c) => c.user?.type === "Bot"
     });
     const log = this.log(context);
@@ -61075,7 +61148,7 @@ var StaleSubscriber = class extends Subscriber {
           issue_number: item.number,
           body: `${interpolate(staleMessage, context)}
 
-${COMMENT_MARKER4}`
+${COMMENT_MARKER}`
         });
         log.debug(`#${item.number}: Marked stale`);
         staled += 1;
@@ -61104,7 +61177,6 @@ var Settings15 = external_exports.object({
   issues: TypeSettings.optional(),
   pull_requests: TypeSettings.optional()
 });
-var COMMENT_MARKER5 = "<!-- carson:template-enforcer -->";
 var DEFAULT_LABEL2 = "needs-template";
 var DEFAULT_MESSAGE5 = [
   "Thanks for opening this {{type}}, @{{user}}! The description doesn't match the template:",
@@ -61231,27 +61303,17 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       issue_number: item.number,
       per_page: 100
     });
-    const priorComment = findCarsonComment(comments, {
-      marker: COMMENT_MARKER5,
-      isBotAuthored: (c) => c.user?.type === "Bot"
-    });
+    const priorComment = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
     if (priorComment === void 0) {
-      const body = `${interpolate(messageTemplate, {
+      const body = interpolate(messageTemplate, {
         user: item.user,
         type: typeLabel(kind),
         number: item.number,
         title: item.title,
         label,
         violations: renderViolations(violations)
-      })}
-
-${COMMENT_MARKER5}`;
-      await context.octokit.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: item.number,
-        body
       });
+      await this.notice(context, item.number, body);
       log.info(`Posted template-enforcer comment on #${item.number}`);
     }
     if (!hasLabel) {
@@ -61304,7 +61366,7 @@ var ThanksSubscriber = class extends Subscriber {
         number: pr.number,
         title: pr.title
       });
-      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      await this.notice(context, pr.number, body);
       log.info(`Commented on PR #${pr.number}`);
     });
   }
@@ -61459,7 +61521,6 @@ var Settings18 = external_exports.object({
   branches: external_exports.array(external_exports.string()).optional(),
   message: external_exports.string().optional()
 });
-var COMMENT_MARKER6 = "<!-- carson:unsupported-branch -->";
 var DEFAULT_MESSAGE7 = `Hey @{{user}}, thanks for the pull request!
 
 It targets \`{{base}}\`, which is no longer maintained. Could you [change the base branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/changing-the-base-branch-of-a-pull-request) to one of these instead? {{branches}}`;
@@ -61506,13 +61567,16 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findCarsonComment(comments, {
-      marker: COMMENT_MARKER6,
-      isBotAuthored: (c) => c.user?.type === "Bot"
-    });
+    const notice = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
     if (supported) {
       if (notice !== void 0) {
-        await minimizeComment(context.octokit, notice.node_id, "OUTDATED");
+        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
+          id: this.id,
+          commentId: notice.comment.id,
+          nodeId: notice.comment.node_id,
+          body: notice.comment.body,
+          inDigest: notice.inDigest
+        }, "OUTDATED");
         log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
       }
       return;
@@ -61528,14 +61592,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       base: pr.base.ref,
       branches: branches.map((b) => `\`${b}\``).join(", ")
     };
-    await context.octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pr.number,
-      body: `${interpolate(settings.message ?? DEFAULT_MESSAGE7, templateContext)}
-
-${COMMENT_MARKER6}`
-    });
+    await this.notice(context, pr.number, interpolate(settings.message ?? DEFAULT_MESSAGE7, templateContext));
     log.info(`Posted unsupported-branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
   }
 };
@@ -61745,7 +61802,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: context.payload.pull_request.number,
         title: context.payload.pull_request.title
       });
-      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      await this.notice(context, context.payload.pull_request.number, body);
       log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
@@ -61776,7 +61833,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: issue3.number,
         title: issue3.title
       });
-      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      await this.notice(context, issue3.number, body);
       log.info(`Commented on issue #${context.payload.issue.number}`);
     });
   }

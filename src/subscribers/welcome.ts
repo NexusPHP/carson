@@ -98,7 +98,7 @@ export class WelcomeSubscriber extends Subscriber {
         title: context.payload.pull_request.title,
       });
 
-      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      await this.notice(context, context.payload.pull_request.number, body);
 
       log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
@@ -140,7 +140,7 @@ export class WelcomeSubscriber extends Subscriber {
         title: issue.title,
       });
 
-      await context.octokit.rest.issues.createComment(context.issue({ body }));
+      await this.notice(context, issue.number, body);
 
       log.info(`Commented on issue #${context.payload.issue.number}`);
     });

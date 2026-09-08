@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findCarsonComment, minimizeComment, unminimizeComment } from '../github/comments.js';
+import { findNotice, type FoundNotice, isNoticeResolved, reopenNotice, resolveNotice } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
 import { forEachConcurrent } from '../concurrency.js';
@@ -15,7 +15,6 @@ const Settings = z.object({
 type ParsedSettings = z.infer<typeof Settings>;
 
 const DEFAULT_MESSAGE = '@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.';
-const COMMENT_MARKER = '<!-- carson:conflicts-notifier -->';
 const CONCURRENCY = 5;
 
 type PrEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
@@ -29,7 +28,7 @@ const PR_EVENTS: PrEvent[] = [
 ];
 
 interface ExistingComment {
-  id: string;
+  found: FoundNotice;
   isMinimized: boolean;
 }
 
@@ -39,6 +38,7 @@ interface CommentsQueryResponse {
       comments: {
         nodes: {
           id: string;
+          databaseId: number;
           body: string;
           isMinimized: boolean;
           author: { __typename: string } | null;
@@ -57,6 +57,7 @@ const COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
       comments(last: 100) {
         nodes {
           id
+          databaseId
           body
           isMinimized
           author {
@@ -192,20 +193,14 @@ export class ConflictsNotifierSubscriber extends Subscriber {
         title: pr.title,
         base: pr.base.ref,
       });
-      const body = `${message}\n\n${COMMENT_MARKER}`;
 
-      await context.octokit.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: pr.number,
-        body,
-      });
+      await this.notice(context, pr.number, message);
       this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
 
-    if (existing.isMinimized) {
-      await unminimizeComment(context.octokit, existing.id);
+    if (isNoticeResolved(existing.found, existing.isMinimized)) {
+      await reopenNotice(context.octokit, { owner, repo, number: pr.number }, existing.found, existing.isMinimized);
       this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -222,12 +217,12 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       return;
     }
 
-    if (existing.isMinimized) {
+    if (isNoticeResolved(existing.found, existing.isMinimized)) {
       log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
       return;
     }
 
-    await minimizeComment(context.octokit, existing.id, 'RESOLVED');
+    await resolveNotice(context.octokit, { ...context.repo(), number: prNumber }, existing.found, 'RESOLVED');
     log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
 
@@ -239,15 +234,17 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       number: prNumber,
     });
 
-    const match = findCarsonComment(response.repository.pullRequest.comments.nodes, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (node) => node.author?.__typename === 'Bot',
-    });
+    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, (node) => node.author?.__typename === 'Bot');
 
     if (match === undefined) {
       return null;
     }
 
-    return { id: match.id, isMinimized: match.isMinimized };
+    const { comment, inDigest } = match;
+
+    return {
+      found: { id: this.id, commentId: comment.databaseId, nodeId: comment.id, body: comment.body, inDigest },
+      isMinimized: comment.isMinimized,
+    };
   }
 }
