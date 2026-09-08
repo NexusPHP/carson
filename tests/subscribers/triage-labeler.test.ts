@@ -39,6 +39,7 @@ const mockConfig = (yaml: string | null): void => {
 interface ReviewInput {
   user: string | null;
   state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
+  commitId?: string;
 }
 
 const mockListReviews = (reviews: ReviewInput[]): nock.Scope => {
@@ -49,6 +50,7 @@ const mockListReviews = (reviews: ReviewInput[]): nock.Scope => {
       id: 1000 + i,
       state: r.state,
       user: r.user === null ? null : { login: r.user },
+      commit_id: r.commitId ?? 'abc1234',
     })));
 };
 
@@ -123,6 +125,7 @@ const reviewPayload = (
 });
 
 const CONFIG_ENABLED = 'version: 1\nsubscribers:\n  - triage-labeler\n';
+const CONFIG_RESET_ON_PUSH = `${CONFIG_ENABLED}settings:\n  triage-labeler:\n    reset_on_push: true\n`;
 
 describe('triage-labeler subscriber (via app)', () => {
   let probot: Probot;
@@ -436,6 +439,73 @@ describe('triage-labeler subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('keeps needs-rework after a push by default even when the change request is stale', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockListReviews([{ user: 'alice', state: 'CHANGES_REQUESTED', commitId: 'older00' }]);
+    mockRole('alice', 'write');
+
+    await probot.receive({
+      id: 'evt-stale-default',
+      name: 'pull_request',
+      payload: prPayload({ action: 'synchronize', labels: ['needs-rework'] }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('returns to needs-review after a push when reset_on_push is set and the change request is stale', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_RESET_ON_PUSH);
+    mockListReviews([{ user: 'alice', state: 'CHANGES_REQUESTED', commitId: 'older00' }]);
+    const removeScope = mockRemoveLabel('needs-rework');
+    const addScope = mockAddLabels('needs-review');
+
+    await probot.receive({
+      id: 'evt-reset-stale',
+      name: 'pull_request',
+      payload: prPayload({ action: 'synchronize', labels: ['needs-rework'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('keeps needs-rework under reset_on_push when the change request targets the current head', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_RESET_ON_PUSH);
+    mockListReviews([{ user: 'alice', state: 'CHANGES_REQUESTED' }]);
+    mockRole('alice', 'write');
+
+    await probot.receive({
+      id: 'evt-reset-fresh',
+      name: 'pull_request',
+      payload: prPayload({ action: 'synchronize', labels: ['needs-rework'] }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does not resurrect an earlier approval when a stale change request is dropped', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_RESET_ON_PUSH);
+    mockListReviews([
+      { user: 'alice', state: 'APPROVED', commitId: 'older00' },
+      { user: 'alice', state: 'CHANGES_REQUESTED', commitId: 'older01' },
+    ]);
+    const removeScope = mockRemoveLabel('needs-rework');
+    const addScope = mockAddLabels('needs-review');
+
+    await probot.receive({
+      id: 'evt-reset-no-resurrect',
+      name: 'pull_request',
+      payload: prPayload({ action: 'synchronize', labels: ['needs-rework'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(addScope.isDone()).toBe(true);
   });
 
   it('ignores the removed qualifying_associations setting and warns', async () => {

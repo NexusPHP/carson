@@ -974,6 +974,8 @@ For each event the subscriber paginates `pulls.listReviews`, reduces to the late
 
 Draft PRs are never labeled. A PR converted to draft has its triage label removed. A PR moved out of draft via `ready_for_review` is re-evaluated.
 
+A change request keeps the PR at `needs-rework` until the reviewer submits a new review, even after the author pushes. With `reset_on_push: true`, a change request whose `commit_id` is not the current head commit no longer counts, so a push after a change request returns the PR to `needs-review` (or `approved`, if an approval from another reviewer stands). Approvals are never treated as stale here: use branch protection's "dismiss stale approvals" for that, which Carson sees as a `DISMISSED` review.
+
 A reviewer "qualifies" when their repository role, looked up via `repos.getCollaboratorPermissionLevel`, is in the configured `qualifying_roles` set. The default and maximum set is `{admin, maintain, write}`. The set cannot be widened to include `triage` or `read`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label. The role lookup replaces `author_association`, which reports private organization members to an App as `CONTRIBUTOR` or `NONE` unless the App holds the organization `members: read` permission. A leftover `qualifying_associations` setting is ignored with a warning.
 
 Bot senders are not skipped, so pull requests opened by Dependabot and similar bots are triaged.
@@ -990,6 +992,7 @@ If the existing managed label already matches the desired state, no label API ca
 | `needs_rework_label` | string | `needs-rework` |
 | `approved_label` | string | `approved` |
 | `qualifying_roles` | array of `admin`, `maintain`, `write` | `[admin, maintain, write]` |
+| `reset_on_push` | boolean | `false` |
 
 ### Example
 

@@ -61172,7 +61172,8 @@ var Settings16 = external_exports.object({
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
   qualifying_roles: external_exports.array(external_exports.enum(QUALIFYING_ROLES)).optional(),
-  qualifying_associations: external_exports.unknown().optional()
+  qualifying_associations: external_exports.unknown().optional(),
+  reset_on_push: external_exports.boolean().optional()
 });
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
@@ -61188,9 +61189,10 @@ var resolveSettings = (raw) => ({
   needsReviewLabel: raw.needs_review_label ?? DEFAULT_NEEDS_REVIEW,
   needsReworkLabel: raw.needs_rework_label ?? DEFAULT_NEEDS_REWORK,
   approvedLabel: raw.approved_label ?? DEFAULT_APPROVED,
-  qualifyingRoles: new Set(raw.qualifying_roles ?? QUALIFYING_ROLES)
+  qualifyingRoles: new Set(raw.qualifying_roles ?? QUALIFYING_ROLES),
+  resetOnPush: raw.reset_on_push ?? false
 });
-var latestVerdicts = (reviews) => {
+var latestReviews = (reviews) => {
   const latest = /* @__PURE__ */ new Map();
   for (const review of reviews) {
     if (review.user === null) {
@@ -61199,14 +61201,17 @@ var latestVerdicts = (reviews) => {
     if (review.state !== "APPROVED" && review.state !== "CHANGES_REQUESTED") {
       continue;
     }
-    latest.set(review.user.login, review.state);
+    latest.set(review.user.login, { verdict: review.state, commitId: review.commit_id });
   }
   return latest;
 };
-var computeDesired = async (reviews, qualifies) => {
+var computeDesired = async (reviews, evaluation) => {
   const states = [];
-  for (const [login, verdict] of latestVerdicts(reviews)) {
-    if (await qualifies(login)) {
+  for (const [login, { verdict, commitId }] of latestReviews(reviews)) {
+    if (evaluation.resetOnPush && verdict === "CHANGES_REQUESTED" && commitId !== evaluation.headSha) {
+      continue;
+    }
+    if (await evaluation.qualifies(login)) {
       states.push(verdict);
     }
   }
@@ -61266,7 +61271,12 @@ var TriageLabelerSubscriber = class extends Subscriber {
         per_page: 100
       });
       const qualifies = async (username) => settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
-      desiredLabel = labelFor(await computeDesired(reviews, qualifies), settings);
+      const desired = await computeDesired(reviews, {
+        headSha: pr.head.sha,
+        resetOnPush: settings.resetOnPush,
+        qualifies
+      });
+      desiredLabel = labelFor(desired, settings);
     }
     for (const label of currentManaged) {
       if (label !== desiredLabel) {
