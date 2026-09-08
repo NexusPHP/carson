@@ -151,6 +151,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**issue-intake**](SUBSCRIBERS.md#issue-intake): turns `repository_dispatch` events from an external system into labeled issues carrying a correlation marker.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
+- [**maintainer-edits**](SUBSCRIBERS.md#maintainer-edits): comments on fork PRs that do not allow edits from maintainers.
 - [**milestone**](SUBSCRIBERS.md#milestone): assigns a milestone to PRs from rules on the base branch and labels, including a next-open milestone.
 - [**no-merge-commits**](SUBSCRIBERS.md#no-merge-commits): posts a check that fails when a PR contains merge commits, with label, author, and branch-rule exemptions.
 - [**no-response-closer**](SUBSCRIBERS.md#no-response-closer): closes open issues and PRs carrying a configurable label whose activity has been stale past a threshold.

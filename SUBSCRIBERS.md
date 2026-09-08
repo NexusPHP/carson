@@ -15,6 +15,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [conflicts-notifier](#conflicts-notifier)
   - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
+  - [maintainer-edits](#maintainer-edits)
   - [milestone](#milestone)
   - [no-merge-commits](#no-merge-commits)
   - [no-response-closer](#no-response-closer)
@@ -63,6 +64,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
 | `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake), [webhook-notifier](#webhook-notifier) |
+| `<!-- carson:maintainer-edits -->` | [maintainer-edits](#maintainer-edits) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
 | `<!-- carson:unsupported-branch -->` | [unsupported-branch](#unsupported-branch) |
@@ -393,6 +395,49 @@ settings:
       This issue has been quiet for {{days}} days, so I'm locking it to keep
       the discussion focused. If you have new information, please open a fresh
       issue and link back to this one.
+```
+
+---
+
+## maintainer-edits
+
+Comments on a pull request from a fork whose author unchecked "Allow edits from maintainers".
+
+**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`
+**Permissions**: `pull_requests: write`
+
+The check is payload-only: the head repository must differ from the base repository and `maintainer_can_modify` must be false. Same-repository branches, PRs whose fork was deleted, and drafts (until `ready_for_review`) are skipped. One notice is posted per PR, found again through the `<!-- carson:maintainer-edits -->` marker.
+
+GitHub does not send an event when the checkbox is toggled later, so the notice is never minimized automatically.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `message` | string (template) | see below |
+
+Default message:
+
+```markdown
+Hey @{{user}}, it looks like "Allow edits from maintainers" is unchecked on this pull request.
+
+That is fine, but maintainers will not be able to rebase, squash, or apply small fixes for you before merging. If you would like them to, please [allow edits from maintainers](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork).
+```
+
+### Template context
+
+| Placeholder | Value |
+| --- | --- |
+| `{{user}}` | PR author login |
+| `{{repo}}` | Repository name |
+| `{{number}}` | PR number |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - maintainer-edits
 ```
 
 ---
