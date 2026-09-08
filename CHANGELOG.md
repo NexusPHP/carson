@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.4.0](https://github.com/NexusPHP/carson/compare/v1.3.0...v1.4.0) - 2026-09-08
+
 ### Added
 
 - `auto-labeler` gains `implied_labels`: applying a mapped label adds the labels it implies, on issues and pull requests.
