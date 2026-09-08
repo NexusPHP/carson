@@ -1,9 +1,10 @@
 import { type ActionContext, type ActionName, type ActionRegistrar, type ActionRequests } from './actions.js';
 import { type CarsonConfig, subscriberSettings } from './configuration/schema.js';
 import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
-import { type NoticeClient, postNotice } from './github/notices.js';
+import { type FoundNotice, isNoticeResolved, queueNotice, reopenNotice, resolveNotice } from './github/notices.js';
 import type { components } from '@octokit/openapi-types';
 import type { Logger } from 'pino';
+import type { MinimizeClassifier } from './github/comments.js';
 import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
 import type { z } from 'zod';
@@ -11,6 +12,8 @@ import type { z } from 'zod';
 export type PermissionLevel = 'read' | 'write' | 'admin';
 export type PermissionKey = keyof NonNullable<components['schemas']['app-permissions']>;
 export type RequiredPermissions = Readonly<Partial<Record<PermissionKey, PermissionLevel>>>;
+
+type NoticeContext = Pick<ActionContext, 'octokit' | 'repo'>;
 
 export interface EnabledSettings<T> {
   config: CarsonConfig;
@@ -53,13 +56,20 @@ export abstract class Subscriber {
     return await this.#actions.dispatch(name, context, request);
   }
 
-  // A second notice on the same item in one event turns the first comment into a digest.
-  protected async notice(
-    context: { id: string; octokit: NoticeClient; repo: () => { owner: string; repo: string } },
-    number: number,
-    body: string,
-  ): Promise<void> {
-    await postNotice(context.octokit, context.id, { ...context.repo(), number }, { id: this.id, body });
+  protected notice(context: NoticeContext, number: number, body: string): void {
+    queueNotice(context.octokit, { ...context.repo(), number }, { id: this.id, body });
+  }
+
+  protected isNoticeResolved(found: FoundNotice): boolean {
+    return isNoticeResolved(this.id, found);
+  }
+
+  protected async resolveNotice(context: NoticeContext, number: number, found: FoundNotice, classifier: MinimizeClassifier): Promise<void> {
+    await resolveNotice(context.octokit, { ...context.repo(), number }, this.id, found, classifier);
+  }
+
+  protected async reopenNotice(context: NoticeContext, number: number, found: FoundNotice): Promise<void> {
+    await reopenNotice(context.octokit, { ...context.repo(), number }, this.id, found);
   }
 
   protected async loadEnabledConfig(context: ConfigLoadable): Promise<CarsonConfig | null> {

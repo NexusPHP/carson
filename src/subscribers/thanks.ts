@@ -54,7 +54,7 @@ export class ThanksSubscriber extends Subscriber {
         title: pr.title,
       });
 
-      await this.notice(context, pr.number, body);
+      this.notice(context, pr.number, body);
 
       log.info(`Commented on PR #${pr.number}`);
     });

@@ -1,10 +1,11 @@
 import type { Context, Probot } from 'probot';
-import { findCarsonComment, minimizeComment } from '../github/comments.js';
+import { findNotice, isBotComment, noticeMarker } from '../github/notices.js';
 import { interpolate, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
 import { labelNames } from '../github/labels.js';
+import { minimizeComment } from '../github/comments.js';
 import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
 
@@ -22,7 +23,7 @@ const DEFAULT_DAYS_CLOSE = 7;
 const DEFAULT_STALE_LABEL = 'stale';
 const DEFAULT_STALE_MESSAGE = 'This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.';
 const DEFAULT_CLOSE_MESSAGE = 'Closing this {{type}} due to extended inactivity.';
-const COMMENT_MARKER = '<!-- carson:stale -->';
+const COMMENT_MARKER = noticeMarker('stale');
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 5;
 
@@ -87,10 +88,7 @@ export class StaleSubscriber extends Subscriber {
       issue_number: issueNumber,
       per_page: 100,
     });
-    const stalePost = findCarsonComment(comments, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (c) => c.user?.type === 'Bot',
-    });
+    const stalePost = findNotice(comments, this.id, isBotComment);
 
     const log = this.log(context);
 

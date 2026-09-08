@@ -1,10 +1,12 @@
 import { type ApplicationFunction, run } from 'probot';
 import { carson } from './app.js';
+import { flushingNotices } from './carson.js';
 import { logger } from './logger.js';
 import { runPreflight } from './preflight.js';
 
 const devApp: ApplicationFunction = async (probot) => {
   carson.run(probot);
+  probot.webhooks.verifyAndReceive = flushingNotices(probot.webhooks.verifyAndReceive);
   const log = logger.for('dev');
   const repository = process.env['DEV_REPOSITORY'];
 

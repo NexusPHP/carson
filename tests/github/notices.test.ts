@@ -1,26 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DIGEST_MARKER, findNotice, isNoticeResolved, noticeMarker, postNotice, reopenNotice, resolveNotice } from '../../src/github/notices.js';
+import { DIGEST_MARKER, findNotice, flushNotices, fromRestComment, isBotComment, isBotNode, isNoticeResolved, noticeMarker, queueNotice, reopenNotice, resolveNotice } from '../../src/github/notices.js';
 import type { NoticeClient } from '../../src/github/notices.js';
 
 const TARGET = { owner: 'acme', repo: 'widgets', number: 42 };
 
-interface Stub {
-  client: NoticeClient;
-  createComment: ReturnType<typeof vi.fn>;
-  updateComment: ReturnType<typeof vi.fn>;
-  graphql: ReturnType<typeof vi.fn>;
-}
-
-const stub = (): Stub => {
+const stub = (liveBody?: string): { client: NoticeClient } & Record<'createComment' | 'getComment' | 'updateComment' | 'graphql', ReturnType<typeof vi.fn>> => {
   const createComment = vi.fn().mockResolvedValue({ data: { id: 500 } });
+  const getComment = vi.fn().mockResolvedValue({ data: { body: liveBody ?? null } });
   const updateComment = vi.fn().mockResolvedValue({});
   const graphql = vi.fn().mockResolvedValue({});
+  const client: NoticeClient = { graphql, rest: { issues: { createComment, getComment, updateComment } } };
 
-  return { client: { graphql, rest: { issues: { createComment, updateComment } } } as unknown as NoticeClient, createComment, updateComment, graphql };
+  return { client, createComment, getComment, updateComment, graphql };
 };
-
-let delivery = 0;
-const eventId = (): string => `evt-${++delivery}`;
 
 const section = (id: string, body: string): string => `<!-- carson:${id}:start -->\n${body}\n${noticeMarker(id)}`;
 const wrapped = (id: string, body: string, label = 'Resolved'): string =>
@@ -29,110 +21,121 @@ const digest = (...sections: string[]): string => `${sections.join('\n\n---\n\n'
 
 const bot = { user: { type: 'Bot' } };
 const human = { user: { type: 'User' } };
-const isBot = (c: { user: { type: string } }): boolean => c.user.type === 'Bot';
+const found = { commentId: 500, nodeId: 'IC_1', body: '' };
 
-describe('postNotice', () => {
-  it('posts a standalone comment for the first notice on an item', async () => {
-    const { client, createComment, updateComment } = stub();
+describe('queueNotice and flushNotices', () => {
+  it('posts a lone notice as a plain comment ending with its marker', async () => {
+    const { client, createComment } = stub();
 
-    await postNotice(client, eventId(), TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, TARGET, { id: 'welcome', body: 'hi' });
+    await flushNotices();
 
     expect(createComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 42, body: `hi\n\n${noticeMarker('welcome')}` });
-    expect(updateComment).not.toHaveBeenCalled();
   });
 
-  it('upgrades the comment into a digest sorted by id when a second notice arrives in the same event', async () => {
-    const { client, createComment, updateComment } = stub();
-    const id = eventId();
+  it('posts several notices on one item as a single digest sorted by id', async () => {
+    const { client, createComment } = stub();
 
-    await Promise.all([
-      postNotice(client, id, TARGET, { id: 'welcome', body: 'hi' }),
-      postNotice(client, id, TARGET, { id: 'draft-policy', body: 'draft' }),
-    ]);
-    await postNotice(client, id, TARGET, { id: 'maintainer-edits', body: 'edits' });
+    queueNotice(client, TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, TARGET, { id: 'draft-policy', body: 'draft' });
+    queueNotice(client, TARGET, { id: 'maintainer-edits', body: 'edits' });
+    await flushNotices();
 
     expect(createComment).toHaveBeenCalledTimes(1);
-    expect(updateComment).toHaveBeenLastCalledWith({
-      owner: 'acme',
-      repo: 'widgets',
-      comment_id: 500,
+    expect(createComment).toHaveBeenCalledWith(expect.objectContaining({
       body: digest(section('draft-policy', 'draft'), section('maintainer-edits', 'edits'), section('welcome', 'hi')),
-    });
+    }));
   });
 
-  it('keeps notices from different events and items apart', async () => {
-    const { client, createComment, updateComment } = stub();
-    const id = eventId();
+  it('posts once per item and drains the queue', async () => {
+    const { client, createComment } = stub();
 
-    await postNotice(client, id, TARGET, { id: 'welcome', body: 'hi' });
-    await postNotice(client, id, { ...TARGET, number: 43 }, { id: 'welcome', body: 'hi' });
-    await postNotice(client, eventId(), TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, { ...TARGET, number: 43 }, { id: 'welcome', body: 'hi' });
+    await flushNotices();
+    await flushNotices();
 
-    expect(createComment).toHaveBeenCalledTimes(3);
-    expect(updateComment).not.toHaveBeenCalled();
+    expect(createComment).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps serving later notices after one fails', async () => {
+  it('still posts the other items when one post fails, then rethrows', async () => {
     const { client, createComment } = stub();
     createComment.mockRejectedValueOnce(new Error('boom'));
 
-    await expect(postNotice(client, eventId(), TARGET, { id: 'welcome', body: 'hi' })).rejects.toThrow('boom');
-    await postNotice(client, eventId(), TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, TARGET, { id: 'welcome', body: 'hi' });
+    queueNotice(client, { ...TARGET, number: 43 }, { id: 'welcome', body: 'hi' });
+    await expect(flushNotices()).rejects.toThrow('boom');
+    await flushNotices();
 
     expect(createComment).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('findNotice', () => {
-  it('finds a standalone bot comment ending with the marker', () => {
-    const comments = [{ ...human, body: `forged\n\n${noticeMarker('welcome')}` }, { ...bot, body: `hi\n\n${noticeMarker('welcome')}` }];
+  it('returns the latest bot comment ending with the marker and ignores forgeries', () => {
+    const comments = [
+      { ...bot, body: `old\n\n${noticeMarker('welcome')}` },
+      { ...bot, body: `new\n\n${noticeMarker('welcome')}` },
+      { ...human, body: `forged\n\n${noticeMarker('welcome')}` },
+    ];
 
-    expect(findNotice(comments, 'welcome', isBot)).toEqual({ comment: comments[1], inDigest: false });
+    expect(findNotice(comments, 'welcome', isBotComment)).toBe(comments[1]);
   });
 
-  it('finds a section inside a bot digest', () => {
-    const comments = [{ ...bot, body: digest(section('draft-policy', 'draft'), section('welcome', 'hi')) }];
+  it('finds a section inside a bot digest, with CRLF line endings too', () => {
+    const comments = [{ ...bot, body: digest(section('draft-policy', 'draft'), section('welcome', 'hi')).replace(/\n/g, '\r\n') }];
 
-    expect(findNotice(comments, 'welcome', isBot)).toEqual({ comment: comments[0], inDigest: true });
-    expect(findNotice(comments, 'stale', isBot)).toBeUndefined();
+    expect(findNotice(comments, 'welcome', isBotComment)).toBe(comments[0]);
+    expect(findNotice(comments, 'stale', isBotComment)).toBeUndefined();
   });
 
   it('ignores comments without a body', () => {
-    expect(findNotice([{ ...bot, body: null }], 'welcome', isBot)).toBeUndefined();
+    expect(findNotice([{ ...bot, body: null }], 'welcome', isBotComment)).toBeUndefined();
+  });
+});
+
+describe('author predicates and adapters', () => {
+  it('recognize bot authors in REST and GraphQL shapes', () => {
+    expect(isBotComment({ user: null })).toBe(false);
+    expect(isBotNode({ author: { __typename: 'Bot' } })).toBe(true);
+    expect(isBotNode({ author: null })).toBe(false);
+  });
+
+  it('adapts a REST comment to a FoundNotice', () => {
+    expect(fromRestComment({ id: 7, node_id: 'IC_7', body: 'x' })).toEqual({ commentId: 7, nodeId: 'IC_7', body: 'x' });
   });
 });
 
 describe('isNoticeResolved', () => {
-  const found = { id: 'welcome', commentId: 500, nodeId: 'IC_1', inDigest: true, body: '' };
-
-  it('is true when the comment is minimized', () => {
-    expect(isNoticeResolved({ ...found, inDigest: false }, true)).toBe(true);
+  it('reads the minimized flag for a standalone comment', () => {
+    expect(isNoticeResolved('welcome', { ...found, body: `hi\n\n${noticeMarker('welcome')}`, isMinimized: true })).toBe(true);
+    expect(isNoticeResolved('welcome', { ...found, body: `hi\n\n${noticeMarker('welcome')}` })).toBe(false);
   });
 
-  it('is true when the section is wrapped', () => {
-    expect(isNoticeResolved({ ...found, body: digest(wrapped('welcome', 'hi')) }, false)).toBe(true);
-    expect(isNoticeResolved({ ...found, body: digest(section('welcome', 'hi')) }, false)).toBe(false);
+  it('reads the wrapper for a digest section', () => {
+    expect(isNoticeResolved('welcome', { ...found, body: digest(wrapped('welcome', 'hi')) })).toBe(true);
+    expect(isNoticeResolved('welcome', { ...found, body: digest(section('welcome', 'hi')) })).toBe(false);
+    expect(isNoticeResolved('welcome', { ...found, body: digest(section('draft-policy', 'draft')) })).toBe(false);
   });
 });
 
 describe('resolveNotice', () => {
-  const found = { id: 'welcome', commentId: 500, nodeId: 'IC_1', inDigest: false, body: `hi\n\n${noticeMarker('welcome')}` };
-
   it('minimizes a standalone comment', async () => {
     const { client, graphql, updateComment } = stub();
 
-    await resolveNotice(client, TARGET, found, 'OUTDATED');
+    await resolveNotice(client, TARGET, 'welcome', { ...found, body: `hi\n\n${noticeMarker('welcome')}` }, 'OUTDATED');
 
     expect(graphql).toHaveBeenCalledWith(expect.stringContaining('minimizeComment'), { subjectId: 'IC_1', classifier: 'OUTDATED' });
     expect(updateComment).not.toHaveBeenCalled();
   });
 
-  it('wraps only its own section and leaves the comment visible while others stand', async () => {
-    const { client, graphql, updateComment } = stub();
-    const body = digest(section('draft-policy', 'draft'), section('welcome', 'hi'));
+  it('wraps only its own section from the live body and never minimizes a digest', async () => {
+    const live = digest(section('draft-policy', 'draft'), section('welcome', 'hi')).replace(/\n/g, '\r\n');
+    const { client, graphql, getComment, updateComment } = stub(live);
 
-    await resolveNotice(client, TARGET, { ...found, inDigest: true, body }, 'OUTDATED');
+    await resolveNotice(client, TARGET, 'welcome', { ...found, body: digest(section('welcome', 'stale snapshot')) }, 'OUTDATED');
 
+    expect(getComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', comment_id: 500 });
     expect(updateComment).toHaveBeenCalledWith({
       owner: 'acme',
       repo: 'widgets',
@@ -142,45 +145,49 @@ describe('resolveNotice', () => {
     expect(graphql).not.toHaveBeenCalled();
   });
 
-  it('minimizes the whole comment once every section is wrapped', async () => {
-    const { client, graphql, updateComment } = stub();
-    const body = digest(wrapped('draft-policy', 'draft'), section('welcome', 'hi'));
+  it('does nothing when the live section is already wrapped or missing', async () => {
+    const snapshot = { ...found, body: digest(section('welcome', 'hi')) };
+    const alreadyWrapped = stub(digest(wrapped('welcome', 'hi')));
+    const missing = stub(digest(section('draft-policy', 'draft')));
+    const emptyBody = stub();
 
-    await resolveNotice(client, TARGET, { ...found, inDigest: true, body }, 'RESOLVED');
+    await resolveNotice(alreadyWrapped.client, TARGET, 'welcome', snapshot, 'RESOLVED');
+    await resolveNotice(missing.client, TARGET, 'welcome', snapshot, 'RESOLVED');
+    await resolveNotice(emptyBody.client, TARGET, 'welcome', snapshot, 'RESOLVED');
 
-    expect(updateComment).toHaveBeenCalledTimes(1);
-    expect(graphql).toHaveBeenCalledWith(expect.stringContaining('minimizeComment'), { subjectId: 'IC_1', classifier: 'RESOLVED' });
+    expect(alreadyWrapped.updateComment).not.toHaveBeenCalled();
+    expect(missing.updateComment).not.toHaveBeenCalled();
+    expect(emptyBody.updateComment).not.toHaveBeenCalled();
   });
 
-  it('does nothing for a section that is already wrapped', async () => {
-    const { client, graphql, updateComment } = stub();
+  it('treats a section whose closing marker was removed as missing', async () => {
+    const { client, updateComment } = stub(`<!-- carson:welcome:start -->\nhi\n\n${DIGEST_MARKER}`);
 
-    await resolveNotice(client, TARGET, { ...found, inDigest: true, body: digest(wrapped('welcome', 'hi')) }, 'RESOLVED');
+    await resolveNotice(client, TARGET, 'welcome', { ...found, body: digest(section('welcome', 'hi')) }, 'RESOLVED');
 
     expect(updateComment).not.toHaveBeenCalled();
-    expect(graphql).not.toHaveBeenCalled();
   });
 });
 
 describe('reopenNotice', () => {
-  const found = { id: 'welcome', commentId: 500, nodeId: 'IC_1', inDigest: false, body: `hi\n\n${noticeMarker('welcome')}` };
+  it('unminimizes a minimized standalone comment and leaves a visible one alone', async () => {
+    const minimized = stub();
+    const visible = stub();
+    const body = `hi\n\n${noticeMarker('welcome')}`;
 
-  it('unminimizes a minimized standalone comment', async () => {
-    const { client, graphql, updateComment } = stub();
+    await reopenNotice(minimized.client, TARGET, 'welcome', { ...found, body, isMinimized: true });
+    await reopenNotice(visible.client, TARGET, 'welcome', { ...found, body });
 
-    await reopenNotice(client, TARGET, found, true);
-
-    expect(graphql).toHaveBeenCalledWith(expect.stringContaining('unminimizeComment'), { subjectId: 'IC_1' });
-    expect(updateComment).not.toHaveBeenCalled();
+    expect(minimized.graphql).toHaveBeenCalledWith(expect.stringContaining('unminimizeComment'), { subjectId: 'IC_1' });
+    expect(visible.graphql).not.toHaveBeenCalled();
   });
 
-  it('unwraps its section in a digest and unminimizes the comment when needed', async () => {
-    const { client, graphql, updateComment } = stub();
-    const body = digest(wrapped('draft-policy', 'draft'), wrapped('welcome', 'hi'));
+  it('unwraps its section from the live digest body', async () => {
+    const { client, graphql, updateComment } = stub(digest(wrapped('draft-policy', 'draft'), wrapped('welcome', 'hi')));
 
-    await reopenNotice(client, TARGET, { ...found, inDigest: true, body }, true);
+    await reopenNotice(client, TARGET, 'welcome', { ...found, body: digest(wrapped('welcome', 'hi')) });
 
-    expect(graphql).toHaveBeenCalledTimes(1);
+    expect(graphql).not.toHaveBeenCalled();
     expect(updateComment).toHaveBeenCalledWith({
       owner: 'acme',
       repo: 'widgets',
@@ -189,12 +196,15 @@ describe('reopenNotice', () => {
     });
   });
 
-  it('does nothing for a visible section in a visible digest', async () => {
-    const { client, graphql, updateComment } = stub();
+  it('does nothing when the live section is visible or missing', async () => {
+    const snapshot = { ...found, body: digest(wrapped('welcome', 'hi')) };
+    const visible = stub(digest(section('welcome', 'hi')));
+    const missing = stub(digest(section('draft-policy', 'draft')));
 
-    await reopenNotice(client, TARGET, { ...found, inDigest: true, body: digest(section('welcome', 'hi')) }, false);
+    await reopenNotice(visible.client, TARGET, 'welcome', snapshot);
+    await reopenNotice(missing.client, TARGET, 'welcome', snapshot);
 
-    expect(graphql).not.toHaveBeenCalled();
-    expect(updateComment).not.toHaveBeenCalled();
+    expect(visible.updateComment).not.toHaveBeenCalled();
+    expect(missing.updateComment).not.toHaveBeenCalled();
   });
 });

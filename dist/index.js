@@ -88,10 +88,10 @@ var require_tunnel = __commonJS({
       self2.on("free", function onFree(socket, host, port, localAddress) {
         var options3 = toOptions(host, port, localAddress);
         for (var i = 0, len = self2.requests.length; i < len; ++i) {
-          var pending = self2.requests[i];
-          if (pending.host === options3.host && pending.port === options3.port) {
+          var pending2 = self2.requests[i];
+          if (pending2.host === options3.host && pending2.port === options3.port) {
             self2.requests.splice(i, 1);
-            pending.request.onSocket(socket);
+            pending2.request.onSocket(socket);
             return;
           }
         }
@@ -205,10 +205,10 @@ var require_tunnel = __commonJS({
         return;
       }
       this.sockets.splice(pos, 1);
-      var pending = this.requests.shift();
-      if (pending) {
-        this.createSocket(pending, function(socket2) {
-          pending.request.onSocket(socket2);
+      var pending2 = this.requests.shift();
+      if (pending2) {
+        this.createSocket(pending2, function(socket2) {
+          pending2.request.onSocket(socket2);
         });
       }
     };
@@ -8177,8 +8177,8 @@ var require_pool_base = __commonJS({
       }
       get [kPending]() {
         let ret = this[kQueued];
-        for (const { [kPending]: pending } of this[kClients]) {
-          ret += pending;
+        for (const { [kPending]: pending2 } of this[kClients]) {
+          ret += pending2;
         }
         return ret;
       }
@@ -11273,18 +11273,18 @@ var require_mock_agent = __commonJS({
       }
       pendingInterceptors() {
         const mockAgentClients = this[kClients];
-        return Array.from(mockAgentClients.entries()).flatMap(([origin, scope]) => scope[kDispatches].map((dispatch) => ({ ...dispatch, origin }))).filter(({ pending }) => pending);
+        return Array.from(mockAgentClients.entries()).flatMap(([origin, scope]) => scope[kDispatches].map((dispatch) => ({ ...dispatch, origin }))).filter(({ pending: pending2 }) => pending2);
       }
       assertNoPendingInterceptors({ pendingInterceptorsFormatter = new PendingInterceptorsFormatter() } = {}) {
-        const pending = this.pendingInterceptors();
-        if (pending.length === 0) {
+        const pending2 = this.pendingInterceptors();
+        if (pending2.length === 0) {
           return;
         }
-        const pluralizer = new Pluralizer("interceptor", "interceptors").pluralize(pending.length);
+        const pluralizer = new Pluralizer("interceptor", "interceptors").pluralize(pending2.length);
         throw new UndiciError(`
 ${pluralizer.count} ${pluralizer.noun} ${pluralizer.is} pending:
 
-${pendingInterceptorsFormatter.format(pending)}
+${pendingInterceptorsFormatter.format(pending2)}
 `.trim());
       }
     };
@@ -22006,7 +22006,7 @@ var require_sonic_boom = __commonJS({
         fsWrite = () => fs2.write(this.fd, this._writingBuf, this.release);
       } else if (contentMode === void 0 || contentMode === kContentModeUtf8) {
         this._writingBuf = "";
-        this.write = write2;
+        this.write = write;
         this.flush = flush;
         this.flushSync = flushSync;
         this._actualWrite = actualWrite;
@@ -22139,7 +22139,7 @@ var require_sonic_boom = __commonJS({
       }
       return Buffer.concat(bufs, len);
     }
-    function write2(data) {
+    function write(data) {
       if (this.destroyed) {
         throw new Error("SonicBoom destroyed");
       }
@@ -22800,7 +22800,7 @@ var require_thread_stream = __commonJS({
             }
             return;
           }
-          write2(stream, leftover, noop4);
+          write(stream, leftover, noop4);
           continue;
         }
         if (leftover === 0) {
@@ -23104,7 +23104,7 @@ var require_thread_stream = __commonJS({
         });
       }
     }
-    function write2(stream, maxBytes, cb) {
+    function write(stream, maxBytes, cb) {
       const current = Atomics.load(stream[kImpl].state, WRITE_INDEX);
       let offset = current;
       let remaining = maxBytes;
@@ -23189,7 +23189,7 @@ var require_thread_stream = __commonJS({
         } else if (leftover < 0) {
           throw new Error("overwritten");
         }
-        write2(stream, leftover, cb);
+        write(stream, leftover, cb);
       }
     }
     function flushSync(stream) {
@@ -24072,7 +24072,7 @@ var require_proto = __commonJS({
         return "Pino";
       },
       [lsCacheSym]: initialLsCache,
-      [writeSym]: write2,
+      [writeSym]: write,
       [asJsonSym]: asJson,
       [getLevelSym]: getLevel,
       [setLevelSym]: setLevel
@@ -24175,7 +24175,7 @@ var require_proto = __commonJS({
     function defaultMixinMergeStrategy(mergeObject, mixinObject) {
       return Object.assign(mixinObject, mergeObject);
     }
-    function write2(_obj, msg, num) {
+    function write(_obj, msg, num) {
       const t = this[timeSym]();
       const mixin = this[mixinSym];
       const errorKey = this[errorKeySym];
@@ -24836,7 +24836,7 @@ var require_multistream = __commonJS({
         });
       }
       const res = {
-        write: write2,
+        write,
         add,
         remove,
         emit,
@@ -24856,7 +24856,7 @@ var require_multistream = __commonJS({
       }
       streamsArray = null;
       return res;
-      function write2(data) {
+      function write(data) {
         let dest;
         const level = this.lastLevel;
         const { streams } = this;
@@ -24958,7 +24958,7 @@ var require_multistream = __commonJS({
           };
         }
         return {
-          write: write2,
+          write,
           add,
           remove,
           minLevel: level,
@@ -25071,11 +25071,11 @@ var require_pino = __commonJS({
       depthLimit: 5,
       edgeLimit: 100
     };
-    var normalize = createArgsNormalizer(defaultOptions2);
+    var normalize2 = createArgsNormalizer(defaultOptions2);
     var serializers = Object.assign(/* @__PURE__ */ Object.create(null), stdSerializers);
     function pino2(...args) {
       const instance = {};
-      const { opts, stream } = normalize(instance, caller(), ...args);
+      const { opts, stream } = normalize2(instance, caller(), ...args);
       if (opts.level && typeof opts.level === "string" && DEFAULT_LEVELS[opts.level.toLowerCase()] !== void 0) opts.level = opts.level.toLowerCase();
       const {
         redact,
@@ -56093,13 +56093,13 @@ var recordProcessor = (schema, ctx, _json, params) => {
         ...params,
         path: [...params.path, "propertyNames"]
       });
-      let pending = pendingRecords.get(ctx);
-      if (!pending) {
-        pending = [];
-        pendingRecords.set(ctx, pending);
+      let pending2 = pendingRecords.get(ctx);
+      if (!pending2) {
+        pending2 = [];
+        pendingRecords.set(ctx, pending2);
         ctx.deferred.push(() => rewriteKeyNames(ctx));
       }
-      pending.push(schema);
+      pending2.push(schema);
     }
     json2.additionalProperties = process2(def.valueType, ctx, {
       ...params,
@@ -58949,12 +58949,12 @@ var fetchAndParse = async (context, knownIds) => {
 var loadConfig = async (context, knownIds) => {
   const { owner, repo } = context.repo();
   const key = `${owner}/${repo}`;
-  let pending = cache.get(key);
-  if (pending === void 0) {
-    pending = fetchAndParse(context, knownIds);
-    cache.set(key, pending);
+  let pending2 = cache.get(key);
+  if (pending2 === void 0) {
+    pending2 = fetchAndParse(context, knownIds);
+    cache.set(key, pending2);
   }
-  return await pending;
+  return await pending2;
 };
 
 // src/scheduled.ts
@@ -59060,103 +59060,114 @@ var minimizeComment = async (octokit, subjectId, classifier) => {
 var unminimizeComment = async (octokit, subjectId) => {
   await octokit.graphql(UNMINIMIZE_MUTATION, { subjectId });
 };
-var findCarsonComment = (comments, options2) => {
-  return comments.find(
-    (comment) => options2.isBotAuthored(comment) && comment.body?.endsWith(options2.marker) === true
-  );
-};
 
 // src/github/notices.ts
 var DIGEST_MARKER = "<!-- carson:digest -->";
 var noticeMarker = (id) => `<!-- carson:${id} -->`;
 var startMarker = (id) => `<!-- carson:${id}:start -->`;
 var LABELS = { RESOLVED: "Resolved", OUTDATED: "Outdated" };
-var WRAPPED = /^<details>\n<summary>(?:Resolved|Outdated)<\/summary>\n\n([\s\S]*)\n<\/details>$/;
-var threads = /* @__PURE__ */ new Map();
-var chain = Promise.resolve();
-var renderSection = ({ id, body }) => `${startMarker(id)}
+var WRAPPED = /^<details>\s*<summary>(?:Resolved|Outdated)<\/summary>\s*([\s\S]*?)\s*<\/details>$/;
+var pending = /* @__PURE__ */ new Map();
+var isBotComment = (comment) => comment.user?.type === "Bot";
+var isBotNode = (node2) => node2.author?.__typename === "Bot";
+var fromRestComment = (comment) => ({ commentId: comment.id, nodeId: comment.node_id, body: comment.body });
+var normalize = (body) => body.replace(/\r\n/g, "\n").trimEnd();
+var renderDigest = (sections) => `${[...sections].sort((a, b) => a.id.localeCompare(b.id)).map(({ id, body }) => `${startMarker(id)}
 ${body}
-${noticeMarker(id)}`;
-var renderDigest = (sections) => `${[...sections].sort((a, b) => a.id.localeCompare(b.id)).map(renderSection).join("\n\n---\n\n")}
+${noticeMarker(id)}`).join("\n\n---\n\n")}
 
 ${DIGEST_MARKER}`;
-var write = async (client, eventId, target, section) => {
-  const key = `${eventId}:${target.owner}/${target.repo}#${target.number}`;
-  const thread = threads.get(key);
-  const { owner, repo, number: number4 } = target;
-  if (thread === void 0) {
-    const { data } = await client.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: number4,
-      body: `${section.body}
-
-${noticeMarker(section.id)}`
-    });
-    threads.set(key, { commentId: data.id, sections: [section] });
-    return;
-  }
-  thread.sections.push(section);
-  await client.rest.issues.updateComment({ owner, repo, comment_id: thread.commentId, body: renderDigest(thread.sections) });
+var queueNotice = (client, target, section) => {
+  const key = `${target.owner}/${target.repo}#${target.number}`;
+  const entry = pending.get(key) ?? { client, target, sections: [] };
+  entry.sections.push(section);
+  pending.set(key, entry);
 };
-var postNotice = async (client, eventId, target, section) => {
-  const run2 = chain.then(async () => {
-    await write(client, eventId, target, section);
-  });
-  chain = run2.catch(() => void 0);
-  await run2;
+var post = async ({ client, target, sections }) => {
+  const [only] = sections;
+  const body = sections.length === 1 && only !== void 0 ? `${only.body}
+
+${noticeMarker(only.id)}` : renderDigest(sections);
+  await client.rest.issues.createComment({ owner: target.owner, repo: target.repo, issue_number: target.number, body });
+};
+var flushNotices = async () => {
+  const entries = [...pending.values()];
+  pending.clear();
+  const failed = (await Promise.allSettled(entries.map(post))).find((r) => r.status === "rejected");
+  if (failed !== void 0) {
+    throw failed.reason;
+  }
 };
 var hasBody = (comment) => typeof comment.body === "string";
 var findNotice = (comments, id, isBotAuthored) => {
-  for (const comment of comments) {
+  for (const comment of [...comments].reverse()) {
     if (!isBotAuthored(comment) || !hasBody(comment)) {
       continue;
     }
-    if (comment.body.endsWith(noticeMarker(id))) {
-      return { comment, inDigest: false };
-    }
-    if (comment.body.endsWith(DIGEST_MARKER) && comment.body.includes(startMarker(id))) {
-      return { comment, inDigest: true };
+    const body = normalize(comment.body);
+    if (body.endsWith(noticeMarker(id)) || body.endsWith(DIGEST_MARKER) && body.includes(startMarker(id))) {
+      return comment;
     }
   }
   return void 0;
 };
+var inDigest = (body) => normalize(body).endsWith(DIGEST_MARKER);
 var splitSection = (body, id) => {
-  const start = body.indexOf(startMarker(id)) + startMarker(id).length + 1;
-  const end = body.indexOf(noticeMarker(id), start) - 1;
-  return { before: body.slice(0, start), inner: body.slice(start, end), after: body.slice(end) };
+  const start = body.indexOf(startMarker(id));
+  if (start < 0) {
+    return null;
+  }
+  const innerStart = start + startMarker(id).length;
+  const end = body.indexOf(noticeMarker(id), innerStart);
+  if (end < 0) {
+    return null;
+  }
+  return { before: body.slice(0, innerStart), inner: body.slice(innerStart, end).trim(), after: body.slice(end) };
 };
-var sectionIds = (body) => [...body.matchAll(/<!-- carson:([\w-]+):start -->/g)].map((m) => m[1]);
-var isWrapped = (body, id) => WRAPPED.test(splitSection(body, id).inner);
-var isNoticeResolved = (found, commentMinimized) => commentMinimized || found.inDigest && isWrapped(found.body, found.id);
-var resolveNotice = async (client, target, found, classifier) => {
-  if (!found.inDigest) {
+var isNoticeResolved = (id, found) => {
+  if (!inDigest(found.body)) {
+    return found.isMinimized === true;
+  }
+  const section = splitSection(normalize(found.body), id);
+  return section !== null && WRAPPED.test(section.inner);
+};
+var liveSection = async (client, target, id, commentId) => {
+  const { data } = await client.rest.issues.getComment({ owner: target.owner, repo: target.repo, comment_id: commentId });
+  return splitSection(normalize(data.body ?? ""), id);
+};
+var resolveNotice = async (client, target, id, found, classifier) => {
+  if (!inDigest(found.body)) {
     await minimizeComment(client, found.nodeId, classifier);
     return;
   }
-  if (isWrapped(found.body, found.id)) {
+  const section = await liveSection(client, target, id, found.commentId);
+  if (section === null || WRAPPED.test(section.inner)) {
     return;
   }
-  const { before, inner, after } = splitSection(found.body, found.id);
-  const body = `${before}<details>
+  const body = `${section.before}
+<details>
 <summary>${LABELS[classifier]}</summary>
 
-${inner}
-</details>${after}`;
+${section.inner}
+</details>
+${section.after}`;
   await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
-  if (sectionIds(body).every((id) => isWrapped(body, id))) {
-    await minimizeComment(client, found.nodeId, classifier);
-  }
 };
-var reopenNotice = async (client, target, found, commentMinimized) => {
-  if (commentMinimized) {
-    await unminimizeComment(client, found.nodeId);
-  }
-  if (!found.inDigest || !isWrapped(found.body, found.id)) {
+var reopenNotice = async (client, target, id, found) => {
+  if (!inDigest(found.body)) {
+    if (found.isMinimized === true) {
+      await unminimizeComment(client, found.nodeId);
+    }
     return;
   }
-  const { before, inner, after } = splitSection(found.body, found.id);
-  const body = `${before}${WRAPPED.exec(inner)[1]}${after}`;
+  const section = await liveSection(client, target, id, found.commentId);
+  const match = section === null ? null : WRAPPED.exec(section.inner);
+  if (section === null || match === null) {
+    return;
+  }
+  const body = `${section.before}
+${match[1]}
+${section.after}`;
   await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
 };
 
@@ -59183,9 +59194,17 @@ var Subscriber = class {
     }
     return await this.#actions.dispatch(name, context, request2);
   }
-  // A second notice on the same item in one event turns the first comment into a digest.
-  async notice(context, number4, body) {
-    await postNotice(context.octokit, context.id, { ...context.repo(), number: number4 }, { id: this.id, body });
+  notice(context, number4, body) {
+    queueNotice(context.octokit, { ...context.repo(), number: number4 }, { id: this.id, body });
+  }
+  isNoticeResolved(found) {
+    return isNoticeResolved(this.id, found);
+  }
+  async resolveNotice(context, number4, found, classifier) {
+    await resolveNotice(context.octokit, { ...context.repo(), number: number4 }, this.id, found, classifier);
+  }
+  async reopenNotice(context, number4, found) {
+    await reopenNotice(context.octokit, { ...context.repo(), number: number4 }, this.id, found);
   }
   async loadEnabledConfig(context) {
     const config3 = await loadConfig(context);
@@ -59592,6 +59611,13 @@ var carsonPackage = JSON.parse(
 );
 var carsonVersion = carsonPackage.version;
 var probotVersion = carsonPackage.dependencies.probot.replace(/^[\^~]/, "");
+var flushingNotices = (receive) => async (...args) => {
+  try {
+    await receive(...args);
+  } finally {
+    await flushNotices();
+  }
+};
 var Carson = class _Carson {
   static DISPLAY_NAME = "Carson";
   #subscribers;
@@ -59615,6 +59641,7 @@ var Carson = class _Carson {
       subscriber.registerScheduled(this.#scheduled);
       subscriber.registerActions(this.#actions);
     }
+    probot.webhooks.receive = flushingNotices(probot.webhooks.receive);
   }
   get app() {
     return (probot) => {
@@ -59833,7 +59860,7 @@ var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
       comments(last: 100) {
         nodes {
           id
-          databaseId
+          fullDatabaseId
           body
           isMinimized
           author {
@@ -59923,7 +59950,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     }
   }
   async #handleConflict(context, pr, settings, existing) {
-    const { owner, repo } = context.repo();
+    const { repo } = context.repo();
     if (existing === null) {
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
         user: pr.user.login,
@@ -59932,12 +59959,12 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
         title: pr.title,
         base: pr.base.ref
       });
-      await this.notice(context, pr.number, message);
+      this.notice(context, pr.number, message);
       this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
-    if (isNoticeResolved(existing.found, existing.isMinimized)) {
-      await reopenNotice(context.octokit, { owner, repo, number: pr.number }, existing.found, existing.isMinimized);
+    if (this.isNoticeResolved(existing)) {
+      await this.reopenNotice(context, pr.number, existing);
       this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -59947,11 +59974,11 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);
       return;
     }
-    if (isNoticeResolved(existing.found, existing.isMinimized)) {
+    if (this.isNoticeResolved(existing)) {
       log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
       return;
     }
-    await resolveNotice(context.octokit, { ...context.repo(), number: prNumber }, existing.found, "RESOLVED");
+    await this.resolveNotice(context, prNumber, existing, "RESOLVED");
     log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
   async #findExistingComment(context, prNumber) {
@@ -59961,15 +59988,11 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       repo,
       number: prNumber
     });
-    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, (node2) => node2.author?.__typename === "Bot");
+    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, isBotNode);
     if (match === void 0) {
       return null;
     }
-    const { comment, inDigest } = match;
-    return {
-      found: { id: this.id, commentId: comment.databaseId, nodeId: comment.id, body: comment.body, inDigest },
-      isMinimized: comment.isMinimized
-    };
+    return { commentId: Number(match.fullDatabaseId), nodeId: match.id, body: match.body, isMinimized: match.isMinimized };
   }
 };
 
@@ -59986,8 +60009,7 @@ var DEFAULT_MESSAGE2 = `Hey @{{user}}, thanks for the pull request!
 
 This repository does not keep draft pull requests open. A pull request does not have to be finished to be reviewed, so please mark it "Ready for review" when you would like a first look, or close it and open a new one when you are done.`;
 var DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
-var PR_EVENTS3 = ["pull_request.opened", "pull_request.ready_for_review"];
-var isBotComment = (c) => c.user?.type === "Bot";
+var PR_EVENTS3 = ["pull_request.opened", "pull_request.converted_to_draft", "pull_request.ready_for_review"];
 var DraftPolicySubscriber = class extends Subscriber {
   id = "draft-policy";
   description = "Comments on draft pull requests and closes those still in draft after a grace period.";
@@ -60021,14 +60043,8 @@ var DraftPolicySubscriber = class extends Subscriber {
       });
       const notice = findNotice(comments, this.id, isBotComment);
       if (notice !== void 0) {
-        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
-          id: this.id,
-          commentId: notice.comment.id,
-          nodeId: notice.comment.node_id,
-          body: notice.comment.body,
-          inDigest: notice.inDigest
-        }, "RESOLVED");
-        log.info(`Minimized draft notice on PR #${pr.number}`);
+        await this.resolveNotice(context, pr.number, fromRestComment(notice), "RESOLVED");
+        log.info(`Resolved draft notice on PR #${pr.number}`);
       }
       return;
     }
@@ -60040,7 +60056,7 @@ var DraftPolicySubscriber = class extends Subscriber {
       repo: context.payload.repository.name,
       number: pr.number
     };
-    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, templateContext));
+    this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE2, templateContext));
     log.info(`Posted draft notice on PR #${pr.number}`);
   }
   async #run(scheduled) {
@@ -60064,6 +60080,10 @@ var DraftPolicySubscriber = class extends Subscriber {
     });
     let closed = 0;
     await forEachConcurrent(drafts, CONCURRENCY2, async (item) => {
+      if (new Date(item.created_at).getTime() >= cutoff) {
+        log.debug(`#${item.number}: opened within the grace period, skipping`);
+        return;
+      }
       const comments = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listComments, {
         owner,
         repo,
@@ -60071,7 +60091,7 @@ var DraftPolicySubscriber = class extends Subscriber {
         per_page: 100
       });
       const notice = findNotice(comments, this.id, isBotComment);
-      if (notice === void 0 || new Date(notice.comment.created_at).getTime() >= cutoff) {
+      if (notice === void 0 || new Date(notice.created_at).getTime() >= cutoff) {
         log.debug(`#${item.number}: ${notice === void 0 ? "no draft notice" : "within grace period"}, skipping`);
         return;
       }
@@ -60412,7 +60432,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
+    const notice = findNotice(comments, this.id, isBotComment);
     if (notice !== void 0) {
       log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
       return;
@@ -60422,7 +60442,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       repo: context.payload.repository.name,
       number: pr.number
     };
-    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, templateContext));
+    this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, templateContext));
     log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
   }
 };
@@ -60893,7 +60913,7 @@ var ReadOnlySubscriber = class extends Subscriber {
       templateContext["upstream"] = `[${settings.upstream}](${url2})`;
       templateContext["upstream_url"] = url2;
     }
-    await this.notice(context, item.number, interpolate(settings.message, templateContext));
+    this.notice(context, item.number, interpolate(settings.message, templateContext));
     await context.octokit.rest.issues.update({
       owner,
       repo,
@@ -60989,7 +61009,7 @@ var DEFAULT_DAYS_CLOSE = 7;
 var DEFAULT_STALE_LABEL = "stale";
 var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
 var DEFAULT_CLOSE_MESSAGE3 = "Closing this {{type}} due to extended inactivity.";
-var COMMENT_MARKER = "<!-- carson:stale -->";
+var COMMENT_MARKER = noticeMarker("stale");
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY5 = 5;
 var StaleSubscriber = class extends Subscriber {
@@ -61039,10 +61059,7 @@ var StaleSubscriber = class extends Subscriber {
       issue_number: issueNumber,
       per_page: 100
     });
-    const stalePost = findCarsonComment(comments, {
-      marker: COMMENT_MARKER,
-      isBotAuthored: (c) => c.user?.type === "Bot"
-    });
+    const stalePost = findNotice(comments, this.id, isBotComment);
     const log = this.log(context);
     if (stalePost !== void 0) {
       await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
@@ -61303,7 +61320,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       issue_number: item.number,
       per_page: 100
     });
-    const priorComment = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
+    const priorComment = findNotice(comments, this.id, isBotComment);
     if (priorComment === void 0) {
       const body = interpolate(messageTemplate, {
         user: item.user,
@@ -61313,7 +61330,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
         label,
         violations: renderViolations(violations)
       });
-      await this.notice(context, item.number, body);
+      this.notice(context, item.number, body);
       log.info(`Posted template-enforcer comment on #${item.number}`);
     }
     if (!hasLabel) {
@@ -61366,7 +61383,7 @@ var ThanksSubscriber = class extends Subscriber {
         number: pr.number,
         title: pr.title
       });
-      await this.notice(context, pr.number, body);
+      this.notice(context, pr.number, body);
       log.info(`Commented on PR #${pr.number}`);
     });
   }
@@ -61567,16 +61584,10 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findNotice(comments, this.id, (c) => c.user?.type === "Bot");
+    const notice = findNotice(comments, this.id, isBotComment);
     if (supported) {
       if (notice !== void 0) {
-        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
-          id: this.id,
-          commentId: notice.comment.id,
-          nodeId: notice.comment.node_id,
-          body: notice.comment.body,
-          inDigest: notice.inDigest
-        }, "OUTDATED");
+        await this.resolveNotice(context, pr.number, fromRestComment(notice), "OUTDATED");
         log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
       }
       return;
@@ -61592,7 +61603,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       base: pr.base.ref,
       branches: branches.map((b) => `\`${b}\``).join(", ")
     };
-    await this.notice(context, pr.number, interpolate(settings.message ?? DEFAULT_MESSAGE7, templateContext));
+    this.notice(context, pr.number, interpolate(settings.message ?? DEFAULT_MESSAGE7, templateContext));
     log.info(`Posted unsupported-branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
   }
 };
@@ -61802,7 +61813,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: context.payload.pull_request.number,
         title: context.payload.pull_request.title
       });
-      await this.notice(context, context.payload.pull_request.number, body);
+      this.notice(context, context.payload.pull_request.number, body);
       log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
     probot.on("issues.opened", async (context) => {
@@ -61833,7 +61844,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: issue3.number,
         title: issue3.title
       });
-      await this.notice(context, issue3.number, body);
+      this.notice(context, issue3.number, body);
       log.info(`Commented on issue #${context.payload.issue.number}`);
     });
   }

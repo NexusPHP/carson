@@ -6,7 +6,7 @@ export const noticeMarker = (id: string): string => `<!-- carson:${id} -->`;
 const startMarker = (id: string): string => `<!-- carson:${id}:start -->`;
 
 const LABELS: Record<MinimizeClassifier, string> = { RESOLVED: 'Resolved', OUTDATED: 'Outdated' };
-const WRAPPED = /^<details>\n<summary>(?:Resolved|Outdated)<\/summary>\n\n([\s\S]*)\n<\/details>$/;
+const WRAPPED = /^<details>\s*<summary>(?:Resolved|Outdated)<\/summary>\s*([\s\S]*?)\s*<\/details>$/;
 
 export interface NoticeTarget {
   owner: string;
@@ -17,18 +17,18 @@ export interface NoticeTarget {
 export interface NoticeClient extends GraphqlClient {
   rest: {
     issues: {
-      createComment: (params: { owner: string; repo: string; issue_number: number; body: string }) => Promise<{ data: { id: number } }>;
+      createComment: (params: { owner: string; repo: string; issue_number: number; body: string }) => Promise<unknown>;
+      getComment: (params: { owner: string; repo: string; comment_id: number }) => Promise<{ data: { body?: string | null } }>;
       updateComment: (params: { owner: string; repo: string; comment_id: number; body: string }) => Promise<unknown>;
     };
   };
 }
 
 export interface FoundNotice {
-  id: string;
   commentId: number;
   nodeId: string;
   body: string;
-  inDigest: boolean;
+  isMinimized?: boolean;
 }
 
 interface Section {
@@ -36,49 +36,53 @@ interface Section {
   body: string;
 }
 
-interface Thread {
-  commentId: number;
+interface Pending {
+  client: NoticeClient;
+  target: NoticeTarget;
   sections: Section[];
 }
 
-const threads = new Map<string, Thread>();
-let chain: Promise<unknown> = Promise.resolve();
+const pending = new Map<string, Pending>();
 
-const renderSection = ({ id, body }: Section): string => `${startMarker(id)}\n${body}\n${noticeMarker(id)}`;
+export const isBotComment = (comment: { user?: { type?: string } | null }): boolean => comment.user?.type === 'Bot';
+
+export const isBotNode = (node: { author?: { __typename: string } | null }): boolean => node.author?.__typename === 'Bot';
+
+export const fromRestComment = (comment: { id: number; node_id: string; body: string }): FoundNotice =>
+  ({ commentId: comment.id, nodeId: comment.node_id, body: comment.body });
+
+const normalize = (body: string): string => body.replace(/\r\n/g, '\n').trimEnd();
 
 const renderDigest = (sections: readonly Section[]): string =>
-  `${[...sections].sort((a, b) => a.id.localeCompare(b.id)).map(renderSection).join('\n\n---\n\n')}\n\n${DIGEST_MARKER}`;
+  `${[...sections]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(({ id, body }) => `${startMarker(id)}\n${body}\n${noticeMarker(id)}`)
+    .join('\n\n---\n\n')}\n\n${DIGEST_MARKER}`;
 
-const write = async (client: NoticeClient, eventId: string, target: NoticeTarget, section: Section): Promise<void> => {
-  const key = `${eventId}:${target.owner}/${target.repo}#${target.number}`;
-  const thread = threads.get(key);
-  const { owner, repo, number } = target;
+export const queueNotice = (client: NoticeClient, target: NoticeTarget, section: Section): void => {
+  const key = `${target.owner}/${target.repo}#${target.number}`;
+  const entry = pending.get(key) ?? { client, target, sections: [] };
 
-  if (thread === undefined) {
-    const { data } = await client.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: number,
-      body: `${section.body}\n\n${noticeMarker(section.id)}`,
-    });
-    threads.set(key, { commentId: data.id, sections: [section] });
-
-    return;
-  }
-
-  thread.sections.push(section);
-  await client.rest.issues.updateComment({ owner, repo, comment_id: thread.commentId, body: renderDigest(thread.sections) });
+  entry.sections.push(section);
+  pending.set(key, entry);
 };
 
-// Handlers for one event run concurrently, so writes are serialized to let a
-// second notice upgrade the first comment into a digest instead of racing it.
-export const postNotice = async (client: NoticeClient, eventId: string, target: NoticeTarget, section: Section): Promise<void> => {
-  const run = chain.then(async () => {
-    await write(client, eventId, target, section);
-  });
-  chain = run.catch(() => undefined);
+const post = async ({ client, target, sections }: Pending): Promise<void> => {
+  const [only] = sections;
+  const body = sections.length === 1 && only !== undefined ? `${only.body}\n\n${noticeMarker(only.id)}` : renderDigest(sections);
 
-  await run;
+  await client.rest.issues.createComment({ owner: target.owner, repo: target.repo, issue_number: target.number, body });
+};
+
+export const flushNotices = async (): Promise<void> => {
+  const entries = [...pending.values()];
+  pending.clear();
+
+  const failed = (await Promise.allSettled(entries.map(post))).find((r): r is PromiseRejectedResult => r.status === 'rejected');
+
+  if (failed !== undefined) {
+    throw failed.reason;
+  }
 };
 
 const hasBody = <T extends { body?: string | null }>(comment: T): comment is T & { body: string } => typeof comment.body === 'string';
@@ -87,69 +91,101 @@ export const findNotice = <T extends { body?: string | null }>(
   comments: readonly T[],
   id: string,
   isBotAuthored: (comment: T) => boolean,
-): { comment: T & { body: string }; inDigest: boolean } | undefined => {
-  for (const comment of comments) {
+): (T & { body: string }) | undefined => {
+  for (const comment of [...comments].reverse()) {
     if (!isBotAuthored(comment) || !hasBody(comment)) {
       continue;
     }
 
-    if (comment.body.endsWith(noticeMarker(id))) {
-      return { comment, inDigest: false };
-    }
+    const body = normalize(comment.body);
 
-    if (comment.body.endsWith(DIGEST_MARKER) && comment.body.includes(startMarker(id))) {
-      return { comment, inDigest: true };
+    if (body.endsWith(noticeMarker(id)) || (body.endsWith(DIGEST_MARKER) && body.includes(startMarker(id)))) {
+      return comment;
     }
   }
 
   return undefined;
 };
 
-const splitSection = (body: string, id: string): { before: string; inner: string; after: string } => {
-  const start = body.indexOf(startMarker(id)) + startMarker(id).length + 1;
-  const end = body.indexOf(noticeMarker(id), start) - 1;
+const inDigest = (body: string): boolean => normalize(body).endsWith(DIGEST_MARKER);
 
-  return { before: body.slice(0, start), inner: body.slice(start, end), after: body.slice(end) };
+const splitSection = (body: string, id: string): { before: string; inner: string; after: string } | null => {
+  const start = body.indexOf(startMarker(id));
+
+  if (start < 0) {
+    return null;
+  }
+
+  const innerStart = start + startMarker(id).length;
+  const end = body.indexOf(noticeMarker(id), innerStart);
+
+  if (end < 0) {
+    return null;
+  }
+
+  return { before: body.slice(0, innerStart), inner: body.slice(innerStart, end).trim(), after: body.slice(end) };
 };
 
-const sectionIds = (body: string): string[] =>
-  [...body.matchAll(/<!-- carson:([\w-]+):start -->/g)].map((m) => m[1] as string);
+export const isNoticeResolved = (id: string, found: FoundNotice): boolean => {
+  if (!inDigest(found.body)) {
+    return found.isMinimized === true;
+  }
 
-const isWrapped = (body: string, id: string): boolean => WRAPPED.test(splitSection(body, id).inner);
+  const section = splitSection(normalize(found.body), id);
 
-export const isNoticeResolved = (found: FoundNotice, commentMinimized: boolean): boolean =>
-  commentMinimized || (found.inDigest && isWrapped(found.body, found.id));
+  return section !== null && WRAPPED.test(section.inner);
+};
 
-export const resolveNotice = async (client: NoticeClient, target: NoticeTarget, found: FoundNotice, classifier: MinimizeClassifier): Promise<void> => {
-  if (!found.inDigest) {
+const liveSection = async (
+  client: NoticeClient,
+  target: NoticeTarget,
+  id: string,
+  commentId: number,
+): Promise<{ before: string; inner: string; after: string } | null> => {
+  const { data } = await client.rest.issues.getComment({ owner: target.owner, repo: target.repo, comment_id: commentId });
+
+  return splitSection(normalize(data.body ?? ''), id);
+};
+
+export const resolveNotice = async (
+  client: NoticeClient,
+  target: NoticeTarget,
+  id: string,
+  found: FoundNotice,
+  classifier: MinimizeClassifier,
+): Promise<void> => {
+  if (!inDigest(found.body)) {
     await minimizeComment(client, found.nodeId, classifier);
 
     return;
   }
 
-  if (isWrapped(found.body, found.id)) {
+  const section = await liveSection(client, target, id, found.commentId);
+
+  if (section === null || WRAPPED.test(section.inner)) {
     return;
   }
 
-  const { before, inner, after } = splitSection(found.body, found.id);
-  const body = `${before}<details>\n<summary>${LABELS[classifier]}</summary>\n\n${inner}\n</details>${after}`;
+  const body = `${section.before}\n<details>\n<summary>${LABELS[classifier]}</summary>\n\n${section.inner}\n</details>\n${section.after}`;
   await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
-
-  if (sectionIds(body).every((id) => isWrapped(body, id))) {
-    await minimizeComment(client, found.nodeId, classifier);
-  }
 };
 
-export const reopenNotice = async (client: NoticeClient, target: NoticeTarget, found: FoundNotice, commentMinimized: boolean): Promise<void> => {
-  if (commentMinimized) {
-    await unminimizeComment(client, found.nodeId);
-  }
+export const reopenNotice = async (client: NoticeClient, target: NoticeTarget, id: string, found: FoundNotice): Promise<void> => {
+  if (!inDigest(found.body)) {
+    if (found.isMinimized === true) {
+      await unminimizeComment(client, found.nodeId);
+    }
 
-  if (!found.inDigest || !isWrapped(found.body, found.id)) {
     return;
   }
 
-  const { before, inner, after } = splitSection(found.body, found.id);
-  const body = `${before}${(WRAPPED.exec(inner) as RegExpExecArray)[1] as string}${after}`;
+  const section = await liveSection(client, target, id, found.commentId);
+  const match = section === null ? null : WRAPPED.exec(section.inner);
+
+  if (section === null || match === null) {
+    return;
+  }
+
+  const body = `${section.before}\n${match[1]}\n${section.after}`;
   await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
 };

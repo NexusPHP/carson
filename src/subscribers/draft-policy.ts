@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findNotice, resolveNotice } from '../github/notices.js';
+import { findNotice, fromRestComment, isBotComment } from '../github/notices.js';
 import { interpolate, pluralize, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
@@ -22,12 +22,10 @@ This repository does not keep draft pull requests open. A pull request does not 
 
 const DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
 
-type DraftPolicyEvent = 'pull_request.opened' | 'pull_request.ready_for_review';
+type DraftPolicyEvent = 'pull_request.opened' | 'pull_request.converted_to_draft' | 'pull_request.ready_for_review';
 type DraftPolicyContext = Context<DraftPolicyEvent>;
 
-const PR_EVENTS: DraftPolicyEvent[] = ['pull_request.opened', 'pull_request.ready_for_review'];
-
-const isBotComment = (c: { user?: { type?: string } | null }): boolean => c.user?.type === 'Bot';
+const PR_EVENTS: DraftPolicyEvent[] = ['pull_request.opened', 'pull_request.converted_to_draft', 'pull_request.ready_for_review'];
 
 export class DraftPolicySubscriber extends Subscriber {
   public readonly id = 'draft-policy';
@@ -69,14 +67,8 @@ export class DraftPolicySubscriber extends Subscriber {
       const notice = findNotice(comments, this.id, isBotComment);
 
       if (notice !== undefined) {
-        await resolveNotice(context.octokit, { owner, repo, number: pr.number }, {
-          id: this.id,
-          commentId: notice.comment.id,
-          nodeId: notice.comment.node_id,
-          body: notice.comment.body,
-          inDigest: notice.inDigest,
-        }, 'RESOLVED');
-        log.info(`Minimized draft notice on PR #${pr.number}`);
+        await this.resolveNotice(context, pr.number, fromRestComment(notice), 'RESOLVED');
+        log.info(`Resolved draft notice on PR #${pr.number}`);
       }
 
       return;
@@ -92,7 +84,7 @@ export class DraftPolicySubscriber extends Subscriber {
       number: pr.number,
     };
 
-    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
+    this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
     log.info(`Posted draft notice on PR #${pr.number}`);
   }
 
@@ -123,6 +115,12 @@ export class DraftPolicySubscriber extends Subscriber {
     let closed = 0;
 
     await forEachConcurrent(drafts, CONCURRENCY, async (item) => {
+      if (new Date(item.created_at).getTime() >= cutoff) {
+        log.debug(`#${item.number}: opened within the grace period, skipping`);
+
+        return;
+      }
+
       const comments = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listComments, {
         owner,
         repo,
@@ -131,7 +129,7 @@ export class DraftPolicySubscriber extends Subscriber {
       });
       const notice = findNotice(comments, this.id, isBotComment);
 
-      if (notice === undefined || new Date(notice.comment.created_at).getTime() >= cutoff) {
+      if (notice === undefined || new Date(notice.created_at).getTime() >= cutoff) {
         log.debug(`#${item.number}: ${notice === undefined ? 'no draft notice' : 'within grace period'}, skipping`);
 
         return;

@@ -50,7 +50,7 @@ const makeProbot = (): Probot => {
   const log: Record<string, unknown> = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
   log['child'] = vi.fn().mockReturnValue(log);
 
-  return { log } as unknown as Probot;
+  return { log, webhooks: { receive: vi.fn().mockResolvedValue(undefined) } } as unknown as Probot;
 };
 
 describe('Carson', () => {

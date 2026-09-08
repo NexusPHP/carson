@@ -65,7 +65,7 @@ export class ReadOnlySubscriber extends Subscriber {
       templateContext['upstream_url'] = url;
     }
 
-    await this.notice(context, item.number, interpolate(settings.message, templateContext));
+    this.notice(context, item.number, interpolate(settings.message, templateContext));
 
     await context.octokit.rest.issues.update({
       owner,

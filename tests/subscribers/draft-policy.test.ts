@@ -59,7 +59,7 @@ const mockMinimize = (nodeId: string): nock.Scope => {
     .reply(200, { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } });
 };
 
-const prPayload = (overrides: { action?: 'opened' | 'ready_for_review'; draft?: boolean } = {}): Record<string, unknown> => ({
+const prPayload = (overrides: { action?: 'opened' | 'converted_to_draft' | 'ready_for_review'; draft?: boolean } = {}): Record<string, unknown> => ({
   action: overrides.action ?? 'opened',
   installation: { id: INSTALLATION_ID },
   pull_request: {
@@ -150,6 +150,20 @@ describe('draft-policy subscriber (via app)', () => {
     expect(createScope.isDone()).toBe(true);
   });
 
+  it('posts a fresh notice when a PR is converted to draft', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    const createScope = mockCreateComment((body) => body.endsWith(MARKER));
+
+    await probot.receive({
+      id: 'evt-dp-converted',
+      name: 'pull_request',
+      payload: prPayload({ action: 'converted_to_draft' }) as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
+  });
+
   it('does nothing for a PR opened ready for review', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
@@ -212,6 +226,7 @@ const HOURS_AGO = (hours: number): string => new Date(NOW - hours * 60 * 60 * 10
 interface DraftShape {
   number: number;
   user?: { login: string } | null;
+  created_at?: string;
   comments: { body: string; created_at: string; userType?: string }[];
 }
 
@@ -236,6 +251,7 @@ const makeHarness = (drafts: DraftShape[], config: unknown): Harness => {
       return await Promise.resolve(drafts.map((d) => ({
         number: d.number,
         title: `Draft #${d.number}`,
+        created_at: d.created_at ?? HOURS_AGO(1000),
         user: d.user === undefined ? { login: 'octocat' } : d.user,
         labels: [],
         pull_request: {},
@@ -314,6 +330,23 @@ describe('draft-policy subscriber (scheduled)', () => {
     await runScheduled(context);
 
     expect(createCommentMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('skips a draft opened within the grace period without reading its comments', async () => {
+    const { context, updateMock } = makeHarness([{ number: 1, created_at: HOURS_AGO(2), comments: [NOTICE(48)] }], ENABLED);
+
+    await runScheduled(context);
+
+    expect(updateMock).not.toHaveBeenCalled();
+    expect((context.octokit.paginate as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it('uses the latest notice as the clock after a PR is re-drafted', async () => {
+    const { context, updateMock } = makeHarness([{ number: 1, comments: [NOTICE(48), NOTICE(2)] }], ENABLED);
+
+    await runScheduled(context);
+
     expect(updateMock).not.toHaveBeenCalled();
   });
 

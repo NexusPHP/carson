@@ -61,7 +61,7 @@ Subscribers that need to find their own prior comment on a PR or issue (to edit,
 
 Do not remove these markers from Carson comments. The subscriber relies on them to identify which comment is its own.
 
-When two or more subscribers post on the same issue or pull request during one event, the first comment is edited into a single digest instead of each subscriber posting its own. Sections are ordered by subscriber id, each wrapped in `<!-- carson:<id>:start -->` and `<!-- carson:<id> -->`, and the comment ends with `<!-- carson:digest -->`. A subscriber that later resolves its notice collapses its own section under a "Resolved" or "Outdated" toggle, and once every section is collapsed the whole comment is minimized. A lone notice is a plain comment and is minimized directly, as before.
+Event-driven notices are collected while an event is handled and posted once it is done. A lone notice is a plain comment ending with its marker, minimized directly when resolved, as before. When two or more subscribers post on the same issue or pull request during one event, they are posted as a single digest: sections ordered by subscriber id, each wrapped in `<!-- carson:<id>:start -->` and `<!-- carson:<id> -->`, and the comment ending with `<!-- carson:digest -->`. A subscriber that later resolves its notice collapses its own section under a "Resolved" or "Outdated" toggle and reopens it by unwrapping. Carson never minimizes a digest itself, so a digest a maintainer minimizes stays that way. Sections are edited from the live comment body, so a digest edited by hand keeps working as long as the markers stay in place.
 
 | Marker | Used by |
 | --- | --- |
@@ -284,12 +284,12 @@ settings:
 
 Comments on pull requests opened as drafts, asking the author to mark them ready for review, and closes those still in draft after a grace period.
 
-**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
+**Triggers**: `pull_request.opened`, `pull_request.converted_to_draft`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `pull_requests: write`
 
-On `pull_request.opened` with `draft: true`, one notice is posted carrying the `<!-- carson:draft-policy -->` marker. On `ready_for_review` the notice is minimized as resolved. A PR converted to draft after opening is not touched.
+On `pull_request.opened` with `draft: true` and on `converted_to_draft`, a notice is posted carrying the `<!-- carson:draft-policy -->` marker. On `ready_for_review` the latest notice is resolved.
 
-Each scheduled run searches open draft PRs and closes those whose notice is older than `hours_until_close`, posting `close_message` first. The notice is the clock: a draft without one (opened before the subscriber was enabled, or converted to draft later) is never closed. Set `hours_until_close: 0` to keep the notice and never close.
+Each scheduled run searches open draft PRs and closes those whose latest notice is older than `hours_until_close`, posting `close_message` first. The notice is the clock: a draft without one (opened before the subscriber was enabled) is never closed, and a PR that leaves and re-enters draft is timed from the newest notice. Set `hours_until_close: 0` to keep the notice and never close.
 
 ### Settings
 

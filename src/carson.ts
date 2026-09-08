@@ -4,6 +4,7 @@ import { findMissingPermissions, type MissingPermission } from './preflight.js';
 import type { PermissionLevel, Subscriber } from './subscriber.js';
 import { ActionRegistrar } from './actions.js';
 import { fileURLToPath } from 'node:url';
+import { flushNotices } from './github/notices.js';
 import { logger } from './logger.js';
 import { readFileSync } from 'node:fs';
 import { ScheduledRegistrar } from './scheduled.js';
@@ -15,6 +16,16 @@ const carsonPackage = JSON.parse(
 ) as { version: string; dependencies: { probot: string } };
 const carsonVersion = carsonPackage.version;
 const probotVersion = carsonPackage.dependencies.probot.replace(/^[\^~]/, '');
+
+// Handlers run concurrently, so queued notices post once the whole event has been handled.
+export const flushingNotices = <A extends unknown[]>(receive: (...args: A) => Promise<void>) =>
+  async (...args: A): Promise<void> => {
+    try {
+      await receive(...args);
+    } finally {
+      await flushNotices();
+    }
+  };
 
 export class Carson {
   public static readonly DISPLAY_NAME: string = 'Carson';
@@ -43,6 +54,8 @@ export class Carson {
       subscriber.registerScheduled(this.#scheduled);
       subscriber.registerActions(this.#actions);
     }
+
+    probot.webhooks.receive = flushingNotices(probot.webhooks.receive);
   }
 
   public get app(): ApplicationFunction {

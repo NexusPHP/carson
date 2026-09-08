@@ -69,7 +69,7 @@ describe('notice digest (via app)', () => {
     nock.cleanAll();
   });
 
-  it('folds two notices on one event into a single digest comment', async () => {
+  it('posts two notices on one event as a single digest comment', async () => {
     nock('https://api.github.com')
       .post('/app/installations/12345/access_tokens')
       .reply(201, { token: 'inst-token', expires_at: '2099-01-01T00:00:00Z' })
@@ -78,37 +78,49 @@ describe('notice digest (via app)', () => {
       .get('/repos/acme/widgets/issues/42/comments')
       .query({ per_page: '100' })
       .reply(200, []);
-    const bodies: string[] = [];
     const createScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        bodies.push(body.body);
+        expect(body.body).toBe([
+          '<!-- carson:maintainer-edits:start -->',
+          'Allow edits, octocat',
+          '<!-- carson:maintainer-edits -->',
+          '',
+          '---',
+          '',
+          '<!-- carson:welcome:start -->',
+          'Welcome octocat',
+          '<!-- carson:welcome -->',
+          '',
+          '<!-- carson:digest -->',
+        ].join('\n'));
         return true;
       })
       .reply(201, { id: 500 });
-    const updateScope = nock('https://api.github.com')
-      .patch('/repos/acme/widgets/issues/comments/500', (body: { body: string }) => {
-        bodies.push(body.body);
-        return true;
-      })
-      .reply(200, {});
 
     await probot.receive({ id: 'evt-digest', name: 'pull_request', payload: payload as never });
 
     expect(createScope.isDone()).toBe(true);
-    expect(updateScope.isDone()).toBe(true);
-    expect(bodies[0]).toMatch(/^(Welcome octocat\n\n<!-- carson:welcome -->|Allow edits, octocat\n\n<!-- carson:maintainer-edits -->)$/);
-    expect(bodies[1]).toBe([
-      '<!-- carson:maintainer-edits:start -->',
-      'Allow edits, octocat',
-      '<!-- carson:maintainer-edits -->',
-      '',
-      '---',
-      '',
-      '<!-- carson:welcome:start -->',
-      'Welcome octocat',
-      '<!-- carson:welcome -->',
-      '',
-      '<!-- carson:digest -->',
-    ].join('\n'));
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('still posts the notices a successful subscriber queued when another subscriber throws', async () => {
+    nock('https://api.github.com')
+      .post('/app/installations/12345/access_tokens')
+      .reply(201, { token: 'inst-token', expires_at: '2099-01-01T00:00:00Z' })
+      .get('/repos/acme/widgets/contents/.github%2Fcarson.yml')
+      .reply(200, CONFIG)
+      .get('/repos/acme/widgets/issues/42/comments')
+      .query({ per_page: '100' })
+      .reply(500, {});
+    const createScope = nock('https://api.github.com')
+      .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
+        expect(body.body).toBe('Welcome octocat\n\n<!-- carson:welcome -->');
+        return true;
+      })
+      .reply(201, { id: 500 });
+
+    await expect(probot.receive({ id: 'evt-digest-partial', name: 'pull_request', payload: payload as never })).rejects.toThrow();
+
+    expect(createScope.isDone()).toBe(true);
   });
 });

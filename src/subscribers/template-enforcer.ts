@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
+import { findNotice, isBotComment } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { findNotice } from '../github/notices.js';
 import { interpolate } from '../template.js';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -203,7 +203,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
       issue_number: item.number,
       per_page: 100,
     });
-    const priorComment = findNotice(comments, this.id, (c) => c.user?.type === 'Bot');
+    const priorComment = findNotice(comments, this.id, isBotComment);
 
     if (priorComment === undefined) {
       const body = interpolate(messageTemplate, {
@@ -215,7 +215,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
         violations: renderViolations(violations),
       });
 
-      await this.notice(context, item.number, body);
+      this.notice(context, item.number, body);
       log.info(`Posted template-enforcer comment on #${item.number}`);
     }
 

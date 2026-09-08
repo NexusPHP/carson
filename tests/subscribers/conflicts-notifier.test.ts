@@ -72,6 +72,40 @@ interface CommentNode {
   author?: { __typename: string } | null;
 }
 
+const COMMENT_ID = 500;
+const DIGEST = [
+  '<!-- carson:conflicts-notifier:start -->',
+  'conflict notice',
+  '<!-- carson:conflicts-notifier -->',
+  '',
+  '---',
+  '',
+  '<!-- carson:welcome:start -->',
+  'Welcome!',
+  '<!-- carson:welcome -->',
+  '',
+  '<!-- carson:digest -->',
+].join('\n');
+const WRAPPED_DIGEST = DIGEST.replace(
+  '<!-- carson:conflicts-notifier:start -->\nconflict notice\n<!-- carson:conflicts-notifier -->',
+  '<!-- carson:conflicts-notifier:start -->\n<details>\n<summary>Resolved</summary>\n\nconflict notice\n</details>\n<!-- carson:conflicts-notifier -->',
+);
+
+const mockGetComment = (body: string): nock.Scope => {
+  return nock('https://api.github.com')
+    .get(`/repos/acme/widgets/issues/comments/${COMMENT_ID}`)
+    .reply(200, { id: COMMENT_ID, body });
+};
+
+const mockUpdateComment = (expected: string): nock.Scope => {
+  return nock('https://api.github.com')
+    .patch(`/repos/acme/widgets/issues/comments/${COMMENT_ID}`, (body: { body: string }) => {
+      expect(body.body).toBe(expected);
+      return true;
+    })
+    .reply(200, {});
+};
+
 const mockCommentsQuery = (nodes: CommentNode[]): nock.Scope => {
   return nock('https://api.github.com')
     .post('/graphql', (body: GraphqlBody) => body.query.includes('pullRequest(number'))
@@ -82,6 +116,7 @@ const mockCommentsQuery = (nodes: CommentNode[]): nock.Scope => {
             comments: {
               nodes: nodes.map((n) => ({
                 ...n,
+                fullDatabaseId: String(COMMENT_ID),
                 author: n.author === undefined ? { __typename: 'Bot' } : n.author,
               })),
             },
@@ -315,6 +350,42 @@ describe('conflicts-notifier subscriber (via app)', () => {
     });
 
     expect(minimizeScope.isDone()).toBe(true);
+  });
+
+  it('collapses its own section of a digest when the conflict is resolved', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(true);
+    mockCommentsQuery([{ id: NODE_ID, body: DIGEST, isMinimized: false }]);
+    mockGetComment(DIGEST);
+    const updateScope = mockUpdateComment(WRAPPED_DIGEST);
+
+    await probot.receive({
+      id: 'evt-digest-resolved',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(updateScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('expands its collapsed section of a digest when the conflict returns', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([{ id: NODE_ID, body: WRAPPED_DIGEST, isMinimized: false }]);
+    mockGetComment(WRAPPED_DIGEST);
+    const updateScope = mockUpdateComment(DIGEST);
+
+    await probot.receive({
+      id: 'evt-digest-reopened',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(updateScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('requests the conflict label from auto-labeler when a conflict is detected', async () => {

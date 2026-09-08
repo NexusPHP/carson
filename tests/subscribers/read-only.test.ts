@@ -74,12 +74,9 @@ const openedPayload = (kind: 'issue' | 'pull_request', overrides: ItemOverrides 
   sender: { type: overrides.senderType ?? 'User' },
 });
 
-let delivery = 0;
-
 const receive = async (probot: Probot, kind: 'issue' | 'pull_request', overrides: ItemOverrides = {}): Promise<void> => {
-  delivery += 1;
   await probot.receive({
-    id: `evt-read-only-${delivery}`,
+    id: 'evt-read-only',
     name: kind === 'issue' ? 'issues' : 'pull_request',
     payload: openedPayload(kind, overrides) as never,
   });

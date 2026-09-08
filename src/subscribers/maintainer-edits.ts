@@ -1,7 +1,7 @@
 import type { Context, Probot } from 'probot';
+import { findNotice, isBotComment } from '../github/notices.js';
 import { interpolate, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
-import { findNotice } from '../github/notices.js';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -52,7 +52,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
       issue_number: pr.number,
       per_page: 100,
     });
-    const notice = findNotice(comments, this.id, (c) => c.user?.type === 'Bot');
+    const notice = findNotice(comments, this.id, isBotComment);
 
     if (notice !== undefined) {
       log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
@@ -66,7 +66,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
       number: pr.number,
     };
 
-    await this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
+    this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
     log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
   }
 }

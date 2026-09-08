@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findNotice, type FoundNotice, isNoticeResolved, reopenNotice, resolveNotice } from '../github/notices.js';
+import { findNotice, type FoundNotice, isBotNode } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
 import { forEachConcurrent } from '../concurrency.js';
@@ -27,18 +27,13 @@ const PR_EVENTS: PrEvent[] = [
   'pull_request.reopened',
 ];
 
-interface ExistingComment {
-  found: FoundNotice;
-  isMinimized: boolean;
-}
-
 interface CommentsQueryResponse {
   repository: {
     pullRequest: {
       comments: {
         nodes: {
           id: string;
-          databaseId: number;
+          fullDatabaseId: string;
           body: string;
           isMinimized: boolean;
           author: { __typename: string } | null;
@@ -57,7 +52,7 @@ const COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
       comments(last: 100) {
         nodes {
           id
-          databaseId
+          fullDatabaseId
           body
           isMinimized
           author {
@@ -181,9 +176,9 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       base: { ref: string };
     },
     settings: ParsedSettings,
-    existing: ExistingComment | null,
+    existing: FoundNotice | null,
   ): Promise<void> {
-    const { owner, repo } = context.repo();
+    const { repo } = context.repo();
 
     if (existing === null) {
       const message = interpolate(settings.message ?? DEFAULT_MESSAGE, {
@@ -194,13 +189,13 @@ export class ConflictsNotifierSubscriber extends Subscriber {
         base: pr.base.ref,
       });
 
-      await this.notice(context, pr.number, message);
+      this.notice(context, pr.number, message);
       this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
 
-    if (isNoticeResolved(existing.found, existing.isMinimized)) {
-      await reopenNotice(context.octokit, { owner, repo, number: pr.number }, existing.found, existing.isMinimized);
+    if (this.isNoticeResolved(existing)) {
+      await this.reopenNotice(context, pr.number, existing);
       this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
@@ -208,7 +203,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   async #handleNoConflict(
     context: SubscriberContext,
     prNumber: number,
-    existing: ExistingComment | null,
+    existing: FoundNotice | null,
   ): Promise<void> {
     const log = this.log(context);
 
@@ -217,16 +212,16 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       return;
     }
 
-    if (isNoticeResolved(existing.found, existing.isMinimized)) {
+    if (this.isNoticeResolved(existing)) {
       log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
       return;
     }
 
-    await resolveNotice(context.octokit, { ...context.repo(), number: prNumber }, existing.found, 'RESOLVED');
+    await this.resolveNotice(context, prNumber, existing, 'RESOLVED');
     log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
 
-  async #findExistingComment(context: SubscriberContext, prNumber: number): Promise<ExistingComment | null> {
+  async #findExistingComment(context: SubscriberContext, prNumber: number): Promise<FoundNotice | null> {
     const { owner, repo } = context.repo();
     const response = await context.octokit.graphql<CommentsQueryResponse>(COMMENTS_QUERY, {
       owner,
@@ -234,17 +229,12 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       number: prNumber,
     });
 
-    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, (node) => node.author?.__typename === 'Bot');
+    const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, isBotNode);
 
     if (match === undefined) {
       return null;
     }
 
-    const { comment, inDigest } = match;
-
-    return {
-      found: { id: this.id, commentId: comment.databaseId, nodeId: comment.id, body: comment.body, inDigest },
-      isMinimized: comment.isMinimized,
-    };
+    return { commentId: Number(match.fullDatabaseId), nodeId: match.id, body: match.body, isMinimized: match.isMinimized };
   }
 }

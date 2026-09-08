@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- When two or more subscribers comment on the same issue or pull request during one event, the notices are folded into a single digest comment. A subscriber resolving its notice collapses its own section, and the whole comment is minimized once every section is resolved.
+- When two or more subscribers comment on the same issue or pull request during one event, the notices are posted as a single digest comment. A subscriber resolving its notice collapses its own section.
 
 ## [v1.3.0](https://github.com/NexusPHP/carson/compare/v1.2.0...v1.3.0) - 2026-09-06
 
