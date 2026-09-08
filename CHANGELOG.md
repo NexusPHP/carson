@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [no-merge-commits](SUBSCRIBERS.md#no-merge-commits) subscriber: posts a check that fails when a pull request contains merge commits, with label, author, and branch-rule exemptions.
 - [milestone](SUBSCRIBERS.md#milestone) subscriber: assigns a milestone to pull requests from rules on the base branch and labels, with a `next-open` sentinel for the earliest open milestone.
+- [no-merge-commits](SUBSCRIBERS.md#no-merge-commits) subscriber: posts a check that fails when a pull request contains merge commits, with label, author, and branch-rule exemptions.
+- [unsupported-branch](SUBSCRIBERS.md#unsupported-branch) subscriber: comments on pull requests that target a branch outside the maintained set and minimizes the notice once retargeted.
 
 ## [v1.3.0](https://github.com/NexusPHP/carson/compare/v1.2.0...v1.3.0) - 2026-09-06
 

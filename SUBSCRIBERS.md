@@ -25,6 +25,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [template-enforcer](#template-enforcer)
   - [thanks](#thanks)
   - [triage-labeler](#triage-labeler)
+  - [unsupported-branch](#unsupported-branch)
   - [webhook-notifier](#webhook-notifier)
   - [welcome](#welcome)
 
@@ -64,6 +65,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake), [webhook-notifier](#webhook-notifier) |
 | `<!-- carson:stale -->` | [stale](#stale) |
 | `<!-- carson:template-enforcer -->` | [template-enforcer](#template-enforcer) |
+| `<!-- carson:unsupported-branch -->` | [unsupported-branch](#unsupported-branch) |
 
 ---
 
@@ -956,6 +958,55 @@ settings:
     needs_rework_label: "status: changes requested"
     approved_label: "status: ready to merge"
     qualifying_roles: [admin, maintain]   # tighten to admins and maintainers only
+```
+
+---
+
+## unsupported-branch
+
+Comments on a pull request that targets a branch outside the maintained set, asking the author to change the base branch.
+
+**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, `pull_request.edited`
+**Permissions**: `pull_requests: write`
+
+The maintained set is the repository's default branch plus every name listed under `branches`. A PR against any other base gets one notice, found again later through the `<!-- carson:unsupported-branch -->` marker so it is never posted twice. When the PR is retargeted to a maintained branch (`pull_request.edited` with a base change), the notice is minimized as outdated. Edits that leave the base alone are ignored, and draft PRs wait for `ready_for_review`.
+
+With no `branches` configured the subscriber does nothing, since every non-default branch would otherwise be unsupported.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `branches` | array of branch names | `[]` |
+| `message` | string (template) | see below |
+
+Default message:
+
+```markdown
+Hey @{{user}}, thanks for the pull request!
+
+It targets `{{base}}`, which is no longer maintained. Could you [change the base branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/changing-the-base-branch-of-a-pull-request) to one of these instead? {{branches}}
+```
+
+### Template context
+
+| Placeholder | Value |
+| --- | --- |
+| `{{user}}` | PR author login |
+| `{{repo}}` | Repository name |
+| `{{number}}` | PR number |
+| `{{base}}` | The unmaintained base branch |
+| `{{branches}}` | The configured branches, each in backticks, comma-separated |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - unsupported-branch
+settings:
+  unsupported-branch:
+    branches: [1.x, 2.x]
 ```
 
 ---

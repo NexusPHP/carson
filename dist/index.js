@@ -61236,6 +61236,92 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
 };
 
+// src/subscribers/unsupported-branch.ts
+var Settings16 = external_exports.object({
+  branches: external_exports.array(external_exports.string()).optional(),
+  message: external_exports.string().optional()
+});
+var COMMENT_MARKER4 = "<!-- carson:unsupported-branch -->";
+var DEFAULT_MESSAGE5 = `Hey @{{user}}, thanks for the pull request!
+
+It targets \`{{base}}\`, which is no longer maintained. Could you [change the base branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/changing-the-base-branch-of-a-pull-request) to one of these instead? {{branches}}`;
+var PR_EVENTS9 = [
+  "pull_request.opened",
+  "pull_request.ready_for_review",
+  "pull_request.edited"
+];
+var UnsupportedBranchSubscriber = class extends Subscriber {
+  id = "unsupported-branch";
+  description = "Comments on pull requests that target a branch outside the maintained set.";
+  requiredPermissions = {
+    pull_requests: "write"
+  };
+  register(probot) {
+    probot.on(PR_EVENTS9, async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const pr = context.payload.pull_request;
+    if (context.payload.action === "edited" && context.payload.changes.base === void 0) {
+      return;
+    }
+    if (pr.draft === true) {
+      return;
+    }
+    const enabled = await this.loadEnabledSettings(context, Settings16);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const branches = settings.branches ?? [];
+    if (branches.length === 0) {
+      log.debug("No branches configured, skipping");
+      return;
+    }
+    const { owner, repo } = context.repo();
+    const supported = pr.base.ref === context.payload.repository.default_branch || branches.includes(pr.base.ref);
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: pr.number,
+      per_page: 100
+    });
+    const notice = findCarsonComment(comments, {
+      marker: COMMENT_MARKER4,
+      isBotAuthored: (c) => c.user?.type === "Bot"
+    });
+    if (supported) {
+      if (notice !== void 0) {
+        await minimizeComment(context.octokit, notice.node_id, "OUTDATED");
+        log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
+      }
+      return;
+    }
+    if (notice !== void 0) {
+      log.debug(`PR #${pr.number} already carries an unsupported-branch notice, skipping`);
+      return;
+    }
+    const templateContext = {
+      user: pr.user.login,
+      repo: context.payload.repository.name,
+      number: pr.number,
+      base: pr.base.ref,
+      branches: branches.map((b) => `\`${b}\``).join(", ")
+    };
+    await context.octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: pr.number,
+      body: `${interpolate(settings.message ?? DEFAULT_MESSAGE5, templateContext)}
+
+${COMMENT_MARKER4}`
+    });
+    log.info(`Posted unsupported-branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
+  }
+};
+
 // src/webhook.ts
 import { createHmac } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -61286,7 +61372,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings16 = external_exports.object({
+var Settings17 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -61308,7 +61394,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings16, log);
+    const settings = subscriberSettings(config3, this.id, Settings17, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -61380,7 +61466,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings17 = external_exports.object({
+var Settings18 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -61423,7 +61509,7 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings17);
+      const enabled = await this.loadEnabledSettings(context, Settings18);
       if (enabled === null) {
         return;
       }
@@ -61454,7 +61540,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings17);
+      const enabled = await this.loadEnabledSettings(context, Settings18);
       if (enabled === null) {
         return;
       }
@@ -61495,6 +61581,7 @@ var carson = new Carson([
   new TemplateEnforcerSubscriber(),
   new ThanksSubscriber(),
   new TriageLabelerSubscriber(),
+  new UnsupportedBranchSubscriber(),
   new WebhookNotifierSubscriber(),
   new WelcomeSubscriber()
 ]);

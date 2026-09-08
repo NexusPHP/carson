@@ -151,16 +151,17 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**issue-intake**](SUBSCRIBERS.md#issue-intake): turns `repository_dispatch` events from an external system into labeled issues carrying a correlation marker.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
+- [**milestone**](SUBSCRIBERS.md#milestone): assigns a milestone to PRs from rules on the base branch and labels, including a next-open milestone.
+- [**no-merge-commits**](SUBSCRIBERS.md#no-merge-commits): posts a check that fails when a PR contains merge commits, with label, author, and branch-rule exemptions.
 - [**no-response-closer**](SUBSCRIBERS.md#no-response-closer): closes open issues and PRs carrying a configurable label whose activity has been stale past a threshold.
 - [**pr-title-linter**](SUBSCRIBERS.md#pr-title-linter): validates PR titles against a configurable set of regex rules and reports the result as a check run.
 - [**read-only**](SUBSCRIBERS.md#read-only): closes (and locks) issues and pull requests opened on a read-only mirror, pointing contributors upstream.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
-- [**no-merge-commits**](SUBSCRIBERS.md#no-merge-commits): posts a check that fails when a PR contains merge commits, with label, author, and branch-rule exemptions.
-- [**milestone**](SUBSCRIBERS.md#milestone): assigns a milestone to PRs from rules on the base branch and labels, including a next-open milestone.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**template-enforcer**](SUBSCRIBERS.md#template-enforcer): comments on and labels issues or PRs whose description does not match the configured template, and clears the label when fixed.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.
 - [**triage-labeler**](SUBSCRIBERS.md#triage-labeler): labels pull requests with their review state (needs-review, needs-rework, approved), ignoring drive-by reviews from contributors without write access.
+- [**unsupported-branch**](SUBSCRIBERS.md#unsupported-branch): comments on PRs that target a branch outside the maintained set.
 - [**webhook-notifier**](SUBSCRIBERS.md#webhook-notifier): POSTs a signed JSON callback to a configured URL when tracked issues are closed or reopened.
 - [**welcome**](SUBSCRIBERS.md#welcome): greets contributors on pull requests and issues, with separate, configurable messages for first-time and returning contributors.
 
