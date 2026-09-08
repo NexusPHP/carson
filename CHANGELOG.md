@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- [no-merge-commits](SUBSCRIBERS.md#no-merge-commits) subscriber: posts a check that fails when a pull request contains merge commits, with label, author, and branch-rule exemptions.
+
 ## [v1.3.0](https://github.com/NexusPHP/carson/compare/v1.2.0...v1.3.0) - 2026-09-06
 
 ### Changed

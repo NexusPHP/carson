@@ -34,7 +34,7 @@ Fill in:
 - **Homepage URL**: your project URL or `https://github.com/NexusPHP/carson`.
 - **Webhook**: uncheck **Active**. Carson does not receive webhooks. It is triggered by your workflow.
 - **Repository permissions**:
-  - **Checks**: Read and write (for the `signed-commits` check run).
+  - **Checks**: Read and write (for the `signed-commits` and `no-merge-commits` check runs).
   - **Contents**: Read-only (to read `.github/carson.yml`).
   - **Issues**: Read and write (to label, lock, and close issues and pull requests, and to comment on issues).
   - **Metadata**: Read-only (mandatory for any App accessing a repo, declared explicitly to keep this list complete).
@@ -73,7 +73,7 @@ name: Carson
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, edited, closed, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, edited, closed, ready_for_review, converted_to_draft, labeled, unlabeled]
   pull_request_review:
     types: [submitted]
   push:
@@ -155,6 +155,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**pr-title-linter**](SUBSCRIBERS.md#pr-title-linter): validates PR titles against a configurable set of regex rules and reports the result as a check run.
 - [**read-only**](SUBSCRIBERS.md#read-only): closes (and locks) issues and pull requests opened on a read-only mirror, pointing contributors upstream.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
+- [**no-merge-commits**](SUBSCRIBERS.md#no-merge-commits): posts a check that fails when a PR contains merge commits, with label, author, and branch-rule exemptions.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**template-enforcer**](SUBSCRIBERS.md#template-enforcer): comments on and labels issues or PRs whose description does not match the configured template, and clears the label when fixed.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.

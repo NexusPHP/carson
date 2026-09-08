@@ -15,6 +15,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [conflicts-notifier](#conflicts-notifier)
   - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
+  - [no-merge-commits](#no-merge-commits)
   - [no-response-closer](#no-response-closer)
   - [pr-title-linter](#pr-title-linter)
   - [read-only](#read-only)
@@ -389,6 +390,54 @@ settings:
       This issue has been quiet for {{days}} days, so I'm locking it to keep
       the discussion focused. If you have new information, please open a fresh
       issue and link back to this one.
+```
+
+---
+
+## no-merge-commits
+
+Posts a [Check Run](https://docs.github.com/en/rest/checks/runs) on each pull request that passes if every commit has a single parent and fails if any commit is a merge commit. It is the subscriber form of [NexusPHP/no-merge-commits](https://github.com/NexusPHP/no-merge-commits).
+
+**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.labeled`, `pull_request.unlabeled`
+**Permissions**: `checks: write`, `pull_requests: read`
+
+Each event re-evaluates every commit on the PR head and updates a single rolling check keyed by check name. The check's output lists each merge commit with its short SHA, first-line subject, and author name.
+
+An exempt pull request gets a `success` check whose summary names the exemption, and its commits are not fetched. Any one exemption suffices. They are evaluated in this order:
+
+1. `exempt_labels`: the PR carries one of these labels. The `labeled` and `unlabeled` triggers re-run the check when a label changes, so make sure the consumer workflow includes them.
+2. `exempt_authors`: the PR author's login is listed (`dependabot[bot]`, a release bot).
+3. `exempt_branches`: a rule matches. Each rule is an object with a `head` regex, a `base` regex, or both, and every key present must match, so `{ head: "^develop$", base: "^master$" }` exempts only develop-to-master PRs while `{ head: "^sync/" }` exempts sync branches whatever they target. An empty rule matches nothing.
+
+Invalid regexes are skipped with a warning and never exempt anything.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `name` | string | `Carson / no-merge-commits` |
+| `treat_merge_commits_as` | `"failure"` or `"neutral"` | `failure` |
+| `exempt_labels` | array of label names | `[]` |
+| `exempt_authors` | array of logins | `[]` |
+| `exempt_branches` | array of `{ head?: regex, base?: regex }` | `[]` |
+
+`treat_merge_commits_as: neutral` is useful for an advisory rollout: the check still appears in the PR's checks list but doesn't block merging.
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - no-merge-commits
+settings:
+  no-merge-commits:
+    name: "Linear history"
+    exempt_labels: [release]
+    exempt_authors: ["dependabot[bot]"]
+    exempt_branches:
+      - head: "^develop$"
+        base: "^master$"
+      - head: "^sync/"
 ```
 
 ---

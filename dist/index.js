@@ -27116,12 +27116,12 @@ var require_prettify_error = __commonJS({
         if (j !== 0) result += eol;
         const line = splitLines[j];
         if (/^\s*"stack"/.test(line)) {
-          const matches = /^(\s*"stack":)\s*(".*"),?$/.exec(line);
-          if (matches && matches.length === 3) {
+          const matches2 = /^(\s*"stack":)\s*(".*"),?$/.exec(line);
+          if (matches2 && matches2.length === 3) {
             const indentSize = /^\s*/.exec(line)[0].length + 4;
             const indentation = " ".repeat(indentSize);
-            const stackMessage = matches[2];
-            result += matches[1] + eol + indentation + JSON.parse(stackMessage).replace(/\n/g, eol + indentation);
+            const stackMessage = matches2[2];
+            result += matches2[1] + eol + indentation + JSON.parse(stackMessage).replace(/\n/g, eol + indentation);
           } else {
             result += line;
           }
@@ -43713,16 +43713,16 @@ var $ZodUnion = /* @__PURE__ */ $constructor("$ZodUnion", (inst, def) => {
   };
 });
 function handleExclusiveUnionResults(results, final, inst, ctx) {
-  const matches = [];
+  const matches2 = [];
   for (let i = 0; i < results.length; i++) {
     if (results[i].issues.length === 0)
-      matches.push(i);
+      matches2.push(i);
   }
-  if (matches.length === 1) {
-    final.value = results[matches[0]].value;
+  if (matches2.length === 1) {
+    final.value = results[matches2[0]].value;
     return final;
   }
-  if (matches.length === 0) {
+  if (matches2.length === 0) {
     final.issues.push({
       code: "invalid_union",
       input: final.value,
@@ -43736,7 +43736,7 @@ function handleExclusiveUnionResults(results, final, inst, ctx) {
       inst,
       errors: [],
       inclusive: false,
-      matches
+      matches: matches2
     });
   }
   return final;
@@ -60141,8 +60141,120 @@ var LockOldIssuesSubscriber = class extends Subscriber {
   }
 };
 
-// src/subscribers/no-response-closer.ts
+// src/subscribers/no-merge-commits.ts
 var Settings6 = external_exports.object({
+  name: external_exports.string().optional(),
+  treat_merge_commits_as: external_exports.enum(["failure", "neutral"]).optional(),
+  exempt_labels: external_exports.array(external_exports.string()).optional(),
+  exempt_authors: external_exports.array(external_exports.string()).optional(),
+  exempt_branches: external_exports.array(external_exports.object({
+    head: external_exports.string().optional(),
+    base: external_exports.string().optional()
+  })).optional()
+});
+var DEFAULT_NAME = "Carson / no-merge-commits";
+var DEFAULT_TREATMENT = "failure";
+var MERGE_COMMIT_PARENTS = 2;
+var PR_EVENTS3 = [
+  "pull_request.opened",
+  "pull_request.synchronize",
+  "pull_request.reopened",
+  "pull_request.labeled",
+  "pull_request.unlabeled"
+];
+var matches = (value, pattern, log) => {
+  if (pattern === void 0) {
+    return true;
+  }
+  try {
+    return new RegExp(pattern).test(value);
+  } catch (error62) {
+    log.warn(`Skipping exemption pattern "${pattern}": invalid regex (${String(error62)})`);
+    return false;
+  }
+};
+var exemptionFor = (pr, settings, log) => {
+  const label = pr.labels.map((l) => l.name).find((name) => settings.exempt_labels?.includes(name) === true);
+  if (label !== void 0) {
+    return `label \`${label}\``;
+  }
+  if (pr.user !== null && settings.exempt_authors?.includes(pr.user.login) === true) {
+    return `author @${pr.user.login}`;
+  }
+  const branchRule = (settings.exempt_branches ?? []).find((rule) => (rule.head !== void 0 || rule.base !== void 0) && matches(pr.head.ref, rule.head, log) && matches(pr.base.ref, rule.base, log));
+  if (branchRule !== void 0) {
+    return `branch rule ${JSON.stringify(branchRule)}`;
+  }
+  return null;
+};
+var NoMergeCommitsSubscriber = class extends Subscriber {
+  id = "no-merge-commits";
+  description = "Posts a check run that fails when a pull request contains merge commits.";
+  requiredPermissions = {
+    checks: "write",
+    pull_requests: "read"
+  };
+  register(probot) {
+    probot.on(PR_EVENTS3, async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const enabled = await this.loadEnabledSettings(context, Settings6);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const pr = context.payload.pull_request;
+    const { owner, repo } = context.repo();
+    const check2 = {
+      owner,
+      repo,
+      name: settings.name ?? DEFAULT_NAME,
+      head_sha: pr.head.sha,
+      status: "completed"
+    };
+    const exemption = exemptionFor(pr, settings, log);
+    if (exemption !== null) {
+      await context.octokit.rest.checks.create({
+        ...check2,
+        conclusion: "success",
+        output: {
+          title: "Exempt from the merge-commit check",
+          summary: `This pull request is exempt by ${exemption}.`
+        }
+      });
+      log.info(`Check skipped for PR #${pr.number}: exempt by ${exemption}`);
+      return;
+    }
+    const commits = await context.octokit.paginate(context.octokit.rest.pulls.listCommits, {
+      owner,
+      repo,
+      pull_number: pr.number,
+      per_page: 100
+    });
+    const merges = commits.filter((c) => c.parents.length >= MERGE_COMMIT_PARENTS).map((c) => ({
+      sha: c.sha,
+      subject: c.commit.message.split("\n")[0],
+      author: c.commit.author?.name ?? c.author?.login ?? "unknown"
+    }));
+    const conclusion = merges.length === 0 ? "success" : settings.treat_merge_commits_as ?? DEFAULT_TREATMENT;
+    const output2 = merges.length === 0 ? {
+      title: `No merge commits in ${pluralize(commits.length, "commit")}`,
+      summary: "Every commit in this pull request has a single parent."
+    } : {
+      title: pluralize(merges.length, "merge commit"),
+      summary: `${merges.length} of ${pluralize(commits.length, "commit")} ${merges.length === 1 ? "is a merge commit" : "are merge commits"}. Rebase the branch onto its base and force-push to clear this check.`,
+      text: merges.map((c) => `- \`${c.sha.slice(0, 7)}\` ${escapeMarkdown(c.subject)} (${escapeMarkdown(c.author)})`).join("\n")
+    };
+    await context.octokit.rest.checks.create({ ...check2, conclusion, output: output2 });
+    log.info(`Check ${conclusion} for PR #${pr.number}`);
+  }
+};
+
+// src/subscribers/no-response-closer.ts
+var Settings7 = external_exports.object({
   label: external_exports.string().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
@@ -60166,7 +60278,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings6);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings7);
     if (enabled === null) {
       return;
     }
@@ -60234,14 +60346,14 @@ var Rule2 = external_exports.object({
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   name: external_exports.string().optional(),
   rules: external_exports.array(Rule2).optional()
 });
-var DEFAULT_NAME = "Carson / pr-title-linter";
+var DEFAULT_NAME2 = "Carson / pr-title-linter";
 var DEFAULT_MODE = "require";
 var DEFAULT_LEVEL = "error";
-var PR_EVENTS3 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS4 = ["pull_request.opened", "pull_request.edited"];
 var compileRules = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
@@ -60254,9 +60366,9 @@ var compileRules = (rules, log) => {
   return compiled;
 };
 var evaluate = (title, compiled) => compiled.filter(({ rule, regex: regex2 }) => {
-  const matches = regex2.test(title);
+  const matches2 = regex2.test(title);
   const mode = rule.mode ?? DEFAULT_MODE;
-  return mode === "require" ? !matches : matches;
+  return mode === "require" ? !matches2 : matches2;
 }).map(({ rule }) => ({
   description: rule.description,
   level: rule.level ?? DEFAULT_LEVEL,
@@ -60290,13 +60402,13 @@ var PrTitleLinterSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS3, async (context) => {
+    probot.on(PR_EVENTS4, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings7);
+    const enabled = await this.loadEnabledSettings(context, Settings8);
     if (enabled === null) {
       return;
     }
@@ -60319,7 +60431,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
     await context.octokit.rest.checks.create({
       owner,
       repo,
-      name: settings.name ?? DEFAULT_NAME,
+      name: settings.name ?? DEFAULT_NAME2,
       head_sha: pr.head.sha,
       status: "completed",
       conclusion,
@@ -60331,7 +60443,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 
 // src/subscribers/read-only.ts
 var DEFAULT_MESSAGE2 = "This repository is read-only, so this {{type}} has been closed.";
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   upstream: external_exports.string().regex(/^[\w.-]+\/[\w.-]+$/, "upstream must be owner/repo").optional(),
   message: external_exports.string().min(1).default(DEFAULT_MESSAGE2),
   lock: external_exports.boolean().default(true),
@@ -60353,7 +60465,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings8, log) ?? Settings8.parse({});
+    const settings = subscriberSettings(config3, this.id, Settings9, log) ?? Settings9.parse({});
     const payload = context.payload;
     const isIssue = "issue" in payload;
     const item = "issue" in payload ? payload.issue : payload.pull_request;
@@ -60396,13 +60508,13 @@ var ReadOnlySubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
-var DEFAULT_NAME2 = "Carson / signed-commits";
-var DEFAULT_TREATMENT = "failure";
-var PR_EVENTS4 = [
+var DEFAULT_NAME3 = "Carson / signed-commits";
+var DEFAULT_TREATMENT2 = "failure";
+var PR_EVENTS5 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened"
@@ -60415,18 +60527,18 @@ var SignedCommitsSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS4, async (context) => {
+    probot.on(PR_EVENTS5, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings9);
+    const enabled = await this.loadEnabledSettings(context, Settings10);
     if (enabled === null) {
       return;
     }
     const { settings } = enabled;
-    const checkName = settings.name ?? DEFAULT_NAME2;
-    const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT;
+    const checkName = settings.name ?? DEFAULT_NAME3;
+    const treatment = settings.treat_unsigned_as ?? DEFAULT_TREATMENT2;
     const pr = context.payload.pull_request;
     const { owner, repo } = context.repo();
     const commits = await context.octokit.paginate(context.octokit.rest.pulls.listCommits, {
@@ -60463,7 +60575,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -60504,7 +60616,7 @@ var StaleSubscriber = class extends Subscriber {
     if (context.isBot) {
       return;
     }
-    const enabled = await this.loadEnabledSettings(context, Settings10);
+    const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
       return;
     }
@@ -60543,7 +60655,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings10);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings11);
     if (enabled === null) {
       return;
     }
@@ -60658,7 +60770,7 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule3).optional()
 });
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
@@ -60674,7 +60786,7 @@ var DEFAULT_MESSAGE3 = [
   "Please update the description. The `{{label}}` label will be removed automatically."
 ].join("\n");
 var ISSUE_EVENTS2 = ["issues.opened", "issues.edited"];
-var PR_EVENTS5 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS6 = ["pull_request.opened", "pull_request.edited"];
 var compileRules2 = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
@@ -60702,8 +60814,8 @@ var collectViolations = (body, rules, log) => {
     violations.push(`Description too short (minimum ${rules.min_length} characters).`);
   }
   for (const compiled of compileRules2(rules.rules ?? [], log)) {
-    const matches = compiled.regex.test(body);
-    const failed = compiled.mode === "require" ? !matches : matches;
+    const matches2 = compiled.regex.test(body);
+    const failed = compiled.mode === "require" ? !matches2 : matches2;
     if (failed) {
       violations.push(compiled.description);
     }
@@ -60723,7 +60835,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     probot.on(ISSUE_EVENTS2, async (context) => {
       await this.#handleIssue(context);
     });
-    probot.on(PR_EVENTS5, async (context) => {
+    probot.on(PR_EVENTS6, async (context) => {
       await this.#handlePr(context);
     });
   }
@@ -60758,7 +60870,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       return;
     }
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings11);
+    const enabled = await this.loadEnabledSettings(context, Settings12);
     if (enabled === null) {
       return;
     }
@@ -60827,7 +60939,7 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE4 = "Thanks for the contribution, @{{user}}!";
@@ -60854,7 +60966,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings12);
+      const enabled = await this.loadEnabledSettings(context, Settings13);
       if (enabled === null) {
         return;
       }
@@ -60872,7 +60984,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ROLES = ["admin", "maintain", "write"];
-var Settings13 = external_exports.object({
+var Settings14 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -60882,7 +60994,7 @@ var Settings13 = external_exports.object({
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
 var DEFAULT_APPROVED = "approved";
-var PR_EVENTS6 = [
+var PR_EVENTS7 = [
   "pull_request.opened",
   "pull_request.reopened",
   "pull_request.synchronize",
@@ -60940,7 +61052,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS6, async (context) => {
+    probot.on(PR_EVENTS7, async (context) => {
       await this.#handle(context);
     });
     probot.on("pull_request_review.submitted", async (context) => {
@@ -60949,7 +61061,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings13);
+    const enabled = await this.loadEnabledSettings(context, Settings14);
     if (enabled === null) {
       return;
     }
@@ -61054,7 +61166,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings14 = external_exports.object({
+var Settings15 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -61076,7 +61188,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings14, log);
+    const settings = subscriberSettings(config3, this.id, Settings15, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -61148,7 +61260,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings15 = external_exports.object({
+var Settings16 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -61191,7 +61303,7 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings15);
+      const enabled = await this.loadEnabledSettings(context, Settings16);
       if (enabled === null) {
         return;
       }
@@ -61222,7 +61334,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings15);
+      const enabled = await this.loadEnabledSettings(context, Settings16);
       if (enabled === null) {
         return;
       }
@@ -61253,6 +61365,7 @@ var carson = new Carson([
   new ConflictsNotifierSubscriber(),
   new IssueIntakeSubscriber(),
   new LockOldIssuesSubscriber(),
+  new NoMergeCommitsSubscriber(),
   new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),
   new ReadOnlySubscriber(),
@@ -62917,11 +63030,11 @@ function removeNonChars(variableName) {
   return variableName.replace(/(?:^\W+)|(?:(?<!\W)\W+$)/g, "").split(/,/);
 }
 function extractUrlVariableNames(url2) {
-  const matches = url2.match(urlVariableRegex);
-  if (!matches) {
+  const matches2 = url2.match(urlVariableRegex);
+  if (!matches2) {
     return [];
   }
-  return matches.map(removeNonChars).reduce((a, b) => a.concat(b), []);
+  return matches2.map(removeNonChars).reduce((a, b) => a.concat(b), []);
 }
 function omit2(object2, keysToOmit) {
   const result = { __proto__: null };
@@ -63697,8 +63810,8 @@ async function fetchWrapper(requestOptions) {
     data: ""
   };
   if ("deprecation" in responseHeaders) {
-    const matches = responseHeaders.link && responseHeaders.link.match(/<([^<>]+)>; rel="deprecation"/);
-    const deprecationLink = matches && matches.pop();
+    const matches2 = responseHeaders.link && responseHeaders.link.match(/<([^<>]+)>; rel="deprecation"/);
+    const deprecationLink = matches2 && matches2.pop();
     log.warn(
       `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${responseHeaders.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
     );
