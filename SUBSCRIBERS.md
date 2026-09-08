@@ -13,6 +13,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [auto-labeler](#auto-labeler)
   - [commands](#commands)
   - [conflicts-notifier](#conflicts-notifier)
+  - [draft-policy](#draft-policy)
   - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
   - [maintainer-edits](#maintainer-edits)
@@ -63,6 +64,7 @@ Do not remove these markers from Carson comments. The subscriber relies on them 
 | Marker | Used by |
 | --- | --- |
 | `<!-- carson:conflicts-notifier -->` | [conflicts-notifier](#conflicts-notifier) |
+| `<!-- carson:draft-policy -->` | [draft-policy](#draft-policy) |
 | `<!-- carson:issue-intake:{event_type}:{ref} -->` | [issue-intake](#issue-intake), [webhook-notifier](#webhook-notifier) |
 | `<!-- carson:maintainer-edits -->` | [maintainer-edits](#maintainer-edits) |
 | `<!-- carson:stale -->` | [stale](#stale) |
@@ -268,6 +270,61 @@ subscribers:
 settings:
   conflicts-notifier:
     message: "@{{user}} #{{number}} conflicts with `{{base}}`. Please rebase."
+```
+
+---
+
+## draft-policy
+
+Comments on pull requests opened as drafts, asking the author to mark them ready for review, and closes those still in draft after a grace period.
+
+**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
+**Permissions**: `pull_requests: write`
+
+On `pull_request.opened` with `draft: true`, one notice is posted carrying the `<!-- carson:draft-policy -->` marker. On `ready_for_review` the notice is minimized as resolved. A PR converted to draft after opening is not touched.
+
+Each scheduled run searches open draft PRs and closes those whose notice is older than `hours_until_close`, posting `close_message` first. The notice is the clock: a draft without one (opened before the subscriber was enabled, or converted to draft later) is never closed. Set `hours_until_close: 0` to keep the notice and never close.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `message` | string (template) | see below |
+| `hours_until_close` | integer, `0` disables closing | `24` |
+| `close_message` | string (template) | see below |
+
+Default `message`:
+
+```markdown
+Hey @{{user}}, thanks for the pull request!
+
+This repository does not keep draft pull requests open. A pull request does not have to be finished to be reviewed, so please mark it "Ready for review" when you would like a first look, or close it and open a new one when you are done.
+```
+
+Default `close_message`:
+
+```markdown
+Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.
+```
+
+### Template context
+
+| Placeholder | `message` | `close_message` |
+| --- | --- | --- |
+| `{{user}}` | PR author login | PR author login (absent for a deleted account) |
+| `{{repo}}` | Repository name | Repository name |
+| `{{number}}` | PR number | PR number |
+| `{{hours}}` | | The configured `hours_until_close` |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - draft-policy
+settings:
+  draft-policy:
+    hours_until_close: 48
 ```
 
 ---

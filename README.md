@@ -149,6 +149,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**auto-labeler**](SUBSCRIBERS.md#auto-labeler): adds labels to PRs based on path globs, title/body regex, or branch name patterns, and to issues by title/body regex, with optional sync mode and label implications.
 - [**commands**](SUBSCRIBERS.md#commands): runs slash commands (`/label`, `/close`, `/lock`, `/assign`, ...) posted in comments by repository collaborators.
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
+- [**draft-policy**](SUBSCRIBERS.md#draft-policy): comments on draft PRs and closes those still in draft after a grace period.
 - [**issue-intake**](SUBSCRIBERS.md#issue-intake): turns `repository_dispatch` events from an external system into labeled issues carrying a correlation marker.
 - [**lock-old-issues**](SUBSCRIBERS.md#lock-old-issues): locks closed issues that have been inactive past a configurable age.
 - [**maintainer-edits**](SUBSCRIBERS.md#maintainer-edits): comments on fork PRs that do not allow edits from maintainers.
