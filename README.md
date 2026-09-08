@@ -156,6 +156,7 @@ See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings,
 - [**read-only**](SUBSCRIBERS.md#read-only): closes (and locks) issues and pull requests opened on a read-only mirror, pointing contributors upstream.
 - [**signed-commits**](SUBSCRIBERS.md#signed-commits): posts a check requiring every commit in a PR to be signed and verified.
 - [**no-merge-commits**](SUBSCRIBERS.md#no-merge-commits): posts a check that fails when a PR contains merge commits, with label, author, and branch-rule exemptions.
+- [**milestone**](SUBSCRIBERS.md#milestone): assigns a milestone to PRs from rules on the base branch and labels, including a next-open milestone.
 - [**stale**](SUBSCRIBERS.md#stale): marks inactive issues and PRs stale, then closes them after a further grace period.
 - [**template-enforcer**](SUBSCRIBERS.md#template-enforcer): comments on and labels issues or PRs whose description does not match the configured template, and clears the label when fixed.
 - [**thanks**](SUBSCRIBERS.md#thanks): posts a thank-you comment when a pull request is merged by someone other than its author.

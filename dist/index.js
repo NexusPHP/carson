@@ -60141,8 +60141,128 @@ var LockOldIssuesSubscriber = class extends Subscriber {
   }
 };
 
-// src/subscribers/no-merge-commits.ts
+// src/subscribers/milestone.ts
+var Rule2 = external_exports.object({
+  labels: external_exports.array(external_exports.string()).optional(),
+  base: external_exports.string().optional(),
+  milestone: external_exports.string()
+});
 var Settings6 = external_exports.object({
+  rules: external_exports.array(Rule2).optional(),
+  override: external_exports.boolean().optional()
+});
+var NEXT_OPEN = "next-open";
+var PR_EVENTS3 = [
+  "pull_request.opened",
+  "pull_request.ready_for_review",
+  "pull_request.labeled",
+  "pull_request.edited"
+];
+var UNDATED = "\uFFFF";
+var byDueThenTitle = (a, b) => {
+  const [dueA, dueB] = [a.due_on ?? UNDATED, b.due_on ?? UNDATED];
+  if (dueA !== dueB) {
+    return dueA < dueB ? -1 : 1;
+  }
+  return a.title.localeCompare(b.title, void 0, { numeric: true });
+};
+var matchBase = (rule, base, log) => {
+  if (rule.base === void 0) {
+    return void 0;
+  }
+  try {
+    return new RegExp(rule.base).exec(base);
+  } catch (error62) {
+    log.warn(`Skipping milestone rule "${rule.milestone}": invalid regex (${String(error62)})`);
+    return null;
+  }
+};
+var resolveTitle = (rules, target, log) => {
+  for (const rule of rules) {
+    if (rule.labels !== void 0 && !rule.labels.some((label) => target.labels.includes(label))) {
+      continue;
+    }
+    const match = matchBase(rule, target.base, log);
+    if (match === null) {
+      continue;
+    }
+    return match === void 0 ? rule.milestone : rule.milestone.replace(/\$(\d+)/g, (_, index) => match[Number(index)] ?? "");
+  }
+  return null;
+};
+var pick2 = (title, open3) => {
+  if (title === null) {
+    return null;
+  }
+  if (title === NEXT_OPEN) {
+    return [...open3].sort(byDueThenTitle)[0] ?? null;
+  }
+  return open3.find((m) => m.title === title) ?? null;
+};
+var MilestoneSubscriber = class extends Subscriber {
+  id = "milestone";
+  description = "Assigns a milestone to pull requests from rules on the base branch and labels.";
+  requiredPermissions = {
+    issues: "write",
+    pull_requests: "write"
+  };
+  register(probot) {
+    probot.on(PR_EVENTS3, async (context) => {
+      await this.#handle(context);
+    });
+  }
+  async #handle(context) {
+    const log = this.log(context);
+    const pr = context.payload.pull_request;
+    const previousBase = context.payload.action === "edited" ? context.payload.changes.base?.ref.from : void 0;
+    if (context.payload.action === "edited" && previousBase === void 0) {
+      return;
+    }
+    if (pr.draft === true) {
+      return;
+    }
+    const enabled = await this.loadEnabledSettings(context, Settings6);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const rules = settings.rules ?? [];
+    if (rules.length === 0) {
+      log.debug("No rules configured, skipping");
+      return;
+    }
+    const labels = pr.labels.map((l) => l.name);
+    const { owner, repo } = context.repo();
+    const open3 = await context.octokit.paginate(context.octokit.rest.issues.listMilestones, {
+      owner,
+      repo,
+      state: "open",
+      per_page: 100
+    });
+    const wanted = pick2(resolveTitle(rules, { base: pr.base.ref, labels }, log), open3);
+    const current = pr.milestone;
+    if (wanted === null || wanted.number === current?.number) {
+      return;
+    }
+    if (current !== null && settings.override !== true) {
+      const previous = previousBase === void 0 ? null : pick2(resolveTitle(rules, { base: previousBase, labels }, log), open3);
+      if (previous?.number !== current.number) {
+        log.info(`PR #${pr.number} already has milestone "${current.title}", leaving it`);
+        return;
+      }
+    }
+    await context.octokit.rest.issues.update({
+      owner,
+      repo,
+      issue_number: pr.number,
+      milestone: wanted.number
+    });
+    log.info(`Milestone "${wanted.title}" set on PR #${pr.number}`);
+  }
+};
+
+// src/subscribers/no-merge-commits.ts
+var Settings7 = external_exports.object({
   name: external_exports.string().optional(),
   treat_merge_commits_as: external_exports.enum(["failure", "neutral"]).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
@@ -60155,7 +60275,7 @@ var Settings6 = external_exports.object({
 var DEFAULT_NAME = "Carson / no-merge-commits";
 var DEFAULT_TREATMENT = "failure";
 var MERGE_COMMIT_PARENTS = 2;
-var PR_EVENTS3 = [
+var PR_EVENTS4 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened",
@@ -60195,13 +60315,13 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS3, async (context) => {
+    probot.on(PR_EVENTS4, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings6);
+    const enabled = await this.loadEnabledSettings(context, Settings7);
     if (enabled === null) {
       return;
     }
@@ -60254,7 +60374,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-response-closer.ts
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   label: external_exports.string().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
@@ -60278,7 +60398,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings7);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings8);
     if (enabled === null) {
       return;
     }
@@ -60340,20 +60460,20 @@ var NoResponseCloserSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/pr-title-linter.ts
-var Rule2 = external_exports.object({
+var Rule3 = external_exports.object({
   pattern: external_exports.string(),
   description: external_exports.string(),
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   name: external_exports.string().optional(),
-  rules: external_exports.array(Rule2).optional()
+  rules: external_exports.array(Rule3).optional()
 });
 var DEFAULT_NAME2 = "Carson / pr-title-linter";
 var DEFAULT_MODE = "require";
 var DEFAULT_LEVEL = "error";
-var PR_EVENTS4 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS5 = ["pull_request.opened", "pull_request.edited"];
 var compileRules = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
@@ -60402,13 +60522,13 @@ var PrTitleLinterSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS4, async (context) => {
+    probot.on(PR_EVENTS5, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -60443,7 +60563,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 
 // src/subscribers/read-only.ts
 var DEFAULT_MESSAGE2 = "This repository is read-only, so this {{type}} has been closed.";
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   upstream: external_exports.string().regex(/^[\w.-]+\/[\w.-]+$/, "upstream must be owner/repo").optional(),
   message: external_exports.string().min(1).default(DEFAULT_MESSAGE2),
   lock: external_exports.boolean().default(true),
@@ -60465,7 +60585,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings9, log) ?? Settings9.parse({});
+    const settings = subscriberSettings(config3, this.id, Settings10, log) ?? Settings10.parse({});
     const payload = context.payload;
     const isIssue = "issue" in payload;
     const item = "issue" in payload ? payload.issue : payload.pull_request;
@@ -60508,13 +60628,13 @@ var ReadOnlySubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
 var DEFAULT_NAME3 = "Carson / signed-commits";
 var DEFAULT_TREATMENT2 = "failure";
-var PR_EVENTS5 = [
+var PR_EVENTS6 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened"
@@ -60527,12 +60647,12 @@ var SignedCommitsSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS5, async (context) => {
+    probot.on(PR_EVENTS6, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings10);
+    const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
       return;
     }
@@ -60575,7 +60695,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -60616,7 +60736,7 @@ var StaleSubscriber = class extends Subscriber {
     if (context.isBot) {
       return;
     }
-    const enabled = await this.loadEnabledSettings(context, Settings11);
+    const enabled = await this.loadEnabledSettings(context, Settings12);
     if (enabled === null) {
       return;
     }
@@ -60655,7 +60775,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings11);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings12);
     if (enabled === null) {
       return;
     }
@@ -60760,7 +60880,7 @@ ${COMMENT_MARKER2}`
 };
 
 // src/subscribers/template-enforcer.ts
-var Rule3 = external_exports.object({
+var Rule4 = external_exports.object({
   pattern: external_exports.string(),
   description: external_exports.string(),
   mode: external_exports.enum(["require", "forbid"]).optional()
@@ -60768,9 +60888,9 @@ var Rule3 = external_exports.object({
 var TypeSettings = external_exports.object({
   required_sections: external_exports.array(external_exports.string()).optional(),
   min_length: external_exports.number().int().positive().optional(),
-  rules: external_exports.array(Rule3).optional()
+  rules: external_exports.array(Rule4).optional()
 });
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   issues: TypeSettings.optional(),
@@ -60786,7 +60906,7 @@ var DEFAULT_MESSAGE3 = [
   "Please update the description. The `{{label}}` label will be removed automatically."
 ].join("\n");
 var ISSUE_EVENTS2 = ["issues.opened", "issues.edited"];
-var PR_EVENTS6 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS7 = ["pull_request.opened", "pull_request.edited"];
 var compileRules2 = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
@@ -60835,7 +60955,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     probot.on(ISSUE_EVENTS2, async (context) => {
       await this.#handleIssue(context);
     });
-    probot.on(PR_EVENTS6, async (context) => {
+    probot.on(PR_EVENTS7, async (context) => {
       await this.#handlePr(context);
     });
   }
@@ -60870,7 +60990,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       return;
     }
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings12);
+    const enabled = await this.loadEnabledSettings(context, Settings13);
     if (enabled === null) {
       return;
     }
@@ -60939,7 +61059,7 @@ ${COMMENT_MARKER3}`;
 };
 
 // src/subscribers/thanks.ts
-var Settings13 = external_exports.object({
+var Settings14 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE4 = "Thanks for the contribution, @{{user}}!";
@@ -60966,7 +61086,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings13);
+      const enabled = await this.loadEnabledSettings(context, Settings14);
       if (enabled === null) {
         return;
       }
@@ -60984,7 +61104,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ROLES = ["admin", "maintain", "write"];
-var Settings14 = external_exports.object({
+var Settings15 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -60994,7 +61114,7 @@ var Settings14 = external_exports.object({
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
 var DEFAULT_APPROVED = "approved";
-var PR_EVENTS7 = [
+var PR_EVENTS8 = [
   "pull_request.opened",
   "pull_request.reopened",
   "pull_request.synchronize",
@@ -61052,7 +61172,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS7, async (context) => {
+    probot.on(PR_EVENTS8, async (context) => {
       await this.#handle(context);
     });
     probot.on("pull_request_review.submitted", async (context) => {
@@ -61061,7 +61181,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log(context);
-    const enabled = await this.loadEnabledSettings(context, Settings14);
+    const enabled = await this.loadEnabledSettings(context, Settings15);
     if (enabled === null) {
       return;
     }
@@ -61166,7 +61286,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings15 = external_exports.object({
+var Settings16 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -61188,7 +61308,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings15, log);
+    const settings = subscriberSettings(config3, this.id, Settings16, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -61260,7 +61380,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings16 = external_exports.object({
+var Settings17 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -61303,7 +61423,7 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const log = this.log(context);
-      const enabled = await this.loadEnabledSettings(context, Settings16);
+      const enabled = await this.loadEnabledSettings(context, Settings17);
       if (enabled === null) {
         return;
       }
@@ -61334,7 +61454,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings16);
+      const enabled = await this.loadEnabledSettings(context, Settings17);
       if (enabled === null) {
         return;
       }
@@ -61365,6 +61485,7 @@ var carson = new Carson([
   new ConflictsNotifierSubscriber(),
   new IssueIntakeSubscriber(),
   new LockOldIssuesSubscriber(),
+  new MilestoneSubscriber(),
   new NoMergeCommitsSubscriber(),
   new NoResponseCloserSubscriber(),
   new PrTitleLinterSubscriber(),

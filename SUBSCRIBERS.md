@@ -15,6 +15,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
   - [conflicts-notifier](#conflicts-notifier)
   - [issue-intake](#issue-intake)
   - [lock-old-issues](#lock-old-issues)
+  - [milestone](#milestone)
   - [no-merge-commits](#no-merge-commits)
   - [no-response-closer](#no-response-closer)
   - [pr-title-linter](#pr-title-linter)
@@ -391,6 +392,51 @@ settings:
       the discussion focused. If you have new information, please open a fresh
       issue and link back to this one.
 ```
+
+---
+
+## milestone
+
+Assigns a milestone to pull requests from an ordered rule list. The first rule whose conditions all hold names the milestone.
+
+**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, `pull_request.labeled`, `pull_request.edited`
+**Permissions**: `issues: write`, `pull_requests: write`
+
+Each rule is an object with optional conditions and a required `milestone`:
+
+- `labels`: the PR carries at least one of these labels.
+- `base`: a regex that must match the base branch name. Capture groups are available to the milestone name as `$1`, `$2`, and so on.
+- A rule with no conditions always matches, which makes it a default when placed last.
+
+The `milestone` value is a literal title (`next`), a template over the base match (`v$1`), or the sentinel `next-open`, which picks the open milestone with the earliest due date and falls back to the lowest version-like title among those without one. Only open milestones are considered, and a name that matches none is skipped rather than created. An invalid regex is skipped with a warning.
+
+A milestone already on the PR is left alone unless `override: true`. The exception is a retarget: on `pull_request.edited` with a base-branch change, the milestone is replaced when it is the one the rules would have derived for the previous base, so a milestone the subscriber set follows the PR while a hand-set one stays. Draft PRs are skipped until `ready_for_review`.
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `rules` | array of `{ labels?: string[], base?: regex, milestone: string }` | `[]` |
+| `override` | boolean | `false` |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - milestone
+settings:
+  milestone:
+    rules:
+      - labels: [waiting code merge]
+        milestone: next
+      - base: "^release/(\\d+\\.\\d+)$"
+        milestone: "v$1"
+      - base: "^main$"
+        milestone: next-open
+```
+
+Repositories that name milestones after branches need a single rule: `base: "^(.+)$"` with `milestone: "$1"`.
 
 ---
 
