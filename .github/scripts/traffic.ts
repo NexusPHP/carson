@@ -43,9 +43,9 @@ for (const date of dates) {
 
 const grand = total + Object.values(kept).reduce((sum, { count }) => sum + count, 0);
 const message = grand >= 1_000_000
-  ? `${(grand / 1_000_000).toFixed(1)}M`
+  ? `${(grand / 1_000_000).toFixed(2)}M`
   : grand >= 1_000
-    ? `${(grand / 1_000).toFixed(1)}k`
+    ? `${(grand / 1_000).toFixed(2)}k`
     : String(grand);
 
 fs.writeFileSync(storePath, `${JSON.stringify({ total, since, days: kept }, null, 2)}\n`);
