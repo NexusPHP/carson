@@ -687,10 +687,10 @@ settings:
 
 Validates pull request titles against a configurable set of regex rules and reports the result as a [Check Run](https://docs.github.com/en/rest/checks/runs).
 
-**Triggers**: `pull_request.opened`, `pull_request.edited`
+**Triggers**: `pull_request.opened`, `pull_request.edited`, `pull_request.synchronize`, `pull_request.reopened`
 **Permissions**: `checks: write`, `pull_requests: read`
 
-Each event re-evaluates the current PR title against every configured rule and updates a single rolling check (keyed by check name). Rules with a malformed regex are skipped with a warning, so a single bad rule does not silence the whole subscriber.
+Each event re-evaluates the current PR title against every configured rule and posts the check on the current head commit. A check run belongs to one commit, so a push needs a fresh check or a required check would block merging until the title was edited again. Rules with a malformed regex are skipped with a warning, so a single bad rule does not silence the whole subscriber.
 
 A rule's `mode` decides what the regex match means: `require` means the title must match the pattern, `forbid` means it must not. Each rule's `level` decides what a failure does to the check conclusion: an `error` rule failing produces `failure` (which blocks merging if the check is required), a `warning` rule failing produces `neutral` (advisory only). If every rule passes the conclusion is `success`. When both error and warning rules fail in the same evaluation, the conclusion is `failure`.
 

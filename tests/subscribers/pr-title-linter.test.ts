@@ -52,7 +52,7 @@ const mockCreateCheck = (verify: (body: CheckBody) => boolean): nock.Scope => {
 };
 
 interface PayloadOverrides {
-  action?: 'opened' | 'edited';
+  action?: 'opened' | 'edited' | 'synchronize' | 'reopened';
   title?: string;
   senderType?: string;
 }
@@ -349,6 +349,27 @@ describe('pr-title-linter subscriber (via app)', () => {
     });
 
     expect(checkScope.isDone()).toBe(true);
+  });
+
+  it('re-posts the check for the new head on synchronize and reopened', async () => {
+    for (const action of ['synchronize', 'reopened'] as const) {
+      mockInstallationToken();
+      mockConfig(configWithRules(CONVENTIONAL_RULE));
+      const checkScope = mockCreateCheck((body) => {
+        expect(body.head_sha).toBe(HEAD_SHA);
+        expect(body.conclusion).toBe('success');
+        return true;
+      });
+
+      await probot.receive({
+        id: `evt-${action}`,
+        name: 'pull_request',
+        payload: prPayload({ action, title: 'feat: add widget' }) as never,
+      });
+
+      expect(checkScope.isDone()).toBe(true);
+      resetConfigCache();
+    }
   });
 
   it('does nothing when carson.yml is missing', async () => {

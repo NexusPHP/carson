@@ -22,10 +22,15 @@ const DEFAULT_NAME = 'Carson / pr-title-linter';
 const DEFAULT_MODE: 'require' | 'forbid' = 'require';
 const DEFAULT_LEVEL: 'error' | 'warning' = 'error';
 
-type PrTitleEvent = 'pull_request.opened' | 'pull_request.edited';
+type PrTitleEvent = 'pull_request.opened' | 'pull_request.edited' | 'pull_request.synchronize' | 'pull_request.reopened';
 type PrTitleContext = Context<PrTitleEvent>;
 
-const PR_EVENTS: PrTitleEvent[] = ['pull_request.opened', 'pull_request.edited'];
+const PR_EVENTS: PrTitleEvent[] = [
+  'pull_request.opened',
+  'pull_request.edited',
+  'pull_request.synchronize',
+  'pull_request.reopened',
+];
 
 interface CompiledRule {
   rule: ParsedRule;

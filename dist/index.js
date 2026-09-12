@@ -60778,7 +60778,12 @@ var Settings11 = external_exports.object({
 var DEFAULT_NAME2 = "Carson / pr-title-linter";
 var DEFAULT_MODE = "require";
 var DEFAULT_LEVEL = "error";
-var PR_EVENTS7 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS7 = [
+  "pull_request.opened",
+  "pull_request.edited",
+  "pull_request.synchronize",
+  "pull_request.reopened"
+];
 var compileRules = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
