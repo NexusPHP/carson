@@ -128,7 +128,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
     let locked = 0;
     const log = this.log();
 
-    log.debug(`Scanning ${pluralize(issues.length, 'candidate issue')}`);
+    log.debug(`Found ${pluralize(issues.length, 'candidate issue')}`);
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.locked) {

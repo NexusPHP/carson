@@ -152,7 +152,7 @@ export class StaleSubscriber extends Subscriber {
     let closed = 0;
     const log = this.log();
 
-    log.debug(`Scanning ${pluralize(staleItems.length, 'stale item')} and ${pluralize(freshItems.length, 'newly inactive item')}`);
+    log.debug(`Found ${pluralize(staleItems.length, 'stale item')} and ${pluralize(freshItems.length, 'newly inactive item')}`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       const names = labelNames(item.labels);

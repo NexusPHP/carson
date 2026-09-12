@@ -59,7 +59,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
     let closed = 0;
     const log = this.log();
 
-    log.debug(`Scanning ${pluralize(items.length, 'candidate item')} labeled "${label}"`);
+    log.debug(`Found ${pluralize(items.length, 'candidate item')} labeled "${label}"`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {

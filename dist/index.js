@@ -60349,7 +60349,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
     let locked = 0;
     const log = this.log();
-    log.debug(`Scanning ${pluralize(issues.length, "candidate issue")}`);
+    log.debug(`Found ${pluralize(issues.length, "candidate issue")}`);
     await forEachConcurrent(issues, CONCURRENCY3, async (issue3) => {
       if (issue3.locked) {
         log.debug(`#${issue3.number}: Already locked, skipping`);
@@ -60723,7 +60723,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
     let closed = 0;
     const log = this.log();
-    log.debug(`Scanning ${pluralize(items.length, "candidate item")} labeled "${label}"`);
+    log.debug(`Found ${pluralize(items.length, "candidate item")} labeled "${label}"`);
     await forEachConcurrent(items, CONCURRENCY4, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
@@ -61116,7 +61116,7 @@ var StaleSubscriber = class extends Subscriber {
     let staled = 0;
     let closed = 0;
     const log = this.log();
-    log.debug(`Scanning ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
+    log.debug(`Found ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
     await forEachConcurrent(items, CONCURRENCY5, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
