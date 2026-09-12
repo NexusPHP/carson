@@ -72,6 +72,7 @@ const prPayload = (overrides: { senderType?: string; action?: string } = {}): Re
     base: { ref: 'main' },
     user: { login: 'octocat' },
     title: 'Fix the thing',
+    labels: [],
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User' },

@@ -395,11 +395,9 @@ describe('lock-old-issues subscriber', () => {
       body: 'Locking @octocat\'s issue #7 on widgets after 90 days.',
     });
     expect(lockMock).toHaveBeenCalledOnce();
-    const [commentOrder] = commentMock.mock.invocationCallOrder;
-    const [lockOrder] = lockMock.mock.invocationCallOrder;
-    expect(commentOrder).toBeDefined();
-    expect(lockOrder).toBeDefined();
-    expect(commentOrder).toBeLessThan(lockOrder as number);
+    const [commentOrder = Number.NaN] = commentMock.mock.invocationCallOrder;
+    const [lockOrder = Number.NaN] = lockMock.mock.invocationCallOrder;
+    expect(commentOrder).toBeLessThan(lockOrder);
   });
 
   it('leaves {{user}} verbatim when the issue has no user (ghost)', async () => {

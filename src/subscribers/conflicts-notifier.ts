@@ -138,11 +138,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       return;
     }
 
-    if (pr.user === null) {
-      return;
-    }
-
-    const hasConflict = pr.mergeable === false;
+    const hasConflict = !pr.mergeable;
     const settings = subscriberSettings(config, this.id, Settings, this.log()) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
 

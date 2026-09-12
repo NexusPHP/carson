@@ -89,7 +89,7 @@ export abstract class Subscriber {
 
   protected async loadEnabledSettings<T>(
     context: ConfigLoadable,
-    schema: z.ZodSchema<T>,
+    schema: z.ZodType<T>,
   ): Promise<EnabledSettings<T> | null> {
     const config = await this.loadEnabledConfig(context);
 

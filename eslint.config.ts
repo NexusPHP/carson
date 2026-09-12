@@ -1,15 +1,16 @@
-import tsEslint, { type ConfigArray } from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
 import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
+import tsEslint from 'typescript-eslint';
 
-const config: ConfigArray = tsEslint.config(
+const config = defineConfig(
   {
     name: 'ignores',
     ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
   },
   eslint.configs.recommended,
-  tsEslint.configs.strict,
-  tsEslint.configs.stylistic,
+  tsEslint.configs.strictTypeChecked,
+  tsEslint.configs.stylisticTypeChecked,
   stylistic.configs.customize({
     arrowParens: true,
     blockSpacing: true,
@@ -46,6 +47,7 @@ const config: ConfigArray = tsEslint.config(
       '@typescript-eslint/method-signature-style': 'error',
       '@typescript-eslint/no-empty-function': ['error', { allow: ['methods'] }],
       '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
       '@typescript-eslint/no-unnecessary-template-expression': 'error',
       '@typescript-eslint/no-unused-vars': ['error', {
         args: 'all',
@@ -68,7 +70,19 @@ const config: ConfigArray = tsEslint.config(
       '@typescript-eslint/promise-function-async': 'error',
       '@typescript-eslint/return-await': ['error', 'always'],
       '@typescript-eslint/require-await': 'error',
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       '@typescript-eslint/strict-boolean-expressions': 'error',
+    },
+  },
+  {
+    name: 'test-mocks',
+    files: ['tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
   {

@@ -23,12 +23,6 @@ export class ThanksSubscriber extends Subscriber {
         return;
       }
 
-      if (pr.user === null) {
-        log.debug(`PR #${pr.number}: no user (ghost), skipping`);
-
-        return;
-      }
-
       if (pr.user.type === 'Bot') {
         log.debug(`PR #${pr.number}: author is a bot (${pr.user.login}), skipping`);
 

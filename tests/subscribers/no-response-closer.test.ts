@@ -207,11 +207,9 @@ describe('no-response-closer subscriber', () => {
       body: 'Closing @octocat\'s issue #7 on widgets after 14 days.',
     });
     expect(updateMock).toHaveBeenCalledOnce();
-    const [commentOrder] = commentMock.mock.invocationCallOrder;
-    const [updateOrder] = updateMock.mock.invocationCallOrder;
-    expect(commentOrder).toBeDefined();
-    expect(updateOrder).toBeDefined();
-    expect(commentOrder).toBeLessThan(updateOrder as number);
+    const [commentOrder = Number.NaN] = commentMock.mock.invocationCallOrder;
+    const [updateOrder = Number.NaN] = updateMock.mock.invocationCallOrder;
+    expect(commentOrder).toBeLessThan(updateOrder);
   });
 
   it('leaves {{user}} verbatim when the item has no user (ghost)', async () => {

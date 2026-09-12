@@ -482,7 +482,7 @@ Comments on a pull request from a fork whose author unchecked "Allow edits from 
 **Triggers**: `pull_request.opened`, `pull_request.ready_for_review`
 **Permissions**: `pull_requests: write`
 
-The check is payload-only: the head repository must differ from the base repository and `maintainer_can_modify` must be false. Same-repository branches, PRs whose fork was deleted, and drafts (until `ready_for_review`) are skipped. One notice is posted per PR, found again through the `<!-- carson:maintainer-edits -->` marker.
+The check is payload-only: the head repository must differ from the base repository and `maintainer_can_modify` must be false. Same-repository branches and drafts (until `ready_for_review`) are skipped. One notice is posted per PR, found again through the `<!-- carson:maintainer-edits -->` marker.
 
 GitHub does not send an event when the checkbox is toggled later, so the notice is never minimized automatically.
 
@@ -1006,7 +1006,6 @@ Carson fires once per merged PR. The subscriber skips four cases:
 - The PR was closed without merging.
 - The PR author merged the PR themselves (maintainer self-merge). Detected by `pull_request.user.login === pull_request.merged_by.login`.
 - The PR author is a bot (e.g. Dependabot, Renovate).
-- The PR has no author (a ghost user).
 
 There is no `author_association` filter. The self-merge guard already handles the most common "don't thank me for my own work" case, and the bot guard suppresses automation PRs. If you want finer scoping (e.g. exclude org members), open an issue.
 

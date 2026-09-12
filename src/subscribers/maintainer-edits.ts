@@ -39,9 +39,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
     }
 
     const pr = context.payload.pull_request;
-    const headRepo = pr.head.repo?.full_name;
-
-    if (pr.draft === true || pr.maintainer_can_modify || headRepo === undefined || headRepo === context.payload.repository.full_name) {
+    if (pr.draft === true || pr.maintainer_can_modify || pr.head.repo.full_name === context.payload.repository.full_name) {
       return;
     }
 

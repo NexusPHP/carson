@@ -557,20 +557,4 @@ describe('template-enforcer subscriber (via app)', () => {
 
     expect(nock.pendingMocks()).toEqual([]);
   });
-
-  it('does nothing when the PR has no user (ghost)', async () => {
-    mockInstallationToken();
-    mockConfig(buildConfig([
-      '    pull_requests:',
-      '      min_length: 10',
-    ].join('\n')));
-
-    await probot.receive({
-      id: 'evt-ghost-pr',
-      name: 'pull_request',
-      payload: prPayload({ user: null }) as never,
-    });
-
-    expect(nock.pendingMocks()).toEqual([]);
-  });
 });

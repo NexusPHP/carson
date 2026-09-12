@@ -244,19 +244,6 @@ describe('runPreflight', () => {
     expect(appIdentity.name).toBe('Carson');
   });
 
-  it('treats a missing permissions field on the App or installation as no permissions', async () => {
-    const probot = makeProbot({
-      appData: { ...DEFAULT_APP_DATA, permissions: undefined },
-      installation: { permissions: undefined },
-    });
-    const carson = new Carson([new StubSubscriber('s1', { issues: 'write' })]);
-
-    const result = await runPreflight(probot, carson, 'acme/widgets');
-
-    expect(result.error).toContain('contents (<base>): required "read", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-    expect(result.error).toContain('issues (s1): required "write", App declares nothing, install accepted nothing. Update App settings, then re-approve the installation.');
-  });
-
   it('returns the invalid-repository message when the repository is not in owner/repo format', async () => {
     const probot = makeProbot();
     const carson = new Carson([]);

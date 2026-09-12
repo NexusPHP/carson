@@ -2,11 +2,10 @@ import * as core from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig, resetConfigCache } from '../../src/configuration/cache.js';
 import type { Context } from 'probot';
-import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { logger } from '../../src/logger.js';
 
 interface ContextHarness {
-  context: Context<EmitterWebhookEventName>;
+  context: Context;
   configMock: ReturnType<typeof vi.fn>;
 }
 
@@ -29,7 +28,7 @@ const makeContext = (raw: unknown, repo = { owner: 'acme', repo: 'widgets' }): C
     repo: () => repo,
     config: configMock,
     log: { error: vi.fn(), warn: vi.fn() },
-  } as unknown as Context<EmitterWebhookEventName>;
+  } as unknown as Context;
 
   return { context, configMock };
 };

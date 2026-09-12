@@ -105,7 +105,7 @@ export class WebhookNotifierSubscriber extends Subscriber {
       issue: {
         number: issue.number,
         title: issue.title,
-        state: issue.state ?? null,
+        state: issue.state,
         state_reason: issue.state_reason ?? null,
         html_url: issue.html_url,
       },

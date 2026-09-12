@@ -52,6 +52,7 @@ const prOpenedPayload = (overrides: PayloadOverrides = {}): Record<string, unkno
     author_association: overrides.association ?? 'FIRST_TIME_CONTRIBUTOR',
     user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
     title: overrides.title ?? 'Fix the thing',
+    labels: [],
   },
   repository: {
     owner: { login: 'acme' },

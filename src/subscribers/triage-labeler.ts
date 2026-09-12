@@ -167,7 +167,7 @@ export class TriageLabelerSubscriber extends Subscriber {
       });
       const qualifies = async (username: string): Promise<boolean> =>
         settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
-      const desired = await computeDesired(reviews as unknown as readonly ReviewLike[], {
+      const desired = await computeDesired(reviews, {
         headSha: pr.head.sha,
         resetOnPush: settings.resetOnPush,
         qualifies,

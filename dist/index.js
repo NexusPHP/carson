@@ -58932,7 +58932,7 @@ var fetchAndParse = async (context, knownIds) => {
   const parsed = CarsonConfigSchema.safeParse(raw);
   const log = logger.for("config");
   if (!parsed.success) {
-    log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
+    log.error({ err: external_exports.treeifyError(parsed.error) }, `Invalid ${CONFIG_FILE}`);
     return null;
   }
   if (knownIds !== void 0) {
@@ -59243,6 +59243,7 @@ var universalContext = () => ({
 });
 var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
 var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
 var interpolate = (template, context) => {
   const merged = { ...universalContext(), ...context };
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
@@ -59579,7 +59580,7 @@ var runPreflight = async (probot, carson2, repository) => {
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
-    installationPermissions = installation.permissions ?? {};
+    installationPermissions = installation.permissions;
     log.debug({ installationId, permissions: installationPermissions }, "Installation resolved");
   } catch (error62) {
     log.warn({ err: error62 }, "Could not resolve installation, skipping");
@@ -59593,7 +59594,7 @@ var runPreflight = async (probot, carson2, repository) => {
     return { error: null, enabledIds: [] };
   }
   log.debug({ subscribers: config3.subscribers }, "Config loaded");
-  const appPermissions = app.permissions ?? {};
+  const appPermissions = app.permissions;
   const missing = carson2.missingPermissions(installationPermissions, appPermissions, config3.subscribers);
   if (missing.length > 0) {
     return { error: formatMissingPermissionsError(missing, app.html_url, appIdentity.current), enabledIds: config3.subscribers };
@@ -59693,7 +59694,7 @@ var parseCommands = (body) => {
       continue;
     }
     const [, name, rawArgs] = match;
-    if (!isCommandName(name)) {
+    if (name === void 0 || !isCommandName(name)) {
       continue;
     }
     const args = (rawArgs ?? "").split(",").map((arg) => arg.trim()).filter((arg) => arg.length > 0);
@@ -59929,10 +59930,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       this.log().debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
       return;
     }
-    if (pr.user === null) {
-      return;
-    }
-    const hasConflict = pr.mergeable === false;
+    const hasConflict = !pr.mergeable;
     const settings = subscriberSettings(config3, this.id, Settings3, this.log()) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
     if (hasConflict) {
@@ -60135,8 +60133,7 @@ var parseIssueIntakeMarker = (body) => {
   if (match === null) {
     return null;
   }
-  const [, eventType, ref] = match;
-  return { eventType: eventType.trim(), ref };
+  return { eventType: match[1].trim(), ref: match[2] };
 };
 
 // src/subscribers/issue-intake.ts
@@ -60429,8 +60426,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       return;
     }
     const pr = context.payload.pull_request;
-    const headRepo = pr.head.repo?.full_name;
-    if (pr.draft === true || pr.maintainer_can_modify || headRepo === void 0 || headRepo === context.payload.repository.full_name) {
+    if (pr.draft === true || pr.maintainer_can_modify || pr.head.repo.full_name === context.payload.repository.full_name) {
       return;
     }
     const { owner, repo } = context.repo();
@@ -60674,7 +60670,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
     });
     const merges = commits.filter((c) => c.parents.length >= MERGE_COMMIT_PARENTS).map((c) => ({
       sha: c.sha,
-      subject: c.commit.message.split("\n")[0],
+      subject: firstLine(c.commit.message),
       author: c.commit.author?.name ?? c.author?.login ?? "unknown"
     }));
     const conclusion = merges.length === 0 ? "success" : settings.treat_merge_commits_as ?? DEFAULT_TREATMENT;
@@ -60993,7 +60989,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     });
     const unsigned = commits.filter((c) => c.commit.verification?.verified !== true).map((c) => ({
       sha: c.sha,
-      subject: c.commit.message.split("\n")[0],
+      subject: firstLine(c.commit.message),
       author: c.commit.author?.name ?? c.author?.login ?? "unknown"
     }));
     const conclusion = unsigned.length === 0 ? "success" : treatment;
@@ -61295,15 +61291,12 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #handlePr(context) {
     const pr = context.payload.pull_request;
-    if (pr.user === null) {
-      return;
-    }
     await this.#apply(context, "pull_request", {
       number: pr.number,
       body: pr.body ?? "",
       title: pr.title,
       user: pr.user.login,
-      labels: pr.labels?.map((l) => l.name) ?? []
+      labels: pr.labels.map((l) => l.name)
     });
   }
   async #apply(context, kind, item) {
@@ -61383,10 +61376,6 @@ var ThanksSubscriber = class extends Subscriber {
       const log = this.log();
       const pr = context.payload.pull_request;
       if (context.isBot || !pr.merged) {
-        return;
-      }
-      if (pr.user === null) {
-        log.debug(`PR #${pr.number}: no user (ghost), skipping`);
         return;
       }
       if (pr.user.type === "Bot") {
@@ -61747,7 +61736,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
       issue: {
         number: issue3.number,
         title: issue3.title,
-        state: issue3.state ?? null,
+        state: issue3.state,
         state_reason: issue3.state_reason ?? null,
         html_url: issue3.html_url
       },

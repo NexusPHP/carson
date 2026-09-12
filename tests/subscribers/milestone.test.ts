@@ -96,11 +96,10 @@ const BRANCH_RULES = [
   '        milestone: next-open',
 ];
 
-const MILESTONES: MilestoneInput[] = [
-  { number: 1, title: 'v1.4', due_on: '2026-10-01T00:00:00Z' },
-  { number: 2, title: 'v1.5', due_on: '2026-12-01T00:00:00Z' },
-  { number: 3, title: 'next' },
-];
+const V14: MilestoneInput = { number: 1, title: 'v1.4', due_on: '2026-10-01T00:00:00Z' };
+const V15: MilestoneInput = { number: 2, title: 'v1.5', due_on: '2026-12-01T00:00:00Z' };
+const NEXT: MilestoneInput = { number: 3, title: 'next' };
+const MILESTONES: MilestoneInput[] = [V14, V15, NEXT];
 
 describe('milestone subscriber (via app)', () => {
   let probot: Probot;
@@ -149,7 +148,7 @@ describe('milestone subscriber (via app)', () => {
   it('picks the earliest open milestone by due date for next-open', async () => {
     mockInstallationToken();
     mockConfig(configWith(BRANCH_RULES));
-    mockListMilestones([MILESTONES[1] as MilestoneInput, MILESTONES[2] as MilestoneInput, MILESTONES[0] as MilestoneInput]);
+    mockListMilestones([V15, NEXT, V14]);
     const setScope = mockSetMilestone(1);
 
     await probot.receive({

@@ -57,6 +57,7 @@ const prClosedPayload = (overrides: PayloadOverrides = {}): Record<string, unkno
         : { login: overrides.user.login, type: overrides.user.type ?? 'User' },
     merged_by: overrides.mergedBy === undefined ? { login: 'maintainer' } : overrides.mergedBy,
     title: overrides.title ?? 'Fix the thing',
+    labels: [],
   },
   repository: {
     owner: { login: 'acme' },
@@ -197,16 +198,6 @@ describe('thanks subscriber (via app)', () => {
       id: 'evt-thanks-bot-author',
       name: 'pull_request',
       payload: prClosedPayload({ user: { login: 'dependabot[bot]', type: 'Bot' } }) as never,
-    });
-
-    expect(nock.pendingMocks()).toEqual([]);
-  });
-
-  it('does nothing when the PR has no author (ghost)', async () => {
-    await probot.receive({
-      id: 'evt-thanks-ghost',
-      name: 'pull_request',
-      payload: prClosedPayload({ user: null }) as never,
     });
 
     expect(nock.pendingMocks()).toEqual([]);

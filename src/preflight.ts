@@ -115,7 +115,7 @@ export const runPreflight = async (
   try {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     installationId = installation.id;
-    installationPermissions = (installation.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
+    installationPermissions = installation.permissions;
     log.debug({ installationId, permissions: installationPermissions }, 'Installation resolved');
   } catch (error) {
     log.warn({ err: error }, 'Could not resolve installation, skipping');
@@ -133,7 +133,7 @@ export const runPreflight = async (
 
   log.debug({ subscribers: config.subscribers }, 'Config loaded');
 
-  const appPermissions = (app.permissions ?? {}) as Readonly<Record<string, PermissionLevel>>;
+  const appPermissions = app.permissions as Readonly<Record<string, PermissionLevel>>;
   const missing = carson.missingPermissions(installationPermissions, appPermissions, config.subscribers);
 
   if (missing.length > 0) {

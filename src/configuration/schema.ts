@@ -15,7 +15,7 @@ export type CarsonConfig = z.infer<typeof CarsonConfigSchema>;
 export const subscriberSettings = <T>(
   config: CarsonConfig,
   subscriberId: string,
-  schema: z.ZodSchema<T>,
+  schema: z.ZodType<T>,
   log?: Logger,
 ): T | undefined => {
   const raw = config.settings?.[subscriberId];

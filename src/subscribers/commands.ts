@@ -53,7 +53,7 @@ const parseCommands = (body: string): Command[] => {
 
     const [, name, rawArgs] = match;
 
-    if (!isCommandName(name)) {
+    if (name === undefined || !isCommandName(name)) {
       continue;
     }
 

@@ -31,9 +31,7 @@ const since = [store.since, dates[0]].filter((d): d is string => d !== undefined
 let total = store.total ?? 0;
 const kept: Record<string, Day> = {};
 
-for (const date of dates) {
-  const day = days[date] as Day;
-
+for (const [date, day] of Object.entries(days).sort(([a], [b]) => a.localeCompare(b))) {
   if (oldestRevisable !== undefined && date < oldestRevisable) {
     total += day.count;
   } else {

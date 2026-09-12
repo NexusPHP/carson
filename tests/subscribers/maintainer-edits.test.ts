@@ -176,19 +176,6 @@ describe('maintainer-edits subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does nothing when the head repository is gone', async () => {
-    mockInstallationToken();
-    mockConfig(CONFIG_ENABLED);
-
-    await probot.receive({
-      id: 'evt-me-no-head-repo',
-      name: 'pull_request',
-      payload: prPayload({ headRepo: null }) as never,
-    });
-
-    expect(nock.pendingMocks()).toEqual([]);
-  });
-
   it('skips draft PRs until ready_for_review', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);

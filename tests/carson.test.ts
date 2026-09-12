@@ -135,13 +135,13 @@ describe('Carson', () => {
     expect(disabled.scheduledCalls).toEqual([]);
   });
 
-  it('app getter returns a function that invokes run', () => {
+  it('app getter returns a function that invokes run', async () => {
     const sub = new FakeSubscriber();
     const carson = new Carson([sub]);
     const probot = makeProbot();
     const options = { cwd: '.', addHandler: vi.fn() };
 
-    carson.app(probot, options);
+    await carson.app(probot, options);
 
     expect(sub.registerCalls).toEqual([probot]);
   });

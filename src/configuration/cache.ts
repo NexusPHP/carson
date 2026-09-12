@@ -3,6 +3,7 @@ import { type CarsonConfig, CarsonConfigSchema } from './schema.js';
 import { logger } from '../logger.js';
 import type { Logger } from 'pino';
 import type { ProbotOctokit } from 'probot';
+import { z } from 'zod';
 
 const CONFIG_FILE = 'carson.yml';
 const CONFIG_PATH = `.github/${CONFIG_FILE}`;
@@ -48,7 +49,7 @@ const fetchAndParse = async (
   const log = logger.for('config');
 
   if (!parsed.success) {
-    log.error({ err: parsed.error.format() }, `Invalid ${CONFIG_FILE}`);
+    log.error({ err: z.treeifyError(parsed.error) }, `Invalid ${CONFIG_FILE}`);
 
     return null;
   }

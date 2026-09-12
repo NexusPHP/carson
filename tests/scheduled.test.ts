@@ -56,7 +56,7 @@ describe('dispatchScheduled', () => {
     const { probot, getRepoInstallation, installationOctokit } = makeProbot(42);
     const registrar = new ScheduledRegistrar();
     const handler = vi.fn().mockResolvedValue(undefined);
-    registrar.on(handler as unknown as ScheduledHandler);
+    registrar.on(handler);
 
     const result = await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 
@@ -73,7 +73,7 @@ describe('dispatchScheduled', () => {
     const { probot } = makeProbot();
     const registrar = new ScheduledRegistrar();
     const handler = vi.fn().mockResolvedValue(undefined);
-    registrar.on(handler as unknown as ScheduledHandler);
+    registrar.on(handler);
 
     await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 
@@ -103,8 +103,8 @@ describe('dispatchScheduled', () => {
       await Promise.resolve();
       callOrder.push('second');
     });
-    registrar.on(failing as unknown as ScheduledHandler);
-    registrar.on(second as unknown as ScheduledHandler);
+    registrar.on(failing);
+    registrar.on(second);
 
     const result = await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 
@@ -128,7 +128,7 @@ describe('dispatchScheduled', () => {
     const handler = vi.fn(async (ctx: { config: <T>(file: string) => Promise<T | null> }) => {
       result = await ctx.config('carson.yml');
     });
-    registrar.on(handler as unknown as ScheduledHandler);
+    registrar.on(handler);
 
     await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
 

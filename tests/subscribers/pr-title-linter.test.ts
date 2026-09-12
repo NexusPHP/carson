@@ -66,6 +66,7 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
     base: { ref: 'main' },
     user: { login: 'octocat' },
     title: overrides.title ?? 'feat: add widget',
+    labels: [],
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User' },

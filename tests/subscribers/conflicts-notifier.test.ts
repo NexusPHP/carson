@@ -164,6 +164,7 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
     title: overrides.title ?? 'Fix the thing',
     base: { ref: overrides.base ?? 'main' },
     head: { ref: 'feature/widget' },
+    labels: [],
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: 'User' },
@@ -644,20 +645,6 @@ describe('conflicts-notifier subscriber (via app)', () => {
       id: 'evt-edit-title',
       name: 'pull_request',
       payload: prPayload({ action: 'edited', changes: { title: { from: 'old' } } }) as never,
-    });
-
-    expect(nock.pendingMocks()).toEqual([]);
-  });
-
-  it('does not post when conflict is detected but the PR has no user (ghost)', async () => {
-    mockInstallationToken();
-    mockConfig(CONFIG_ENABLED);
-    mockGetPR(false, { user: null });
-
-    await probot.receive({
-      id: 'evt-ghost-pr',
-      name: 'pull_request',
-      payload: prPayload() as never,
     });
 
     expect(nock.pendingMocks()).toEqual([]);

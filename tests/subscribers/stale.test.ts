@@ -156,11 +156,9 @@ describe('stale subscriber', () => {
     expect(updateMock).toHaveBeenCalledWith({
       owner: 'acme', repo: 'widgets', issue_number: 3, state: 'closed',
     });
-    const [commentOrder] = createCommentMock.mock.invocationCallOrder;
-    const [updateOrder] = updateMock.mock.invocationCallOrder;
-    expect(commentOrder).toBeDefined();
-    expect(updateOrder).toBeDefined();
-    expect(commentOrder).toBeLessThan(updateOrder as number);
+    const [commentOrder = Number.NaN] = createCommentMock.mock.invocationCallOrder;
+    const [updateOrder = Number.NaN] = updateMock.mock.invocationCallOrder;
+    expect(commentOrder).toBeLessThan(updateOrder);
   });
 
   it('skips a stale-labeled item still within the close window', async () => {

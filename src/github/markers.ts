@@ -26,7 +26,5 @@ export const parseIssueIntakeMarker = (body: string | null | undefined): IssueIn
     return null;
   }
 
-  const [, eventType, ref] = match;
-
-  return { eventType: eventType.trim(), ref };
+  return { eventType: (match[1] as string).trim(), ref: match[2] as string };
 };

@@ -144,16 +144,12 @@ export class TemplateEnforcerSubscriber extends Subscriber {
   async #handlePr(context: Context<PrEvent>): Promise<void> {
     const pr = context.payload.pull_request;
 
-    if (pr.user === null) {
-      return;
-    }
-
     await this.#apply(context, 'pull_request', {
       number: pr.number,
       body: pr.body ?? '',
       title: pr.title,
       user: pr.user.login,
-      labels: pr.labels?.map((l) => l.name) ?? [],
+      labels: pr.labels.map((l) => l.name),
     });
   }
 

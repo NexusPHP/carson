@@ -59,7 +59,7 @@ describe('repository_dispatch routing', () => {
     const seen: Record<string, unknown>[] = [];
     const probot = await makeProbot((p) => {
       p.on('repository_dispatch', (context) => {
-        seen.push(context.payload as unknown as Record<string, unknown>);
+        seen.push(context.payload);
       });
     });
 

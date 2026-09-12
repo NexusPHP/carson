@@ -66,6 +66,7 @@ const openedPayload = (kind: 'issue' | 'pull_request', overrides: ItemOverrides 
   [kind]: {
     number: 42,
     title: 'Something',
+    labels: [],
     user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
   },
   repository: {

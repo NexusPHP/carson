@@ -128,9 +128,9 @@ Event-driven comments go through `this.notice(context, number, body)` ([src/subs
 
 ## Style
 
-ESLint config in [eslint.config.ts](eslint.config.ts) is strict: `typescript-eslint` strict plus stylistic, plus `sort-imports` (member syntax order: `none, all, multiple, single`), `consistent-type-imports`, `strict-boolean-expressions`, `prefer-nullish-coalescing`, and 2-space / single-quote / semi formatting via `@stylistic`. Run `npm run lint:fix` before committing.
+ESLint config in [eslint.config.ts](eslint.config.ts) is strict: `typescript-eslint` `strictTypeChecked` plus `stylisticTypeChecked` (the `no-unsafe-*` family is off under `tests/`, where mocks are `any` by nature), plus `sort-imports` (member syntax order: `none, all, multiple, single`), `consistent-type-imports`, `strict-boolean-expressions`, `prefer-nullish-coalescing`, and 2-space / single-quote / semi formatting via `@stylistic`. Run `npm run lint:fix` before committing.
 
-TypeScript ([tsconfig.json](tsconfig.json)) enables `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `noUnusedLocals`, and `noUnusedParameters`. All imports must use the `.js` extension (NodeNext / `node16` module resolution) even though sources are `.ts`.
+TypeScript ([tsconfig.json](tsconfig.json)) enables `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `noUnusedLocals`, and `noUnusedParameters`. Webhook payload fields are trusted as typed: a guard the types make unreachable is a lint error, not defence in depth. All imports must use the `.js` extension (NodeNext / `node16` module resolution) even though sources are `.ts`.
 
 ## Release flow
 

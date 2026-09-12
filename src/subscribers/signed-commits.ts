@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { escapeMarkdown, pluralize } from '../template.js';
+import { escapeMarkdown, firstLine, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { z } from 'zod';
@@ -65,7 +65,7 @@ export class SignedCommitsSubscriber extends Subscriber {
       .filter((c) => c.commit.verification?.verified !== true)
       .map((c) => ({
         sha: c.sha,
-        subject: c.commit.message.split('\n')[0],
+        subject: firstLine(c.commit.message),
         author: c.commit.author?.name ?? c.author?.login ?? 'unknown',
       }));
 

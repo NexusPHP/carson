@@ -58,8 +58,9 @@ describe('ActionRegistrar', () => {
     const registrar = new ActionRegistrar();
     registrar.on('lock', 'locker', vi.fn());
 
-    expect(() => registrar.on('lock', 'other', vi.fn()))
-      .toThrow('Action "lock" is already handled by "locker"');
+    expect(() => {
+      registrar.on('lock', 'other', vi.fn());
+    }).toThrow('Action "lock" is already handled by "locker"');
   });
 
   it('lets the same owner re-register, replacing the handler', async () => {

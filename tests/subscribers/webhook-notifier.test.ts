@@ -163,7 +163,7 @@ describe('webhook-notifier subscriber (via app)', () => {
       .matchHeader('x-carson-delivery', 'run-777')
       .reply(function (_uri, body) {
         capturedBody = body as Record<string, unknown>;
-        signature = this.req.headers['x-carson-signature-256'] as unknown as string;
+        signature = this.req.headers['x-carson-signature-256'] ?? '';
         return [200];
       });
 
@@ -218,21 +218,20 @@ describe('webhook-notifier subscriber (via app)', () => {
     expect(hookScope.isDone()).toBe(true);
   });
 
-  it('sends null state and state_reason and an empty delivery id when the payload and env omit them', async () => {
-    vi.stubEnv('GITHUB_RUN_ID', undefined as never);
+  it('sends a null state_reason and an empty delivery id when the payload and env omit them', async () => {
+    vi.stubEnv('GITHUB_RUN_ID', undefined);
     mockInstallationToken();
     mockConfig(configFor());
 
     const hookScope = nock('https://app.example.com')
-      .post('/api/support/github-webhook', (body: { issue: { state: null; state_reason: null } }) => {
-        expect(body.issue.state).toBeNull();
+      .post('/api/support/github-webhook', (body: { issue: { state_reason: null } }) => {
         expect(body.issue.state_reason).toBeNull();
         return true;
       })
       .matchHeader('x-carson-delivery', '')
       .reply(200);
 
-    await receiveIssues(probot, 'closed', { state: undefined, state_reason: null });
+    await receiveIssues(probot, 'closed', { state_reason: null });
 
     expect(hookScope.isDone()).toBe(true);
   });
@@ -310,7 +309,7 @@ describe('webhook-notifier subscriber (via app)', () => {
   });
 
   it('throws when the secret_env variable is not set', async () => {
-    vi.stubEnv('CARSON_WEBHOOK_SECRET', undefined as never);
+    vi.stubEnv('CARSON_WEBHOOK_SECRET', undefined);
     mockInstallationToken();
     mockConfig(configFor());
 
