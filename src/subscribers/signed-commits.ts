@@ -72,7 +72,7 @@ export class SignedCommitsSubscriber extends Subscriber {
     const conclusion = unsigned.length === 0 ? 'success' : treatment;
     const output = unsigned.length === 0
       ? {
-          title: `All ${pluralize(commits.length, 'commit')} signed`,
+          title: `${pluralize(commits.length, 'commit')} signed`,
           summary: `Every commit in this pull request has a verified signature.`,
         }
       : {

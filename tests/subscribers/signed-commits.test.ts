@@ -121,7 +121,7 @@ describe('signed-commits subscriber (via app)', () => {
       expect(body.head_sha).toBe(HEAD_SHA);
       expect(body.status).toBe('completed');
       expect(body.conclusion).toBe('success');
-      expect(body.output.title).toContain('All 2 commit');
+      expect(body.output.title).toBe('2 commits signed');
       return true;
     });
 

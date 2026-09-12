@@ -60809,7 +60809,7 @@ var conclusionFor = (failures) => {
 var outputFor = (failures, totalRules) => {
   if (failures.length === 0) {
     return {
-      title: `Title passes all ${pluralize(totalRules, "rule")}`,
+      title: `Title passes ${pluralize(totalRules, "rule")}`,
       summary: "Every configured rule matched the pull request title."
     };
   }
@@ -60975,7 +60975,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
     }));
     const conclusion = unsigned.length === 0 ? "success" : treatment;
     const output2 = unsigned.length === 0 ? {
-      title: `All ${pluralize(commits.length, "commit")} signed`,
+      title: `${pluralize(commits.length, "commit")} signed`,
       summary: `Every commit in this pull request has a verified signature.`
     } : {
       title: pluralize(unsigned.length, "unsigned commit"),

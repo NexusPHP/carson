@@ -177,7 +177,7 @@ describe('pr-title-linter subscriber (via app)', () => {
       expect(body.name).toBe('Carson / pr-title-linter');
       expect(body.head_sha).toBe(HEAD_SHA);
       expect(body.conclusion).toBe('success');
-      expect(body.output.title).toBe('Title passes all 1 rule');
+      expect(body.output.title).toBe('Title passes 1 rule');
       expect(body.output.text).toBeUndefined();
       return true;
     });
@@ -285,7 +285,7 @@ describe('pr-title-linter subscriber (via app)', () => {
     ].join('\n')));
 
     const checkScope = mockCreateCheck((body) => {
-      expect(body.output.title).toBe('Title passes all 1 rule');
+      expect(body.output.title).toBe('Title passes 1 rule');
       expect(body.conclusion).toBe('success');
       return true;
     });

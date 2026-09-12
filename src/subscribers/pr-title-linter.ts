@@ -80,7 +80,7 @@ const outputFor = (
 ): { title: string; summary: string; text?: string } => {
   if (failures.length === 0) {
     return {
-      title: `Title passes all ${pluralize(totalRules, 'rule')}`,
+      title: `Title passes ${pluralize(totalRules, 'rule')}`,
       summary: 'Every configured rule matched the pull request title.',
     };
   }
