@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.4.2](https://github.com/NexusPHP/carson/compare/v1.4.1...v1.4.2) - 2026-09-12
+
 ### Fixed
 
 - `pr-title-linter` runs on `pull_request.synchronize` and `pull_request.reopened` too, so a push no longer leaves the new head without a check.

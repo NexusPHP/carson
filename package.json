@@ -1,6 +1,6 @@
 {
   "name": "carson",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "A GitHub App that manages your repository like a butler.",
   "homepage": "https://github.com/NexusPHP/carson#readme",
