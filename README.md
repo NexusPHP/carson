@@ -75,7 +75,9 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited, closed, ready_for_review, converted_to_draft, labeled, unlabeled]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
+  pull_request_review_comment:
+    types: [created]
   push:
   issues:
     types: [opened, edited, closed, reopened, labeled]

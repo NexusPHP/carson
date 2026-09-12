@@ -32,7 +32,11 @@ const PR_EVENTS: TriagePrEvent[] = [
   'pull_request.converted_to_draft',
 ];
 
-type TriageContext = Context<TriagePrEvent | 'pull_request_review.submitted'>;
+type TriageReviewEvent = 'pull_request_review.submitted' | 'pull_request_review.dismissed';
+
+const REVIEW_EVENTS: TriageReviewEvent[] = ['pull_request_review.submitted', 'pull_request_review.dismissed'];
+
+type TriageContext = Context<TriagePrEvent | TriageReviewEvent>;
 
 interface ResolvedSettings {
   needsReviewLabel: string;
@@ -136,7 +140,7 @@ export class TriageLabelerSubscriber extends Subscriber {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
       await this.#handle(context as TriageContext);
     });
-    probot.on('pull_request_review.submitted', async (context): Promise<void> => {
+    probot.on(REVIEW_EVENTS, async (context): Promise<void> => {
       await this.#handle(context as TriageContext);
     });
   }

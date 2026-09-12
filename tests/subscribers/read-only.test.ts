@@ -55,12 +55,13 @@ const mockConfig = (yaml: string | null): void => {
 };
 
 interface ItemOverrides {
+  action?: 'opened' | 'reopened';
   user?: { login: string } | null;
   senderType?: string;
 }
 
 const openedPayload = (kind: 'issue' | 'pull_request', overrides: ItemOverrides = {}): Record<string, unknown> => ({
-  action: 'opened',
+  action: overrides.action ?? 'opened',
   installation: { id: INSTALLATION_ID },
   [kind]: {
     number: 42,
@@ -146,6 +147,20 @@ describe('read-only subscriber (via app)', () => {
     const lock = mockLock();
 
     await receive(probot, 'issue');
+
+    expect(comment.isDone()).toBe(true);
+    expect(close.isDone()).toBe(true);
+    expect(lock.isDone()).toBe(true);
+  });
+
+  it('closes a reopened issue again', async () => {
+    mockInstallationToken();
+    mockConfig(configFor(null));
+    const comment = mockComment();
+    const close = mockClose('not_planned');
+    const lock = mockLock();
+
+    await receive(probot, 'issue', { action: 'reopened' });
 
     expect(comment.isDone()).toBe(true);
     expect(close.isDone()).toBe(true);

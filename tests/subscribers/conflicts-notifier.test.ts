@@ -147,15 +147,17 @@ const mockUnminimize = (subjectId: string): nock.Scope => {
 };
 
 interface PayloadOverrides {
-  action?: 'opened' | 'synchronize' | 'reopened';
+  action?: 'opened' | 'synchronize' | 'reopened' | 'edited';
   user?: { login: string } | null;
   title?: string;
   base?: string;
+  changes?: Record<string, unknown>;
 }
 
 const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> => ({
   action: overrides.action ?? 'synchronize',
   installation: { id: INSTALLATION_ID },
+  ...(overrides.changes === undefined ? {} : { changes: overrides.changes }),
   pull_request: {
     number: PR_NUMBER,
     user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
@@ -610,6 +612,41 @@ describe('conflicts-notifier subscriber (via app)', () => {
     });
 
     expect(createScope.isDone()).toBe(true);
+  });
+
+  it('re-checks the PR when it is retargeted', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockGetPR(false);
+    mockCommentsQuery([]);
+
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`).reply(201, {});
+
+    await probot.receive({
+      id: 'evt-retarget',
+      name: 'pull_request',
+      payload: prPayload({
+        action: 'edited',
+        base: 'release/1.x',
+        changes: { base: { ref: { from: 'main' }, sha: { from: 'old' } } },
+      }) as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
+  });
+
+  it('ignores edits that do not change the base branch', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+
+    await probot.receive({
+      id: 'evt-edit-title',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', changes: { title: { from: 'old' } } }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does not post when conflict is detected but the PR has no user (ghost)', async () => {

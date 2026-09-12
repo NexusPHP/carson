@@ -59228,7 +59228,7 @@ var Subscriber = class {
 
 // src/github/labels.ts
 var labelNames = (labels) => {
-  return (labels ?? []).map((label) => typeof label === "string" ? label : label.name).filter((name) => typeof name === "string");
+  return (labels ?? []).map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string");
 };
 
 // src/subscribers/auto-labeler.ts
@@ -59851,7 +59851,8 @@ var CONCURRENCY = 5;
 var PR_EVENTS2 = [
   "pull_request.opened",
   "pull_request.synchronize",
-  "pull_request.reopened"
+  "pull_request.reopened",
+  "pull_request.edited"
 ];
 var COMMENTS_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -59886,6 +59887,9 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     });
   }
   async #handlePrEvent(context) {
+    if (context.payload.action === "edited" && context.payload.changes.base === void 0) {
+      return;
+    }
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return;
@@ -60008,7 +60012,12 @@ var DEFAULT_MESSAGE2 = `Hey @{{user}}, thanks for the pull request!
 
 This repository does not keep draft pull requests open. A pull request does not have to be finished to be reviewed, so please mark it "Ready for review" when you would like a first look, or close it and open a new one when you are done.`;
 var DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
-var PR_EVENTS3 = ["pull_request.opened", "pull_request.converted_to_draft", "pull_request.ready_for_review"];
+var PR_EVENTS3 = [
+  "pull_request.opened",
+  "pull_request.reopened",
+  "pull_request.converted_to_draft",
+  "pull_request.ready_for_review"
+];
 var DraftPolicySubscriber = class extends Subscriber {
   id = "draft-policy";
   description = "Comments on draft pull requests and closes those still in draft after a grace period.";
@@ -60584,6 +60593,7 @@ var PR_EVENTS6 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened",
+  "pull_request.edited",
   "pull_request.labeled",
   "pull_request.unlabeled"
 ];
@@ -60625,6 +60635,9 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
+    if (context.payload.action === "edited" && context.payload.changes.base === void 0) {
+      return;
+    }
     const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
@@ -60880,12 +60893,18 @@ var Settings12 = external_exports.object({
   issues: external_exports.boolean().default(true),
   pull_requests: external_exports.boolean().default(true)
 });
+var READONLY_EVENTS = [
+  "issues.opened",
+  "issues.reopened",
+  "pull_request.opened",
+  "pull_request.reopened"
+];
 var ReadOnlySubscriber = class extends Subscriber {
   id = "read-only";
   description = "Closes issues and pull requests opened on a read-only repository, pointing to the upstream.";
   requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
-    probot.on(["issues.opened", "pull_request.opened"], async (context) => {
+    probot.on(READONLY_EVENTS, async (context) => {
       await this.#handle(context);
     });
   }
@@ -61016,25 +61035,26 @@ var DEFAULT_CLOSE_MESSAGE3 = "Closing this {{type}} due to extended inactivity."
 var COMMENT_MARKER = noticeMarker("stale");
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY5 = 5;
+var ISSUE_ACTIVITY = ["issue_comment.created", "issues.edited", "issues.reopened"];
+var PR_ACTIVITY = [
+  "pull_request.synchronize",
+  "pull_request.edited",
+  "pull_request.reopened",
+  "pull_request_review.submitted",
+  "pull_request_review_comment.created"
+];
 var StaleSubscriber = class extends Subscriber {
   id = "stale";
   description = "Marks inactive issues and pull requests as stale, then closes them after a further grace period.";
   requiredPermissions = { issues: "write", pull_requests: "write" };
   register(probot) {
-    probot.on(["issue_comment.created", "issues.edited"], async (context) => {
+    probot.on(ISSUE_ACTIVITY, async (context) => {
       const ctx = context;
       await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);
     });
-    probot.on(["pull_request.synchronize", "pull_request.edited"], async (context) => {
+    probot.on(PR_ACTIVITY, async (context) => {
       const ctx = context;
       await this.#processActivity(ctx, ctx.payload.pull_request.number, ctx.payload.pull_request.labels);
-    });
-    probot.on("pull_request_review.submitted", async (context) => {
-      await this.#processActivity(
-        context,
-        context.payload.pull_request.number,
-        context.payload.pull_request.labels
-      );
     });
   }
   async #processActivity(context, issueNumber, rawLabels) {
@@ -61413,6 +61433,7 @@ var PR_EVENTS10 = [
   "pull_request.ready_for_review",
   "pull_request.converted_to_draft"
 ];
+var REVIEW_EVENTS = ["pull_request_review.submitted", "pull_request_review.dismissed"];
 var resolveSettings = (raw) => ({
   needsReviewLabel: raw.needs_review_label ?? DEFAULT_NEEDS_REVIEW,
   needsReworkLabel: raw.needs_rework_label ?? DEFAULT_NEEDS_REWORK,
@@ -61471,7 +61492,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     probot.on(PR_EVENTS10, async (context) => {
       await this.#handle(context);
     });
-    probot.on("pull_request_review.submitted", async (context) => {
+    probot.on(REVIEW_EVENTS, async (context) => {
       await this.#handle(context);
     });
   }

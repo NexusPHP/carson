@@ -59,7 +59,7 @@ const mockMinimize = (nodeId: string): nock.Scope => {
     .reply(200, { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } });
 };
 
-const prPayload = (overrides: { action?: 'opened' | 'converted_to_draft' | 'ready_for_review'; draft?: boolean } = {}): Record<string, unknown> => ({
+const prPayload = (overrides: { action?: 'opened' | 'reopened' | 'converted_to_draft' | 'ready_for_review'; draft?: boolean } = {}): Record<string, unknown> => ({
   action: overrides.action ?? 'opened',
   installation: { id: INSTALLATION_ID },
   pull_request: {
@@ -159,6 +159,20 @@ describe('draft-policy subscriber (via app)', () => {
       id: 'evt-dp-converted',
       name: 'pull_request',
       payload: prPayload({ action: 'converted_to_draft' }) as never,
+    });
+
+    expect(createScope.isDone()).toBe(true);
+  });
+
+  it('posts a fresh notice when a draft PR is reopened', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    const createScope = mockCreateComment((body) => body.endsWith(MARKER));
+
+    await probot.receive({
+      id: 'evt-dp-reopened',
+      name: 'pull_request',
+      payload: prPayload({ action: 'reopened' }) as never,
     });
 
     expect(createScope.isDone()).toBe(true);

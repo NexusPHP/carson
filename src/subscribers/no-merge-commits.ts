@@ -24,13 +24,15 @@ type NoMergeCommitsEvent
     | 'pull_request.synchronize'
     | 'pull_request.reopened'
     | 'pull_request.labeled'
-    | 'pull_request.unlabeled';
+    | 'pull_request.unlabeled'
+    | 'pull_request.edited';
 type NoMergeCommitsContext = Context<NoMergeCommitsEvent>;
 
 const PR_EVENTS: NoMergeCommitsEvent[] = [
   'pull_request.opened',
   'pull_request.synchronize',
   'pull_request.reopened',
+  'pull_request.edited',
   'pull_request.labeled',
   'pull_request.unlabeled',
 ];
@@ -97,6 +99,10 @@ export class NoMergeCommitsSubscriber extends Subscriber {
   }
 
   async #handle(context: NoMergeCommitsContext): Promise<void> {
+    if (context.payload.action === 'edited' && context.payload.changes.base === undefined) {
+      return;
+    }
+
     const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 

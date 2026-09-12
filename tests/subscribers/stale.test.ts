@@ -306,10 +306,15 @@ describe('stale subscriber', () => {
     const subscriber = new StaleSubscriber();
     const onSpy = vi.fn();
     subscriber.register({ on: onSpy } as never);
-    expect(onSpy).toHaveBeenCalledTimes(3);
-    expect(onSpy.mock.calls[0]?.[0]).toEqual(['issue_comment.created', 'issues.edited']);
-    expect(onSpy.mock.calls[1]?.[0]).toEqual(['pull_request.synchronize', 'pull_request.edited']);
-    expect(onSpy.mock.calls[2]?.[0]).toBe('pull_request_review.submitted');
+    expect(onSpy).toHaveBeenCalledTimes(2);
+    expect(onSpy.mock.calls[0]?.[0]).toEqual(['issue_comment.created', 'issues.edited', 'issues.reopened']);
+    expect(onSpy.mock.calls[1]?.[0]).toEqual([
+      'pull_request.synchronize',
+      'pull_request.edited',
+      'pull_request.reopened',
+      'pull_request_review.submitted',
+      'pull_request_review_comment.created',
+    ]);
   });
 });
 
@@ -371,6 +376,7 @@ const mockMinimize = (subjectId: string): nock.Scope => {
 };
 
 const issueCommentPayload = (overrides: {
+  action?: string;
   labels?: { name: string }[] | null;
   senderType?: string;
   issueNumber?: number;
@@ -386,7 +392,7 @@ const issueCommentPayload = (overrides: {
   }
 
   return {
-    action: 'created',
+    action: overrides.action ?? 'created',
     installation: { id: INSTALLATION_ID },
     comment: { id: 1, body: 'hi' },
     issue,
@@ -396,11 +402,12 @@ const issueCommentPayload = (overrides: {
 };
 
 const prSynchronizePayload = (overrides: {
+  action?: string;
   labels?: { name: string }[];
   senderType?: string;
   senderLogin?: string;
 } = {}): Record<string, unknown> => ({
-  action: 'synchronize',
+  action: overrides.action ?? 'synchronize',
   installation: { id: INSTALLATION_ID },
   number: 42,
   pull_request: {
@@ -463,6 +470,36 @@ describe('stale subscriber (webhook un-stale)', () => {
 
     expect(removeScope.isDone()).toBe(true);
     expect(minimizeScope.isDone()).toBe(true);
+  });
+
+  it('removes the stale label when a stale issue is reopened', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+    const removeScope = mockRemoveLabel(42, 'stale');
+    mockListComments(42, []);
+
+    await probot.receive({
+      id: 'evt-unstale-reopened',
+      name: 'issues',
+      payload: issueCommentPayload({ action: 'reopened' }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('removes the stale label on an inline review comment', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+    const removeScope = mockRemoveLabel(42, 'stale');
+    mockListComments(42, []);
+
+    await probot.receive({
+      id: 'evt-unstale-review-comment',
+      name: 'pull_request_review_comment',
+      payload: prSynchronizePayload({ action: 'created' }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
   });
 
   it('removes the stale label on pull_request.synchronize when the PR is stale', async () => {

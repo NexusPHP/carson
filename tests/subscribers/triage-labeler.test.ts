@@ -79,6 +79,7 @@ const mockRemoveLabel = (label: string): nock.Scope => {
 
 interface PayloadOverrides {
   action?: 'opened' | 'reopened' | 'synchronize' | 'ready_for_review' | 'converted_to_draft';
+  reviewAction?: 'submitted' | 'dismissed';
   draft?: boolean;
   labels?: string[];
   senderType?: string;
@@ -105,7 +106,7 @@ const reviewPayload = (
   reviewer: string,
   overrides: PayloadOverrides = {},
 ): Record<string, unknown> => ({
-  action: 'submitted',
+  action: overrides.reviewAction ?? 'submitted',
   installation: { id: INSTALLATION_ID },
   pull_request: {
     number: PR_NUMBER,
@@ -243,6 +244,23 @@ describe('triage-labeler subscriber (via app)', () => {
       id: 'evt-changes-requested',
       name: 'pull_request_review',
       payload: reviewPayload('CHANGES_REQUESTED', 'alice', { labels: ['needs-review'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('returns to needs-review when the standing change request is dismissed', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockListReviews([{ user: 'alice', state: 'DISMISSED' }]);
+    const removeScope = mockRemoveLabel('needs-rework');
+    const addScope = mockAddLabels('needs-review');
+
+    await probot.receive({
+      id: 'evt-dismissed',
+      name: 'pull_request_review',
+      payload: reviewPayload('CHANGES_REQUESTED', 'alice', { reviewAction: 'dismissed', labels: ['needs-rework'] }) as never,
     });
 
     expect(removeScope.isDone()).toBe(true);

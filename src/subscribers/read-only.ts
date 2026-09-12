@@ -14,7 +14,14 @@ const Settings = z.object({
   pull_requests: z.boolean().default(true),
 });
 
-type ReadOnlyEvent = 'issues.opened' | 'pull_request.opened';
+type ReadOnlyEvent = 'issues.opened' | 'issues.reopened' | 'pull_request.opened' | 'pull_request.reopened';
+
+const READONLY_EVENTS: ReadOnlyEvent[] = [
+  'issues.opened',
+  'issues.reopened',
+  'pull_request.opened',
+  'pull_request.reopened',
+];
 type ReadOnlyContext = Context<ReadOnlyEvent>;
 
 export class ReadOnlySubscriber extends Subscriber {
@@ -23,7 +30,7 @@ export class ReadOnlySubscriber extends Subscriber {
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write', pull_requests: 'write' };
 
   public override register(probot: Probot): void {
-    probot.on(['issues.opened', 'pull_request.opened'], async (context: ReadOnlyContext): Promise<void> => {
+    probot.on(READONLY_EVENTS, async (context: ReadOnlyContext): Promise<void> => {
       await this.#handle(context);
     });
   }

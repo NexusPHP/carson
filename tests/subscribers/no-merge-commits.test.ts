@@ -71,11 +71,13 @@ interface PayloadOverrides {
   login?: string | null;
   headRef?: string;
   baseRef?: string;
+  changes?: Record<string, unknown>;
 }
 
 const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> => ({
   action: overrides.action ?? 'synchronize',
   installation: { id: INSTALLATION_ID },
+  ...(overrides.changes === undefined ? {} : { changes: overrides.changes }),
   pull_request: {
     number: PR_NUMBER,
     head: { sha: HEAD_SHA, ref: overrides.headRef ?? 'feature/widget' },
@@ -464,6 +466,41 @@ describe('no-merge-commits subscriber (via app)', () => {
     });
 
     expect(checkScope.isDone()).toBe(true);
+  });
+
+  it('re-checks the commits when the PR is retargeted', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    mockListCommits([MERGE]);
+    const checkScope = mockCreateCheck((body) => {
+      expect(body.conclusion).toBe('failure');
+      return true;
+    });
+
+    await probot.receive({
+      id: 'evt-nmc-retarget',
+      name: 'pull_request',
+      payload: prPayload({
+        action: 'edited',
+        baseRef: 'release/1.x',
+        changes: { base: { ref: { from: 'main' }, sha: { from: 'old' } } },
+      }) as never,
+    });
+
+    expect(checkScope.isDone()).toBe(true);
+  });
+
+  it('ignores edits that do not change the base branch', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+
+    await probot.receive({
+      id: 'evt-nmc-edit-title',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', changes: { title: { from: 'old' } } }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing when no-merge-commits is not enabled', async () => {

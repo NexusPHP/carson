@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `pr-title-linter` runs on `pull_request.synchronize` and `pull_request.reopened` too, so a push no longer leaves the new head without a check.
+- `conflicts-notifier` and `no-merge-commits` re-run when a pull request is retargeted (`pull_request.edited` with a base change).
+- `draft-policy` posts a fresh notice when a draft is reopened, so a draft closed by the sweep and reopened is not closed again on the next run.
+- `read-only` closes reopened issues and pull requests as well as new ones.
+- `stale` un-stales on `issues.reopened`, `pull_request.reopened`, and `pull_request_review_comment.created`.
+- `triage-labeler` recomputes the label on `pull_request_review.dismissed`.
 
 ## [v1.4.1](https://github.com/NexusPHP/carson/compare/v1.4.0...v1.4.1) - 2026-09-12
 

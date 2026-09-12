@@ -1,10 +1,10 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment, noticeMarker } from '../github/notices.js';
 import { interpolate, pluralize } from '../template.js';
+import { type LabelLike, labelNames } from '../github/labels.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
-import { labelNames } from '../github/labels.js';
 import { minimizeComment } from '../github/comments.js';
 import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
@@ -27,35 +27,44 @@ const COMMENT_MARKER = noticeMarker('stale');
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 5;
 
+type IssueActivityEvent = 'issue_comment.created' | 'issues.edited' | 'issues.reopened';
+type PrActivityEvent
+  = | 'pull_request.synchronize'
+    | 'pull_request.edited'
+    | 'pull_request.reopened'
+    | 'pull_request_review.submitted'
+    | 'pull_request_review_comment.created';
+
+const ISSUE_ACTIVITY: IssueActivityEvent[] = ['issue_comment.created', 'issues.edited', 'issues.reopened'];
+const PR_ACTIVITY: PrActivityEvent[] = [
+  'pull_request.synchronize',
+  'pull_request.edited',
+  'pull_request.reopened',
+  'pull_request_review.submitted',
+  'pull_request_review_comment.created',
+];
+
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';
   public readonly description = 'Marks inactive issues and pull requests as stale, then closes them after a further grace period.';
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write', pull_requests: 'write' };
 
   public override register(probot: Probot): void {
-    probot.on(['issue_comment.created', 'issues.edited'], async (context): Promise<void> => {
-      const ctx = context as Context<'issue_comment.created' | 'issues.edited'>;
+    probot.on(ISSUE_ACTIVITY, async (context): Promise<void> => {
+      const ctx = context as Context<IssueActivityEvent>;
       await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);
     });
 
-    probot.on(['pull_request.synchronize', 'pull_request.edited'], async (context): Promise<void> => {
-      const ctx = context as Context<'pull_request.synchronize' | 'pull_request.edited'>;
+    probot.on(PR_ACTIVITY, async (context): Promise<void> => {
+      const ctx = context as Context<PrActivityEvent>;
       await this.#processActivity(ctx, ctx.payload.pull_request.number, ctx.payload.pull_request.labels);
-    });
-
-    probot.on('pull_request_review.submitted', async (context): Promise<void> => {
-      await this.#processActivity(
-        context,
-        context.payload.pull_request.number,
-        context.payload.pull_request.labels,
-      );
     });
   }
 
   async #processActivity(
-    context: Context<'issue_comment.created' | 'issues.edited' | 'pull_request.synchronize' | 'pull_request.edited' | 'pull_request_review.submitted'>,
+    context: Context<IssueActivityEvent | PrActivityEvent>,
     issueNumber: number,
-    rawLabels: { name?: string }[] | undefined,
+    rawLabels: readonly LabelLike[] | undefined,
   ): Promise<void> {
     if (context.isBot) {
       return;

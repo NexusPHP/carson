@@ -22,10 +22,19 @@ This repository does not keep draft pull requests open. A pull request does not 
 
 const DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
 
-type DraftPolicyEvent = 'pull_request.opened' | 'pull_request.converted_to_draft' | 'pull_request.ready_for_review';
+type DraftPolicyEvent
+  = | 'pull_request.opened'
+    | 'pull_request.reopened'
+    | 'pull_request.converted_to_draft'
+    | 'pull_request.ready_for_review';
 type DraftPolicyContext = Context<DraftPolicyEvent>;
 
-const PR_EVENTS: DraftPolicyEvent[] = ['pull_request.opened', 'pull_request.converted_to_draft', 'pull_request.ready_for_review'];
+const PR_EVENTS: DraftPolicyEvent[] = [
+  'pull_request.opened',
+  'pull_request.reopened',
+  'pull_request.converted_to_draft',
+  'pull_request.ready_for_review',
+];
 
 export class DraftPolicySubscriber extends Subscriber {
   public readonly id = 'draft-policy';

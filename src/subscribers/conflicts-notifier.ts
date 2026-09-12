@@ -17,7 +17,7 @@ type ParsedSettings = z.infer<typeof Settings>;
 const DEFAULT_MESSAGE = '@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.';
 const CONCURRENCY = 5;
 
-type PrEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
+type PrEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened' | 'pull_request.edited';
 type SupportedEvent = PrEvent | 'push';
 type SubscriberContext = Context<SupportedEvent>;
 
@@ -25,6 +25,7 @@ const PR_EVENTS: PrEvent[] = [
   'pull_request.opened',
   'pull_request.synchronize',
   'pull_request.reopened',
+  'pull_request.edited',
 ];
 
 interface CommentsQueryResponse {
@@ -83,6 +84,10 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   }
 
   async #handlePrEvent(context: Context<PrEvent>): Promise<void> {
+    if (context.payload.action === 'edited' && context.payload.changes.base === undefined) {
+      return;
+    }
+
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {

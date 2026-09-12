@@ -232,8 +232,10 @@ settings:
 
 Posts a comment on a pull request that has merge conflicts with its base branch, and marks the comment as resolved when the conflict is fixed.
 
-**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `push`
+**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.edited`, `push`
 **Permissions**: `issues: write`, `pull_requests: write`
+
+`pull_request.edited` counts only when the base branch changed, since a retarget changes the PR's mergeability.
 
 On `push` to a branch (e.g. `main` after a merge), Carson lists all open PRs targeting that branch and runs the per-PR check on each one. This catches the "PR was clean, base advanced, PR is now stale" case that pure `pull_request.*` triggers miss. Tag pushes (`refs/tags/*`) are ignored. For Carson to receive push events, your `.github/workflows/carson.yml` needs `on: push:` in its triggers.
 
@@ -284,10 +286,10 @@ settings:
 
 Comments on pull requests opened as drafts, asking the author to mark them ready for review, and closes those still in draft after a grace period.
 
-**Triggers**: `pull_request.opened`, `pull_request.converted_to_draft`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.converted_to_draft`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `pull_requests: write`
 
-On `pull_request.opened` with `draft: true` and on `converted_to_draft`, a notice is posted carrying the `<!-- carson:draft-policy -->` marker. On `ready_for_review` the latest notice is resolved.
+On `pull_request.opened` or `reopened` with `draft: true` and on `converted_to_draft`, a notice is posted carrying the `<!-- carson:draft-policy -->` marker, so a draft closed by the sweep and reopened gets a fresh grace period. On `ready_for_review` the latest notice is resolved.
 
 Each scheduled run searches open draft PRs and closes those whose latest notice is older than `hours_until_close`, posting `close_message` first. The notice is the clock: a draft without one (opened before the subscriber was enabled) is never closed, and a PR that leaves and re-enters draft is timed from the newest notice. Set `hours_until_close: 0` to keep the notice and never close.
 
@@ -565,10 +567,10 @@ Repositories that name milestones after branches need a single rule: `base: "^(.
 
 Posts a [Check Run](https://docs.github.com/en/rest/checks/runs) on each pull request that passes if every commit has a single parent and fails if any commit is a merge commit. It is the subscriber form of [NexusPHP/no-merge-commits](https://github.com/NexusPHP/no-merge-commits).
 
-**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.labeled`, `pull_request.unlabeled`
+**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.edited`, `pull_request.labeled`, `pull_request.unlabeled`
 **Permissions**: `checks: write`, `pull_requests: read`
 
-Each event re-evaluates every commit on the PR head and updates a single rolling check keyed by check name. The check's output lists each merge commit with its short SHA, first-line subject, and author name.
+Each event re-evaluates every commit on the PR head and updates a single rolling check keyed by check name. `pull_request.edited` counts only when the base branch changed, since a retarget changes which commits the PR contains and which branch rules apply. The check's output lists each merge commit with its short SHA, first-line subject, and author name.
 
 An exempt pull request gets a `success` check whose summary names the exemption, and its commits are not fetched. Any one exemption suffices. They are evaluated in this order:
 
@@ -736,9 +738,9 @@ settings:
 
 ## read-only
 
-Closes issues and pull requests the moment they are opened on a read-only repository (a mirror, a subtree split), leaving a comment that points contributors upstream, then locks the thread so the conversation cannot continue in the wrong place.
+Closes issues and pull requests the moment they are opened or reopened on a read-only repository (a mirror, a subtree split), leaving a comment that points contributors upstream, then locks the thread so the conversation cannot continue in the wrong place.
 
-**Triggers**: `issues.opened`, `pull_request.opened`
+**Triggers**: `issues.opened`, `issues.reopened`, `pull_request.opened`, `pull_request.reopened`
 **Permissions**: `issues: write`, `pull_requests: write`
 
 Bot senders are not exempt: an automated PR against a mirror is exactly what should be closed. Issues are closed as `not_planned`. Locking is delegated to [lock-old-issues](#lock-old-issues) through Carson's action routing, so that subscriber must also be enabled for `lock` to take effect (its configured `reason` applies, no extra comment is posted). When it is not enabled, the item is still closed and a warning is logged.
@@ -831,9 +833,12 @@ In addition, the subscriber listens to the following webhook events and **remove
 
 - `issue_comment.created`
 - `issues.edited`
+- `issues.reopened`
 - `pull_request.synchronize`
 - `pull_request.edited`
+- `pull_request.reopened`
 - `pull_request_review.submitted`
+- `pull_request_review_comment.created`
 
 The stale notice is identified by the hidden marker `<!-- carson:stale -->` appended to its body. If the marker isn't found (e.g. on items that became stale before this version shipped), the label is still removed but no comment is minimized.
 
@@ -1037,7 +1042,7 @@ settings:
 
 Labels pull requests with their current review state: `needs-review`, `needs-rework`, or `approved`. The three labels are mutually exclusive: applying one removes the others (other labels on the PR are untouched).
 
-**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`, `pull_request_review.dismissed`
 **Permissions**: `issues: write`, `pull_requests: write`
 
 For each event the subscriber paginates `pulls.listReviews`, reduces to the latest review per reviewer, ignores `COMMENTED` reviews and reviews from users without a qualifying repository role, then derives the target state:

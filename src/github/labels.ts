@@ -1,4 +1,4 @@
-type LabelLike = string | { name?: string | null };
+export type LabelLike = string | { name?: string | null } | null;
 
 // Normalizes a label list to an array of string names. Handles both shapes
 // GitHub returns: REST `listForRepo` mixes strings with `{ name?: string }`
@@ -6,6 +6,6 @@ type LabelLike = string | { name?: string | null };
 // name is missing or null are dropped.
 export const labelNames = (labels: readonly LabelLike[] | undefined): string[] => {
   return (labels ?? [])
-    .map((label) => (typeof label === 'string' ? label : label.name))
+    .map((label) => (typeof label === 'string' ? label : label?.name))
     .filter((name): name is string => typeof name === 'string');
 };
