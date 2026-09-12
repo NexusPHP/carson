@@ -2,6 +2,7 @@ import type { Context, Probot } from 'probot';
 import { findNotice, type FoundNotice, isBotNode } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { CarsonConfig } from '../configuration/schema.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { forEachConcurrent } from '../concurrency.js';
 import { interpolate } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
@@ -17,16 +18,15 @@ type ParsedSettings = z.infer<typeof Settings>;
 const DEFAULT_MESSAGE = '@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.';
 const CONCURRENCY = 5;
 
-type PrEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened' | 'pull_request.edited';
-type SupportedEvent = PrEvent | 'push';
-type SubscriberContext = Context<SupportedEvent>;
-
-const PR_EVENTS: PrEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.synchronize',
   'pull_request.reopened',
   'pull_request.edited',
-];
+] satisfies EmitterWebhookEventName[];
+
+type PrEvent = (typeof PR_EVENTS)[number];
+type SubscriberContext = Context<PrEvent | 'push'>;
 
 interface CommentsQueryResponse {
   repository: {
@@ -75,11 +75,11 @@ export class ConflictsNotifierSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handlePrEvent(context as Context<PrEvent>);
+      await this.#handlePrEvent(context);
     });
 
     probot.on('push', async (context): Promise<void> => {
-      await this.#handlePushEvent(context as Context<'push'>);
+      await this.#handlePushEvent(context);
     });
   }
 

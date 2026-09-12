@@ -3,6 +3,7 @@ import { findNotice, fromRestComment, isBotComment } from '../github/notices.js'
 import { interpolate, pluralize, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { forEachConcurrent } from '../concurrency.js';
 import { z } from 'zod';
 
@@ -22,19 +23,14 @@ This repository does not keep draft pull requests open. A pull request does not 
 
 const DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
 
-type DraftPolicyEvent
-  = | 'pull_request.opened'
-    | 'pull_request.reopened'
-    | 'pull_request.converted_to_draft'
-    | 'pull_request.ready_for_review';
-type DraftPolicyContext = Context<DraftPolicyEvent>;
-
-const PR_EVENTS: DraftPolicyEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.reopened',
   'pull_request.converted_to_draft',
   'pull_request.ready_for_review',
-];
+] satisfies EmitterWebhookEventName[];
+
+type DraftPolicyContext = Context<(typeof PR_EVENTS)[number]>;
 
 export class DraftPolicySubscriber extends Subscriber {
   public readonly id = 'draft-policy';
@@ -45,7 +41,7 @@ export class DraftPolicySubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as DraftPolicyContext);
+      await this.#handle(context);
     });
   }
 

@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { interpolate } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
@@ -14,15 +15,14 @@ const Settings = z.object({
   pull_requests: z.boolean().default(true),
 });
 
-type ReadOnlyEvent = 'issues.opened' | 'issues.reopened' | 'pull_request.opened' | 'pull_request.reopened';
-
-const READONLY_EVENTS: ReadOnlyEvent[] = [
+const READONLY_EVENTS = [
   'issues.opened',
   'issues.reopened',
   'pull_request.opened',
   'pull_request.reopened',
-];
-type ReadOnlyContext = Context<ReadOnlyEvent>;
+] satisfies EmitterWebhookEventName[];
+
+type ReadOnlyContext = Context<(typeof READONLY_EVENTS)[number]>;
 
 export class ReadOnlySubscriber extends Subscriber {
   public readonly id = 'read-only';

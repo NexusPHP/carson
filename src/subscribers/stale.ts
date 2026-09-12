@@ -4,6 +4,7 @@ import { interpolate, pluralize } from '../template.js';
 import { type LabelLike, labelNames } from '../github/labels.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { forEachConcurrent } from '../concurrency.js';
 import { minimizeComment } from '../github/comments.js';
 import { searchTimestamp } from '../github/search.js';
@@ -27,22 +28,17 @@ const COMMENT_MARKER = noticeMarker('stale');
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 5;
 
-type IssueActivityEvent = 'issue_comment.created' | 'issues.edited' | 'issues.reopened';
-type PrActivityEvent
-  = | 'pull_request.synchronize'
-    | 'pull_request.edited'
-    | 'pull_request.reopened'
-    | 'pull_request_review.submitted'
-    | 'pull_request_review_comment.created';
-
-const ISSUE_ACTIVITY: IssueActivityEvent[] = ['issue_comment.created', 'issues.edited', 'issues.reopened'];
-const PR_ACTIVITY: PrActivityEvent[] = [
+const ISSUE_ACTIVITY = ['issue_comment.created', 'issues.edited', 'issues.reopened'] satisfies EmitterWebhookEventName[];
+const PR_ACTIVITY = [
   'pull_request.synchronize',
   'pull_request.edited',
   'pull_request.reopened',
   'pull_request_review.submitted',
   'pull_request_review_comment.created',
-];
+] satisfies EmitterWebhookEventName[];
+
+type IssueActivityEvent = (typeof ISSUE_ACTIVITY)[number];
+type PrActivityEvent = (typeof PR_ACTIVITY)[number];
 
 export class StaleSubscriber extends Subscriber {
   public readonly id = 'stale';

@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import type { Logger } from 'pino';
 import { pluralize } from '../template.js';
 import { z } from 'zod';
@@ -22,15 +23,14 @@ const DEFAULT_NAME = 'Carson / pr-title-linter';
 const DEFAULT_MODE: 'require' | 'forbid' = 'require';
 const DEFAULT_LEVEL: 'error' | 'warning' = 'error';
 
-type PrTitleEvent = 'pull_request.opened' | 'pull_request.edited' | 'pull_request.synchronize' | 'pull_request.reopened';
-type PrTitleContext = Context<PrTitleEvent>;
-
-const PR_EVENTS: PrTitleEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.edited',
   'pull_request.synchronize',
   'pull_request.reopened',
-];
+] satisfies EmitterWebhookEventName[];
+
+type PrTitleContext = Context<(typeof PR_EVENTS)[number]>;
 
 interface CompiledRule {
   rule: ParsedRule;
@@ -111,7 +111,7 @@ export class PrTitleLinterSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as PrTitleContext);
+      await this.#handle(context);
     });
   }
 

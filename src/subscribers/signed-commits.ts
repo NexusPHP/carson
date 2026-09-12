@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { escapeMarkdown, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -11,14 +12,13 @@ const Settings = z.object({
 const DEFAULT_NAME = 'Carson / signed-commits';
 const DEFAULT_TREATMENT: 'failure' | 'neutral' = 'failure';
 
-type SignedCommitsEvent = 'pull_request.opened' | 'pull_request.synchronize' | 'pull_request.reopened';
-type SignedCommitsContext = Context<SignedCommitsEvent>;
-
-const PR_EVENTS: SignedCommitsEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.synchronize',
   'pull_request.reopened',
-];
+] satisfies EmitterWebhookEventName[];
+
+type SignedCommitsContext = Context<(typeof PR_EVENTS)[number]>;
 
 interface UnsignedCommit {
   sha: string;
@@ -36,7 +36,7 @@ export class SignedCommitsSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as SignedCommitsContext);
+      await this.#handle(context);
     });
   }
 

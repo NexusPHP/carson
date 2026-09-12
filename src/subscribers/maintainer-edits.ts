@@ -2,6 +2,7 @@ import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment } from '../github/notices.js';
 import { interpolate, type TemplateContext } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { z } from 'zod';
 
 const Settings = z.object({
@@ -12,10 +13,9 @@ const DEFAULT_MESSAGE = `Hey @{{user}}, it looks like "Allow edits from maintain
 
 That is fine, but maintainers will not be able to rebase, squash, or apply small fixes for you before merging. If you would like them to, please [allow edits from maintainers](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork).`;
 
-type MaintainerEditsEvent = 'pull_request.opened' | 'pull_request.ready_for_review';
-type MaintainerEditsContext = Context<MaintainerEditsEvent>;
+const PR_EVENTS = ['pull_request.opened', 'pull_request.ready_for_review'] satisfies EmitterWebhookEventName[];
 
-const PR_EVENTS: MaintainerEditsEvent[] = ['pull_request.opened', 'pull_request.ready_for_review'];
+type MaintainerEditsContext = Context<(typeof PR_EVENTS)[number]>;
 
 export class MaintainerEditsSubscriber extends Subscriber {
   public readonly id = 'maintainer-edits';
@@ -26,7 +26,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as MaintainerEditsContext);
+      await this.#handle(context);
     });
   }
 

@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { interpolate } from '../template.js';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -34,11 +35,11 @@ const DEFAULT_MESSAGE = [
 ].join('\n');
 
 type ItemKind = 'issue' | 'pull_request';
-type IssueEvent = 'issues.opened' | 'issues.edited';
-type PrEvent = 'pull_request.opened' | 'pull_request.edited';
+const ISSUE_EVENTS = ['issues.opened', 'issues.edited'] satisfies EmitterWebhookEventName[];
+const PR_EVENTS = ['pull_request.opened', 'pull_request.edited'] satisfies EmitterWebhookEventName[];
 
-const ISSUE_EVENTS: IssueEvent[] = ['issues.opened', 'issues.edited'];
-const PR_EVENTS: PrEvent[] = ['pull_request.opened', 'pull_request.edited'];
+type IssueEvent = (typeof ISSUE_EVENTS)[number];
+type PrEvent = (typeof PR_EVENTS)[number];
 
 interface Item {
   number: number;

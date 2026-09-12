@@ -1,6 +1,7 @@
 import type { ActionContext, ActionRegistrar } from '../actions.js';
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
@@ -38,28 +39,18 @@ const Settings = z.object({
 type ParsedRule = z.infer<typeof Rule>;
 type ParsedFilesMatcher = z.infer<typeof FilesMatcher>;
 
-type LabelEvent
-  = | 'pull_request.opened'
-    | 'pull_request.reopened'
-    | 'pull_request.synchronize'
-    | 'pull_request.edited';
-type LabelContext = Context<LabelEvent>;
-
-type IssueEvent = 'issues.opened' | 'issues.edited';
-type IssueContext = Context<IssueEvent>;
-
-type LabeledEvent = 'pull_request.labeled' | 'issues.labeled';
-type LabeledContext = Context<LabeledEvent>;
-
-const PR_EVENTS: LabelEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.reopened',
   'pull_request.synchronize',
   'pull_request.edited',
-];
+] satisfies EmitterWebhookEventName[];
+const ISSUE_EVENTS = ['issues.opened', 'issues.edited'] satisfies EmitterWebhookEventName[];
+const LABELED_EVENTS = ['pull_request.labeled', 'issues.labeled'] satisfies EmitterWebhookEventName[];
 
-const ISSUE_EVENTS: IssueEvent[] = ['issues.opened', 'issues.edited'];
-const LABELED_EVENTS: LabeledEvent[] = ['pull_request.labeled', 'issues.labeled'];
+type LabelContext = Context<(typeof PR_EVENTS)[number]>;
+type IssueContext = Context<(typeof ISSUE_EVENTS)[number]>;
+type LabeledContext = Context<(typeof LABELED_EVENTS)[number]>;
 
 type FilesPredicate = (files: readonly string[]) => boolean;
 
@@ -189,15 +180,15 @@ export class AutoLabelerSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handlePullRequest(context as LabelContext);
+      await this.#handlePullRequest(context);
     });
 
     probot.on(ISSUE_EVENTS, async (context): Promise<void> => {
-      await this.#handleIssue(context as IssueContext);
+      await this.#handleIssue(context);
     });
 
     probot.on(LABELED_EVENTS, async (context): Promise<void> => {
-      await this.#handleLabeled(context as LabeledContext);
+      await this.#handleLabeled(context);
     });
   }
 

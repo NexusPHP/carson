@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
@@ -18,19 +19,14 @@ type Rule = z.infer<typeof Rule>;
 
 const NEXT_OPEN = 'next-open';
 
-type MilestoneEvent
-  = | 'pull_request.opened'
-    | 'pull_request.ready_for_review'
-    | 'pull_request.labeled'
-    | 'pull_request.edited';
-type MilestoneContext = Context<MilestoneEvent>;
-
-const PR_EVENTS: MilestoneEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.ready_for_review',
   'pull_request.labeled',
   'pull_request.edited',
-];
+] satisfies EmitterWebhookEventName[];
+
+type MilestoneContext = Context<(typeof PR_EVENTS)[number]>;
 
 interface OpenMilestone {
   number: number;
@@ -111,7 +107,7 @@ export class MilestoneSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as MilestoneContext);
+      await this.#handle(context);
     });
   }
 

@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { escapeMarkdown, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
@@ -19,23 +20,16 @@ const DEFAULT_NAME = 'Carson / no-merge-commits';
 const DEFAULT_TREATMENT: 'failure' | 'neutral' = 'failure';
 const MERGE_COMMIT_PARENTS = 2;
 
-type NoMergeCommitsEvent
-  = | 'pull_request.opened'
-    | 'pull_request.synchronize'
-    | 'pull_request.reopened'
-    | 'pull_request.labeled'
-    | 'pull_request.unlabeled'
-    | 'pull_request.edited';
-type NoMergeCommitsContext = Context<NoMergeCommitsEvent>;
-
-const PR_EVENTS: NoMergeCommitsEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.synchronize',
   'pull_request.reopened',
   'pull_request.edited',
   'pull_request.labeled',
   'pull_request.unlabeled',
-];
+] satisfies EmitterWebhookEventName[];
+
+type NoMergeCommitsContext = Context<(typeof PR_EVENTS)[number]>;
 
 interface MergeCommit {
   sha: string;
@@ -94,7 +88,7 @@ export class NoMergeCommitsSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as NoMergeCommitsContext);
+      await this.#handle(context);
     });
   }
 

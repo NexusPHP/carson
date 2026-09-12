@@ -1,5 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { z } from 'zod';
 
 const QUALIFYING_ROLES = ['admin', 'maintain', 'write'] as const;
@@ -17,26 +18,16 @@ const DEFAULT_NEEDS_REVIEW = 'needs-review';
 const DEFAULT_NEEDS_REWORK = 'needs-rework';
 const DEFAULT_APPROVED = 'approved';
 
-type TriagePrEvent
-  = | 'pull_request.opened'
-    | 'pull_request.reopened'
-    | 'pull_request.synchronize'
-    | 'pull_request.ready_for_review'
-    | 'pull_request.converted_to_draft';
-
-const PR_EVENTS: TriagePrEvent[] = [
+const PR_EVENTS = [
   'pull_request.opened',
   'pull_request.reopened',
   'pull_request.synchronize',
   'pull_request.ready_for_review',
   'pull_request.converted_to_draft',
-];
+] satisfies EmitterWebhookEventName[];
+const REVIEW_EVENTS = ['pull_request_review.submitted', 'pull_request_review.dismissed'] satisfies EmitterWebhookEventName[];
 
-type TriageReviewEvent = 'pull_request_review.submitted' | 'pull_request_review.dismissed';
-
-const REVIEW_EVENTS: TriageReviewEvent[] = ['pull_request_review.submitted', 'pull_request_review.dismissed'];
-
-type TriageContext = Context<TriagePrEvent | TriageReviewEvent>;
+type TriageContext = Context<(typeof PR_EVENTS)[number] | (typeof REVIEW_EVENTS)[number]>;
 
 interface ResolvedSettings {
   needsReviewLabel: string;
@@ -138,10 +129,10 @@ export class TriageLabelerSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on(PR_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as TriageContext);
+      await this.#handle(context);
     });
     probot.on(REVIEW_EVENTS, async (context): Promise<void> => {
-      await this.#handle(context as TriageContext);
+      await this.#handle(context);
     });
   }
 
