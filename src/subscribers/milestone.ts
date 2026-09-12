@@ -116,7 +116,7 @@ export class MilestoneSubscriber extends Subscriber {
   }
 
   async #handle(context: MilestoneContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const pr = context.payload.pull_request;
     const previousBase = context.payload.action === 'edited' ? context.payload.changes.base?.ref.from : undefined;
 

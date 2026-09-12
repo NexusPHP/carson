@@ -93,7 +93,7 @@ export class CommandsSubscriber extends Subscriber {
   }
 
   async #handle(context: CommandContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const { comment, issue } = context.payload;
 
     if (context.isBot || comment.user === null) {

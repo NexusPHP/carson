@@ -47,7 +47,7 @@ export class DraftPolicySubscriber extends Subscriber {
   }
 
   async #handle(context: DraftPolicyContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {
@@ -89,7 +89,7 @@ export class DraftPolicySubscriber extends Subscriber {
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {
-    const log = this.log(scheduled);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(scheduled, Settings);
 
     if (enabled === null) {

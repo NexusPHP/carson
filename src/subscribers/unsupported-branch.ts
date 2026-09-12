@@ -36,7 +36,7 @@ export class UnsupportedBranchSubscriber extends Subscriber {
   }
 
   async #handle(context: UnsupportedBranchContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const pr = context.payload.pull_request;
 
     if (context.payload.action === 'edited' && context.payload.changes.base === undefined) {

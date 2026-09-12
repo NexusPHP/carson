@@ -42,7 +42,7 @@ export class WebhookNotifierSubscriber extends Subscriber {
   }
 
   async #handle(context: NotifierContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     // No bot-sender bail on purpose: a tracked issue closed by automation
     // (another bot, or Carson's own scheduled subscribers) must still notify.
     const config = await this.loadEnabledConfig(context);

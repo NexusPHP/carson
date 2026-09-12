@@ -59183,13 +59183,13 @@ var Subscriber = class {
   bindActions(registrar) {
     this.#actions = registrar;
   }
-  log(context) {
-    return context.log.child({ name: this.id });
+  log() {
+    return logger.for(this.id);
   }
   /** Resolves to false when no router is bound, no enabled subscriber owns the action, or the owner declined it. */
   async dispatch(name, context, request2) {
     if (this.#actions === null) {
-      this.log(context).warn(`No action router bound, cannot dispatch "${name}"`);
+      this.log().warn(`No action router bound, cannot dispatch "${name}"`);
       return false;
     }
     return await this.#actions.dispatch(name, context, request2);
@@ -59221,7 +59221,7 @@ var Subscriber = class {
     if (config3 === null) {
       return null;
     }
-    const settings = subscriberSettings(config3, this.id, schema, this.log(context)) ?? {};
+    const settings = subscriberSettings(config3, this.id, schema, this.log()) ?? {};
     return { config: config3, settings };
   }
 };
@@ -59380,7 +59380,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       }
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request2.number, labels: request2.labels });
-      this.log(context).info(`Added ${pluralize(request2.labels.length, "label")} to #${request2.number} on request`);
+      this.log().info(`Added ${pluralize(request2.labels.length, "label")} to #${request2.number} on request`);
       return true;
     });
     registrar.on("unlabel", this.id, async (context, request2) => {
@@ -59390,7 +59390,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       for (const name of request2.labels) {
         await this.#removeLabel(context, request2.number, name);
       }
-      this.log(context).info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request`);
+      this.log().info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request`);
       return true;
     });
   }
@@ -59406,7 +59406,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
     }
   }
   async #handlePullRequest(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
     if (enabled === null) {
       return;
@@ -59448,7 +59448,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
     });
   }
   async #handleIssue(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
     if (enabled === null) {
       return;
@@ -59471,7 +59471,6 @@ var AutoLabelerSubscriber = class extends Subscriber {
     });
   }
   async #handleLabeled(context) {
-    const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
     if (enabled === null || context.payload.label === void 0) {
       return;
@@ -59484,10 +59483,10 @@ var AutoLabelerSubscriber = class extends Subscriber {
     }
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
-    log.info(`Added ${pluralize(implied.length, "implied label")} to #${item.number} for "${context.payload.label.name}"`);
+    this.log().info(`Added ${pluralize(implied.length, "implied label")} to #${item.number} for "${context.payload.label.name}"`);
   }
   async #reconcile(context, target) {
-    const log = this.log(context);
+    const log = this.log();
     const { owner, repo } = context.repo();
     const matched = /* @__PURE__ */ new Set();
     const managed = /* @__PURE__ */ new Set();
@@ -59719,7 +59718,7 @@ var CommandsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const { comment, issue: issue3 } = context.payload;
     if (context.isBot || comment.user === null) {
       return;
@@ -59923,14 +59922,14 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       pull_number: prNumber
     });
     if (pr.mergeable === null) {
-      this.log(context).debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
+      this.log().debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
       return;
     }
     if (pr.user === null) {
       return;
     }
     const hasConflict = pr.mergeable === false;
-    const settings = subscriberSettings(config3, this.id, Settings3, this.log(context)) ?? {};
+    const settings = subscriberSettings(config3, this.id, Settings3, this.log()) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
     if (hasConflict) {
       await this.#handleConflict(context, pr, settings, existing);
@@ -59960,16 +59959,16 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
         base: pr.base.ref
       });
       this.notice(context, pr.number, message);
-      this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
+      this.log().info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
     if (this.isNoticeResolved(existing)) {
       await this.reopenNotice(context, pr.number, existing);
-      this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
+      this.log().info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
   async #handleNoConflict(context, prNumber, existing) {
-    const log = this.log(context);
+    const log = this.log();
     if (existing === null) {
       log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);
       return;
@@ -60027,7 +60026,7 @@ var DraftPolicySubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings4);
     if (enabled === null) {
       return;
@@ -60060,7 +60059,7 @@ var DraftPolicySubscriber = class extends Subscriber {
     log.info(`Posted draft notice on PR #${pr.number}`);
   }
   async #run(scheduled) {
-    const log = this.log(scheduled);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(scheduled, Settings4);
     if (enabled === null) {
       return;
@@ -60189,7 +60188,7 @@ var IssueIntakeSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return;
@@ -60294,15 +60293,15 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     if (config3 === null) {
       return false;
     }
-    const settings = subscriberSettings(config3, this.id, Settings6, this.log(context));
+    const settings = subscriberSettings(config3, this.id, Settings6, this.log());
     await this.#applyLock(context, number4, settings?.reason ?? DEFAULT_REASON);
-    this.log(context).info(`Locked #${number4} on request`);
+    this.log().info(`Locked #${number4} on request`);
     return true;
   }
   // A label applied by another bot (auto-labeler, say) must still lock, so
   // this applies no bot-sender guard either.
   async #handleLabeled(context) {
-    const log = this.log(context);
+    const log = this.log();
     const issue3 = context.payload.issue;
     const label = context.payload.label?.name;
     if (label === void 0 || issue3.locked === true) {
@@ -60349,7 +60348,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
       per_page: 100
     });
     let locked = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
     log.debug(`Scanning ${pluralize(issues.length, "candidate issue")}`);
     await forEachConcurrent(issues, CONCURRENCY3, async (issue3) => {
       if (issue3.locked) {
@@ -60415,7 +60414,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings7);
     if (enabled === null) {
       return;
@@ -60518,7 +60517,7 @@ var MilestoneSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const pr = context.payload.pull_request;
     const previousBase = context.payload.action === "edited" ? context.payload.changes.base?.ref.from : void 0;
     if (context.payload.action === "edited" && previousBase === void 0) {
@@ -60626,7 +60625,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
@@ -60723,7 +60722,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
       per_page: 100
     });
     let closed = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
     log.debug(`Scanning ${pluralize(items.length, "candidate item")} labeled "${label}"`);
     await forEachConcurrent(items, CONCURRENCY4, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
@@ -60833,7 +60832,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings11);
     if (enabled === null) {
       return;
@@ -60886,7 +60885,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return;
@@ -60991,7 +60990,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
       conclusion,
       output: output2
     });
-    this.log(context).info(`Check ${conclusion} for PR #${pr.number}`);
+    this.log().info(`Check ${conclusion} for PR #${pr.number}`);
   }
 };
 
@@ -61060,7 +61059,7 @@ var StaleSubscriber = class extends Subscriber {
       per_page: 100
     });
     const stalePost = findNotice(comments, this.id, isBotComment);
-    const log = this.log(context);
+    const log = this.log();
     if (stalePost !== void 0) {
       await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
       log.info(`Minimized stale notice on #${issueNumber}`);
@@ -61111,7 +61110,7 @@ var StaleSubscriber = class extends Subscriber {
     });
     let staled = 0;
     let closed = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
     log.debug(`Scanning ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
     await forEachConcurrent(items, CONCURRENCY5, async (item) => {
       const names = labelNames(item.labels);
@@ -61286,7 +61285,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     if (context.isBot) {
       return;
     }
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings15);
     if (enabled === null) {
       return;
@@ -61356,7 +61355,7 @@ var ThanksSubscriber = class extends Subscriber {
   requiredPermissions = { pull_requests: "write" };
   register(probot) {
     probot.on("pull_request.closed", async (context) => {
-      const log = this.log(context);
+      const log = this.log();
       const pr = context.payload.pull_request;
       if (context.isBot || !pr.merged) {
         return;
@@ -61472,7 +61471,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings17);
     if (enabled === null) {
       return;
@@ -61558,7 +61557,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const pr = context.payload.pull_request;
     if (context.payload.action === "edited" && context.payload.changes.base === void 0) {
       return;
@@ -61675,7 +61674,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
-    const log = this.log(context);
+    const log = this.log();
     const config3 = await this.loadEnabledConfig(context);
     if (config3 === null) {
       return;
@@ -61794,7 +61793,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (context.isBot) {
         return;
       }
-      const log = this.log(context);
+      const log = this.log();
       const enabled = await this.loadEnabledSettings(context, Settings20);
       if (enabled === null) {
         return;
@@ -61820,7 +61819,7 @@ var WelcomeSubscriber = class extends Subscriber {
       if (context.isBot) {
         return;
       }
-      const log = this.log(context);
+      const log = this.log();
       const issue3 = context.payload.issue;
       if (issue3.user === null) {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);

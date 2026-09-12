@@ -55,10 +55,10 @@ export class LockOldIssuesSubscriber extends Subscriber {
       return false;
     }
 
-    const settings = subscriberSettings(config, this.id, Settings, this.log(context));
+    const settings = subscriberSettings(config, this.id, Settings, this.log());
 
     await this.#applyLock(context, number, settings?.reason ?? DEFAULT_REASON);
-    this.log(context).info(`Locked #${number} on request`);
+    this.log().info(`Locked #${number} on request`);
 
     return true;
   }
@@ -66,7 +66,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
   // A label applied by another bot (auto-labeler, say) must still lock, so
   // this applies no bot-sender guard either.
   async #handleLabeled(context: Context<'issues.labeled'>): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const issue = context.payload.issue;
     const label = context.payload.label?.name;
 
@@ -126,7 +126,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
     });
 
     let locked = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
 
     log.debug(`Scanning ${pluralize(issues.length, 'candidate issue')}`);
 

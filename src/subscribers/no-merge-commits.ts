@@ -97,7 +97,7 @@ export class NoMergeCommitsSubscriber extends Subscriber {
   }
 
   async #handle(context: NoMergeCommitsContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {

@@ -93,6 +93,6 @@ export class SignedCommitsSubscriber extends Subscriber {
       output,
     });
 
-    this.log(context).info(`Check ${conclusion} for PR #${pr.number}`);
+    this.log().info(`Check ${conclusion} for PR #${pr.number}`);
   }
 }

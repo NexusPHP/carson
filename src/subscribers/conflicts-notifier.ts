@@ -129,7 +129,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
 
     if (pr.mergeable === null) {
-      this.log(context).debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
+      this.log().debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
       return;
     }
 
@@ -138,7 +138,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     }
 
     const hasConflict = pr.mergeable === false;
-    const settings = subscriberSettings(config, this.id, Settings, this.log(context)) ?? {};
+    const settings = subscriberSettings(config, this.id, Settings, this.log()) ?? {};
     const existing = await this.#findExistingComment(context, prNumber);
 
     if (hasConflict) {
@@ -190,13 +190,13 @@ export class ConflictsNotifierSubscriber extends Subscriber {
       });
 
       this.notice(context, pr.number, message);
-      this.log(context).info(`Posted conflict notice on PR #${pr.number}`);
+      this.log().info(`Posted conflict notice on PR #${pr.number}`);
       return;
     }
 
     if (this.isNoticeResolved(existing)) {
       await this.reopenNotice(context, pr.number, existing);
-      this.log(context).info(`Reopened conflict notice on PR #${pr.number}`);
+      this.log().info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
 
@@ -205,7 +205,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     prNumber: number,
     existing: FoundNotice | null,
   ): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
 
     if (existing === null) {
       log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);

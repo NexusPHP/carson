@@ -95,10 +95,11 @@ describe('Carson', () => {
 
   it('dispatch() warns and resolves false when no router is bound', async () => {
     const sub = new FakeSubscriber();
-    const context = makeContext();
+    const probot = makeProbot();
+    logger.init(probot.log);
 
-    await expect(sub.requestLock(context, 7)).resolves.toBe(false);
-    expect(context.log.warn).toHaveBeenCalledWith('No action router bound, cannot dispatch "lock"');
+    await expect(sub.requestLock(makeContext(), 7)).resolves.toBe(false);
+    expect(probot.log.warn).toHaveBeenCalledWith('No action router bound, cannot dispatch "lock"');
   });
 
   it('run() only registers subscribers listed in enabledIds when it is provided', () => {

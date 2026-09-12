@@ -90,7 +90,7 @@ export class IssueIntakeSubscriber extends Subscriber {
   }
 
   async #handle(context: IntakeContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const config = await this.loadEnabledConfig(context);
 
     if (config === null) {

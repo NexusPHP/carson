@@ -209,7 +209,7 @@ export class AutoLabelerSubscriber extends Subscriber {
 
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request.number, labels: request.labels });
-      this.log(context).info(`Added ${pluralize(request.labels.length, 'label')} to #${request.number} on request`);
+      this.log().info(`Added ${pluralize(request.labels.length, 'label')} to #${request.number} on request`);
 
       return true;
     });
@@ -223,7 +223,7 @@ export class AutoLabelerSubscriber extends Subscriber {
         await this.#removeLabel(context, request.number, name);
       }
 
-      this.log(context).info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request`);
+      this.log().info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request`);
 
       return true;
     });
@@ -243,7 +243,7 @@ export class AutoLabelerSubscriber extends Subscriber {
   }
 
   async #handlePullRequest(context: LabelContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {
@@ -295,7 +295,7 @@ export class AutoLabelerSubscriber extends Subscriber {
   }
 
   async #handleIssue(context: IssueContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {
@@ -325,7 +325,6 @@ export class AutoLabelerSubscriber extends Subscriber {
   }
 
   async #handleLabeled(context: LabeledContext): Promise<void> {
-    const log = this.log(context);
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null || context.payload.label === undefined) {
@@ -342,7 +341,7 @@ export class AutoLabelerSubscriber extends Subscriber {
 
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
-    log.info(`Added ${pluralize(implied.length, 'implied label')} to #${item.number} for "${context.payload.label.name}"`);
+    this.log().info(`Added ${pluralize(implied.length, 'implied label')} to #${item.number} for "${context.payload.label.name}"`);
   }
 
   async #reconcile(context: Pick<IssueContext, 'octokit' | 'log' | 'repo'>, target: {
@@ -354,7 +353,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     filenames: readonly string[];
     syncLabels: boolean;
   }): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const { owner, repo } = context.repo();
     const matched = new Set<string>();
     const managed = new Set<string>();

@@ -29,7 +29,7 @@ export class ReadOnlySubscriber extends Subscriber {
   }
 
   async #handle(context: ReadOnlyContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     // No bot-sender bail on purpose: automated PRs against a mirror are
     // exactly what should be closed.
     const config = await this.loadEnabledConfig(context);

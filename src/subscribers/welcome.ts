@@ -73,7 +73,7 @@ export class WelcomeSubscriber extends Subscriber {
         return;
       }
 
-      const log = this.log(context);
+      const log = this.log();
       const enabled = await this.loadEnabledSettings(context, Settings);
 
       if (enabled === null) {
@@ -108,7 +108,7 @@ export class WelcomeSubscriber extends Subscriber {
         return;
       }
 
-      const log = this.log(context);
+      const log = this.log();
       const issue = context.payload.issue;
 
       if (issue.user === null) {

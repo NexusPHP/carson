@@ -90,7 +90,7 @@ export class StaleSubscriber extends Subscriber {
     });
     const stalePost = findNotice(comments, this.id, isBotComment);
 
-    const log = this.log(context);
+    const log = this.log();
 
     if (stalePost !== undefined) {
       await minimizeComment(context.octokit, stalePost.node_id, 'OUTDATED');
@@ -150,7 +150,7 @@ export class StaleSubscriber extends Subscriber {
 
     let staled = 0;
     let closed = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
 
     log.debug(`Scanning ${pluralize(staleItems.length, 'stale item')} and ${pluralize(freshItems.length, 'newly inactive item')}`);
 

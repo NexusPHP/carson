@@ -4,6 +4,7 @@ import { type ConfigLoadable, loadConfig } from './configuration/cache.js';
 import { type FoundNotice, isNoticeResolved, queueNotice, reopenNotice, resolveNotice } from './github/notices.js';
 import type { components } from '@octokit/openapi-types';
 import type { Logger } from 'pino';
+import { logger } from './logger.js';
 import type { MinimizeClassifier } from './github/comments.js';
 import type { Probot } from 'probot';
 import type { ScheduledRegistrar } from './scheduled.js';
@@ -37,8 +38,8 @@ export abstract class Subscriber {
     this.#actions = registrar;
   }
 
-  protected log(context: { log: Logger }): Logger {
-    return context.log.child({ name: this.id });
+  protected log(): Logger {
+    return logger.for(this.id);
   }
 
   /** Resolves to false when no router is bound, no enabled subscriber owns the action, or the owner declined it. */
@@ -48,7 +49,7 @@ export abstract class Subscriber {
     request: ActionRequests[N],
   ): Promise<boolean> {
     if (this.#actions === null) {
-      this.log(context).warn(`No action router bound, cannot dispatch "${name}"`);
+      this.log().warn(`No action router bound, cannot dispatch "${name}"`);
 
       return false;
     }
@@ -96,7 +97,7 @@ export abstract class Subscriber {
       return null;
     }
 
-    const settings = subscriberSettings(config, this.id, schema, this.log(context)) ?? ({} as T);
+    const settings = subscriberSettings(config, this.id, schema, this.log()) ?? ({} as T);
 
     return { config, settings };
   }

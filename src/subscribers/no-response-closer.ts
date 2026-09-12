@@ -57,7 +57,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
     });
 
     let closed = 0;
-    const log = this.log(scheduled);
+    const log = this.log();
 
     log.debug(`Scanning ${pluralize(items.length, 'candidate item')} labeled "${label}"`);
 

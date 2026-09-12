@@ -16,7 +16,7 @@ export class ThanksSubscriber extends Subscriber {
 
   public override register(probot: Probot): void {
     probot.on('pull_request.closed', async (context: Context<'pull_request.closed'>): Promise<void> => {
-      const log = this.log(context);
+      const log = this.log();
       const pr = context.payload.pull_request;
 
       if (context.isBot || !pr.merged) {

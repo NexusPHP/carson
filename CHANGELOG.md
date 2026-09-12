@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `pr-title-linter` and `signed-commits` success titles read `Title passes 1 rule` and `1 commit signed` instead of `Title passes all 1 rule` and `All 1 commit signed`.
+- Subscriber log lines no longer carry the webhook delivery id, which is the run id under the action.
 
 ## [v1.4.0](https://github.com/NexusPHP/carson/compare/v1.3.0...v1.4.0) - 2026-09-08
 

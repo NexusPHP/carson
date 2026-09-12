@@ -142,7 +142,7 @@ export class TriageLabelerSubscriber extends Subscriber {
   }
 
   async #handle(context: TriageContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {

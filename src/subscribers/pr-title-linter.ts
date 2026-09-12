@@ -111,7 +111,7 @@ export class PrTitleLinterSubscriber extends Subscriber {
   }
 
   async #handle(context: PrTitleContext): Promise<void> {
-    const log = this.log(context);
+    const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 
     if (enabled === null) {
