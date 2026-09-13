@@ -144,30 +144,79 @@ interface PrFields {
   base: string;
 }
 
-const ruleMatches = (rule: CompiledRule, fields: PrFields, files: readonly string[]): boolean => {
+type Field = keyof PrFields | 'files';
+
+const ALL_FIELDS: ReadonlySet<Field> = new Set<Field>(['files', 'title', 'body', 'head', 'base']);
+
+const ruleMatches = (rule: CompiledRule, fields: PrFields, files: readonly string[], on: ReadonlySet<Field>): boolean => {
   const m = rule.matchers;
 
-  if (m.files?.(files) === true) {
+  if (on.has('files') && m.files?.(files) === true) {
     return true;
   }
 
-  if (m.title.some((r) => r.test(fields.title))) {
+  if (on.has('title') && m.title.some((r) => r.test(fields.title))) {
     return true;
   }
 
-  if (m.body.some((r) => r.test(fields.body))) {
+  if (on.has('body') && m.body.some((r) => r.test(fields.body))) {
     return true;
   }
 
-  if (m.head_branch.some((r) => r.test(fields.head))) {
+  if (on.has('head') && m.head_branch.some((r) => r.test(fields.head))) {
     return true;
   }
 
-  if (m.base_branch.some((r) => r.test(fields.base))) {
+  if (on.has('base') && m.base_branch.some((r) => r.test(fields.base))) {
     return true;
   }
 
   return false;
+};
+
+// A label a maintainer removed must not come back from a field the author never touched.
+const changedPrFields = (payload: LabelContext['payload']): ReadonlySet<Field> => {
+  if (payload.action === 'synchronize') {
+    return new Set<Field>(['files']);
+  }
+
+  if (payload.action !== 'edited') {
+    return ALL_FIELDS;
+  }
+
+  const changed = new Set<Field>();
+
+  if (payload.changes.title !== undefined) {
+    changed.add('title');
+  }
+
+  if (payload.changes.body !== undefined) {
+    changed.add('body');
+  }
+
+  if (payload.changes.base !== undefined) {
+    changed.add('base');
+  }
+
+  return changed;
+};
+
+const changedIssueFields = (payload: IssueContext['payload']): ReadonlySet<Field> => {
+  if (payload.action !== 'edited') {
+    return ALL_FIELDS;
+  }
+
+  const changed = new Set<Field>();
+
+  if (payload.changes.title !== undefined) {
+    changed.add('title');
+  }
+
+  if (payload.changes.body !== undefined) {
+    changed.add('body');
+  }
+
+  return changed;
 };
 
 export class AutoLabelerSubscriber extends Subscriber {
@@ -281,6 +330,7 @@ export class AutoLabelerSubscriber extends Subscriber {
       compiled,
       fields,
       filenames,
+      changed: changedPrFields(context.payload),
       syncLabels: settings.sync_labels ?? false,
     });
   }
@@ -311,6 +361,7 @@ export class AutoLabelerSubscriber extends Subscriber {
       compiled: rawRules.map((r) => compileRule(r, log)),
       fields: { title: issue.title, body: issue.body ?? '', head: '', base: '' },
       filenames: [],
+      changed: changedIssueFields(context.payload),
       syncLabels: settings.sync_labels ?? false,
     });
   }
@@ -342,23 +393,29 @@ export class AutoLabelerSubscriber extends Subscriber {
     compiled: readonly CompiledRule[];
     fields: PrFields;
     filenames: readonly string[];
+    changed: ReadonlySet<Field>;
     syncLabels: boolean;
   }): Promise<void> {
     const log = this.log();
     const { owner, repo } = context.repo();
     const matched = new Set<string>();
+    const fresh = new Set<string>();
     const managed = new Set<string>();
 
     for (const rule of target.compiled) {
       managed.add(rule.label);
 
-      if (ruleMatches(rule, target.fields, target.filenames)) {
+      if (ruleMatches(rule, target.fields, target.filenames, ALL_FIELDS)) {
         matched.add(rule.label);
+      }
+
+      if (ruleMatches(rule, target.fields, target.filenames, target.changed)) {
+        fresh.add(rule.label);
       }
     }
 
     const current = new Set(target.current);
-    const toAdd = Array.from(matched).filter((l) => !current.has(l));
+    const toAdd = Array.from(fresh).filter((l) => !current.has(l));
     const toRemove = target.syncLabels
       ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l))
       : [];

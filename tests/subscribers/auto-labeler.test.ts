@@ -69,6 +69,7 @@ interface PayloadOverrides {
   labels?: string[];
   label?: string;
   senderType?: string;
+  changes?: Record<string, unknown>;
 }
 
 const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> => ({
@@ -86,7 +87,7 @@ const prPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> =>
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User' },
-  ...(overrides.action === 'edited' ? { changes: { title: { from: 'old' } } } : {}),
+  ...(overrides.action === 'edited' ? { changes: overrides.changes ?? { title: { from: 'old' } } } : {}),
   ...(overrides.label === undefined ? {} : { label: { name: overrides.label } }),
 });
 
@@ -97,6 +98,7 @@ interface IssueOverrides {
   labels?: string[];
   label?: string;
   senderType?: string;
+  changes?: Record<string, unknown>;
 }
 
 const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> => ({
@@ -111,6 +113,7 @@ const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> =
   },
   repository: { owner: { login: 'acme' }, name: 'widgets' },
   sender: { type: overrides.senderType ?? 'User' },
+  ...(overrides.action === 'edited' ? { changes: overrides.changes ?? { title: { from: 'old' } } } : {}),
   ...(overrides.label === undefined ? {} : { label: { name: overrides.label } }),
 });
 
@@ -653,21 +656,122 @@ describe('auto-labeler subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('fires on pull_request.synchronize', async () => {
+  it('re-evaluates file rules on pull_request.synchronize', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules([
+      '      - label: "area:api"',
+      '        files: ["src/api/**"]',
+    ].join('\n')));
+    mockListFiles(['src/api/users.ts']);
+    const addScope = mockAddLabels(['area:api']);
+
+    await probot.receive({
+      id: 'evt-sync',
+      name: 'pull_request',
+      payload: prPayload({ action: 'synchronize' }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('does not re-add a removed label on synchronize when only a branch rule matches', async () => {
     mockInstallationToken();
     mockConfig(configWithRules([
       '      - label: hotfix',
       '        head_branch: ["^hotfix/"]',
     ].join('\n')));
-    const addScope = mockAddLabels(['hotfix']);
 
     await probot.receive({
-      id: 'evt-sync',
+      id: 'evt-sync-branch',
       name: 'pull_request',
       payload: prPayload({ action: 'synchronize', headRef: 'hotfix/urgent' }) as never,
     });
 
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does not re-add a removed label when an edit left the matching field untouched', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules([
+      '      - label: "type:docs"',
+      '        title: ["^docs:"]',
+    ].join('\n')));
+
+    await probot.receive({
+      id: 'evt-edit-body-only',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', title: 'docs: fix typo', changes: { body: { from: 'old' } } }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('re-adds a label when the edited field still matches', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules([
+      '      - label: "type:docs"',
+      '        title: ["^docs:"]',
+    ].join('\n')));
+    const addScope = mockAddLabels(['type:docs']);
+
+    await probot.receive({
+      id: 'evt-edit-title',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', title: 'docs: fix typo' }) as never,
+    });
+
     expect(addScope.isDone()).toBe(true);
+  });
+
+  it('adds a base-branch label when a PR is retargeted', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules([
+      '      - label: backport',
+      '        base_branch: ["^release/"]',
+    ].join('\n')));
+    const addScope = mockAddLabels(['backport']);
+
+    await probot.receive({
+      id: 'evt-edit-base',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', baseRef: 'release/1.x', changes: { base: { ref: { from: 'main' }, sha: { from: 'old' } } } }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('adds a body label when an issue body is edited to match', async () => {
+    mockInstallationToken();
+    mockConfig(configWithIssueRules([
+      '      - label: crash',
+      '        body: ["segfault"]',
+    ].join('\n')));
+    const addScope = mockAddLabels(['crash']);
+
+    await probot.receive({
+      id: 'evt-issue-edit-body',
+      name: 'issues',
+      payload: issuePayload({ action: 'edited', body: 'now it segfaults', changes: { body: { from: 'old' } } }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
+  it('still removes a managed label under sync when an unrelated field was edited', async () => {
+    mockInstallationToken();
+    mockConfig(configWithRules([
+      '      - label: "type:docs"',
+      '        title: ["^docs:"]',
+    ].join('\n'), true));
+    const removeScope = mockRemoveLabel('type:docs');
+
+    await probot.receive({
+      id: 'evt-edit-body-sync',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', title: 'feat: thing', labels: ['type:docs'], changes: { body: { from: 'old' } } }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
   });
 
   it('labels an issue when a title regex in issue_rules matches', async () => {

@@ -59337,24 +59337,57 @@ var compileRule = (rule, log) => ({
     base_branch: rule.base_branch !== void 0 ? compileRegexes(rule.base_branch, log, rule.label) : []
   }
 });
-var ruleMatches = (rule, fields, files) => {
+var ALL_FIELDS = /* @__PURE__ */ new Set(["files", "title", "body", "head", "base"]);
+var ruleMatches = (rule, fields, files, on) => {
   const m = rule.matchers;
-  if (m.files?.(files) === true) {
+  if (on.has("files") && m.files?.(files) === true) {
     return true;
   }
-  if (m.title.some((r) => r.test(fields.title))) {
+  if (on.has("title") && m.title.some((r) => r.test(fields.title))) {
     return true;
   }
-  if (m.body.some((r) => r.test(fields.body))) {
+  if (on.has("body") && m.body.some((r) => r.test(fields.body))) {
     return true;
   }
-  if (m.head_branch.some((r) => r.test(fields.head))) {
+  if (on.has("head") && m.head_branch.some((r) => r.test(fields.head))) {
     return true;
   }
-  if (m.base_branch.some((r) => r.test(fields.base))) {
+  if (on.has("base") && m.base_branch.some((r) => r.test(fields.base))) {
     return true;
   }
   return false;
+};
+var changedPrFields = (payload) => {
+  if (payload.action === "synchronize") {
+    return /* @__PURE__ */ new Set(["files"]);
+  }
+  if (payload.action !== "edited") {
+    return ALL_FIELDS;
+  }
+  const changed = /* @__PURE__ */ new Set();
+  if (payload.changes.title !== void 0) {
+    changed.add("title");
+  }
+  if (payload.changes.body !== void 0) {
+    changed.add("body");
+  }
+  if (payload.changes.base !== void 0) {
+    changed.add("base");
+  }
+  return changed;
+};
+var changedIssueFields = (payload) => {
+  if (payload.action !== "edited") {
+    return ALL_FIELDS;
+  }
+  const changed = /* @__PURE__ */ new Set();
+  if (payload.changes.title !== void 0) {
+    changed.add("title");
+  }
+  if (payload.changes.body !== void 0) {
+    changed.add("body");
+  }
+  return changed;
 };
 var AutoLabelerSubscriber = class extends Subscriber {
   id = "auto-labeler";
@@ -59445,6 +59478,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       compiled,
       fields,
       filenames,
+      changed: changedPrFields(context.payload),
       syncLabels: settings.sync_labels ?? false
     });
   }
@@ -59468,6 +59502,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       compiled: rawRules.map((r) => compileRule(r, log)),
       fields: { title: issue3.title, body: issue3.body ?? "", head: "", base: "" },
       filenames: [],
+      changed: changedIssueFields(context.payload),
       syncLabels: settings.sync_labels ?? false
     });
   }
@@ -59490,15 +59525,19 @@ var AutoLabelerSubscriber = class extends Subscriber {
     const log = this.log();
     const { owner, repo } = context.repo();
     const matched = /* @__PURE__ */ new Set();
+    const fresh = /* @__PURE__ */ new Set();
     const managed = /* @__PURE__ */ new Set();
     for (const rule of target.compiled) {
       managed.add(rule.label);
-      if (ruleMatches(rule, target.fields, target.filenames)) {
+      if (ruleMatches(rule, target.fields, target.filenames, ALL_FIELDS)) {
         matched.add(rule.label);
+      }
+      if (ruleMatches(rule, target.fields, target.filenames, target.changed)) {
+        fresh.add(rule.label);
       }
     }
     const current = new Set(target.current);
-    const toAdd = Array.from(matched).filter((l) => !current.has(l));
+    const toAdd = Array.from(fresh).filter((l) => !current.has(l));
     const toRemove = target.syncLabels ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l)) : [];
     if (toAdd.length > 0) {
       await context.octokit.rest.issues.addLabels({

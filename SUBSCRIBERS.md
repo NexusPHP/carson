@@ -83,6 +83,8 @@ Event-driven notices are collected while an event is handled and posted once it 
 
 Adds labels to pull requests based on path globs, title or body regex, or branch name patterns, and to issues based on title or body regex. Rules are evaluated on every PR or issue event, and (optionally) labels Carson added that no longer match are removed. A label can also imply others, applied whenever it is added.
 
+A label is added only from a field the event changed: everything on `opened` and `reopened`, the changed files on `synchronize`, and on `edited` just the title, body, or base branch that the edit touched. So a label a maintainer removed does not come back from an edit to some other field, while an author who edits the title back into a matching shape gets it again.
+
 **Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.edited`, `pull_request.labeled`, `issues.opened`, `issues.edited`, `issues.labeled`
 **Permissions**: `issues: write`, `pull_requests: write`
 
@@ -140,9 +142,9 @@ implied_labels:
 
 ### Sync labels
 
-With `sync_labels: false` (default), Carson only adds labels. Labels removed by maintainers stay removed even if a rule still matches on the next event.
+With `sync_labels: false` (default), Carson only adds labels. Labels removed by maintainers stay removed unless the field that matched is edited again.
 
-With `sync_labels: true`, Carson reconciles the PR's labels against the rules: any label appearing in a rule's `label` field is "managed", and managed labels currently on the PR that no longer match are removed. Labels not declared in any rule (manually applied by maintainers, applied by other subscribers, etc.) are never touched.
+With `sync_labels: true`, Carson reconciles the PR's labels against the rules: any label appearing in a rule's `label` field is "managed", and managed labels currently on the PR that no longer match on any field are removed. Labels not declared in any rule (manually applied by maintainers, applied by other subscribers, etc.) are never touched.
 
 > [!CAUTION]
 > Patterns are compiled to JavaScript `RegExp` and matched with no runtime timeout. A catastrophically backtracking pattern in `carson.yml` will hang the action. Since `carson.yml` lives on the default branch only, this is a maintainer footgun rather than a contributor attack surface, but keep patterns simple and test them locally.
