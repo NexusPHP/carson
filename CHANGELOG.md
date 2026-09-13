@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.4.3](https://github.com/NexusPHP/carson/compare/v1.4.2...v1.4.3) - 2026-09-13
+
 ### Changed
 
 - `auto-labeler` adds a rule label only from a field the event changed, so a label a maintainer removed no longer comes back from an unrelated edit or push.
