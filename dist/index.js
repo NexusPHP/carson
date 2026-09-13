@@ -60508,9 +60508,19 @@ var Carson = class _Carson {
   }
 };
 
+// src/github/roles.ts
+var ROLES = ["admin", "maintain", "write", "triage", "read"];
+var roleOf = async (octokit, owner, repo, username) => {
+  try {
+    const { data } = await octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+    return data.role_name;
+  } catch {
+    return "none";
+  }
+};
+
 // src/subscribers/commands.ts
 var COMMANDS = ["label", "unlabel", "close", "reopen", "lock", "assign", "unassign"];
-var ROLES = ["admin", "maintain", "write", "triage", "read"];
 var MAX_COMMANDS_PER_COMMENT = 10;
 var MAX_LABEL_LENGTH = 50;
 var LOGIN_REGEX = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
@@ -60580,9 +60590,9 @@ var CommandsSubscriber = class extends Subscriber {
     const settings = subscriberSettings(config3, this.id, Settings2, log) ?? Settings2.parse({});
     const { owner, repo } = context.repo();
     const login = comment.user.login;
-    const role = await this.#roleOf(context, owner, repo, login);
+    const role = await roleOf(context.octokit, owner, repo, login);
     if (!settings.roles.includes(role)) {
-      log.debug(`#${issue3.number}: "${login}" has role "${role}", commands ignored`);
+      log.debug(`#${issue3.number}: "${login}" has "${role}" role, commands ignored`);
       return;
     }
     let succeeded = 0;
@@ -60606,16 +60616,6 @@ var CommandsSubscriber = class extends Subscriber {
         comment_id: comment.id,
         content: "+1"
       });
-    }
-  }
-  // Anyone can comment, so the gate is the commenter's actual repository
-  // role, not the self-reported author_association.
-  async #roleOf(context, owner, repo, username) {
-    try {
-      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
-      return data.role_name;
-    } catch {
-      return "none";
     }
   }
   async #execute(context, command, settings, login) {
@@ -62056,6 +62056,7 @@ var TypeSettings = external_exports.object({
 var Settings15 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
+  exempt_roles: external_exports.array(external_exports.enum(ROLES)).optional(),
   issues: TypeSettings.optional(),
   pull_requests: TypeSettings.optional()
 });
@@ -62161,9 +62162,10 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     }
     const label = settings.label ?? DEFAULT_LABEL2;
     const messageTemplate = settings.message ?? DEFAULT_MESSAGE5;
-    const violations = collectViolations(item.body, typeRules, log);
     const hasLabel = item.labels.includes(label);
     const { owner, repo } = context.repo();
+    const exempt = await this.#isExempt(context, owner, repo, item.user, settings.exempt_roles ?? []);
+    const violations = exempt ? [] : collectViolations(item.body, typeRules, log);
     if (violations.length === 0) {
       if (hasLabel) {
         await context.octokit.rest.issues.removeLabel({
@@ -62204,6 +62206,17 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       });
       log.info(`Added "${label}" to #${item.number}`);
     }
+  }
+  async #isExempt(context, owner, repo, user, exemptRoles) {
+    if (exemptRoles.length === 0) {
+      return false;
+    }
+    const role = await roleOf(context.octokit, owner, repo, user);
+    const exempt = exemptRoles.includes(role);
+    if (exempt) {
+      this.log().debug(`"${user}" has "${role}" role, exempt from the template check`);
+    }
+    return exempt;
   }
 };
 
@@ -62353,7 +62366,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
         pull_number: pr.number,
         per_page: 100
       });
-      const qualifies = async (username) => settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
+      const qualifies = async (username) => settings.qualifyingRoles.has(await roleOf(context.octokit, owner, repo, username));
       const desired = await computeDesired(reviews, {
         headSha: pr.head.sha,
         resetOnPush: settings.resetOnPush,
@@ -62380,15 +62393,6 @@ var TriageLabelerSubscriber = class extends Subscriber {
       });
     }
     log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? "none"}`);
-  }
-  // author_association hides private org members from an App, so the gate is the reviewer's actual repository role.
-  async #roleOf(context, owner, repo, username) {
-    try {
-      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
-      return data.role_name;
-    } catch {
-      return "none";
-    }
   }
 };
 

@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { roleOf, ROLES } from '../github/roles.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { interpolate } from '../template.js';
 import type { Logger } from 'pino';
@@ -21,6 +22,7 @@ const TypeSettings = z.object({
 const Settings = z.object({
   label: z.string().optional(),
   message: z.string().optional(),
+  exempt_roles: z.array(z.enum(ROLES)).optional(),
   issues: TypeSettings.optional(),
   pull_requests: TypeSettings.optional(),
 });
@@ -176,9 +178,10 @@ export class TemplateEnforcerSubscriber extends Subscriber {
 
     const label = settings.label ?? DEFAULT_LABEL;
     const messageTemplate = settings.message ?? DEFAULT_MESSAGE;
-    const violations = collectViolations(item.body, typeRules, log);
     const hasLabel = item.labels.includes(label);
     const { owner, repo } = context.repo();
+    const exempt = await this.#isExempt(context, owner, repo, item.user, settings.exempt_roles ?? []);
+    const violations = exempt ? [] : collectViolations(item.body, typeRules, log);
 
     if (violations.length === 0) {
       if (hasLabel) {
@@ -225,5 +228,26 @@ export class TemplateEnforcerSubscriber extends Subscriber {
       });
       log.info(`Added "${label}" to #${item.number}`);
     }
+  }
+
+  async #isExempt(
+    context: Context<IssueEvent | PrEvent>,
+    owner: string,
+    repo: string,
+    user: string,
+    exemptRoles: readonly string[],
+  ): Promise<boolean> {
+    if (exemptRoles.length === 0) {
+      return false;
+    }
+
+    const role = await roleOf(context.octokit, owner, repo, user);
+    const exempt = exemptRoles.includes(role);
+
+    if (exempt) {
+      this.log().debug(`"${user}" has "${role}" role, exempt from the template check`);
+    }
+
+    return exempt;
   }
 }

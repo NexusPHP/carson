@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
+import { roleOf } from '../github/roles.js';
 import { z } from 'zod';
 
 const QUALIFYING_ROLES = ['admin', 'maintain', 'write'] as const;
@@ -166,7 +167,7 @@ export class TriageLabelerSubscriber extends Subscriber {
         per_page: 100,
       });
       const qualifies = async (username: string): Promise<boolean> =>
-        settings.qualifyingRoles.has(await this.#roleOf(context, owner, repo, username));
+        settings.qualifyingRoles.has(await roleOf(context.octokit, owner, repo, username));
       const desired = await computeDesired(reviews, {
         headSha: pr.head.sha,
         resetOnPush: settings.resetOnPush,
@@ -196,16 +197,5 @@ export class TriageLabelerSubscriber extends Subscriber {
     }
 
     log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? 'none'}`);
-  }
-
-  // author_association hides private org members from an App, so the gate is the reviewer's actual repository role.
-  async #roleOf(context: TriageContext, owner: string, repo: string, username: string): Promise<string> {
-    try {
-      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
-
-      return data.role_name;
-    } catch {
-      return 'none';
-    }
   }
 }

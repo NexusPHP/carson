@@ -1,10 +1,10 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { roleOf, ROLES } from '../github/roles.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const COMMANDS = ['label', 'unlabel', 'close', 'reopen', 'lock', 'assign', 'unassign'] as const;
-const ROLES = ['admin', 'maintain', 'write', 'triage', 'read'] as const;
 const MAX_COMMANDS_PER_COMMENT = 10;
 const MAX_LABEL_LENGTH = 50;
 const LOGIN_REGEX = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
@@ -115,10 +115,10 @@ export class CommandsSubscriber extends Subscriber {
     const settings = subscriberSettings(config, this.id, Settings, log) ?? Settings.parse({});
     const { owner, repo } = context.repo();
     const login = comment.user.login;
-    const role = await this.#roleOf(context, owner, repo, login);
+    const role = await roleOf(context.octokit, owner, repo, login);
 
     if (!(settings.roles as readonly string[]).includes(role)) {
-      log.debug(`#${issue.number}: "${login}" has role "${role}", commands ignored`);
+      log.debug(`#${issue.number}: "${login}" has "${role}" role, commands ignored`);
       return;
     }
 
@@ -146,18 +146,6 @@ export class CommandsSubscriber extends Subscriber {
         comment_id: comment.id,
         content: '+1',
       });
-    }
-  }
-
-  // Anyone can comment, so the gate is the commenter's actual repository
-  // role, not the self-reported author_association.
-  async #roleOf(context: CommandContext, owner: string, repo: string, username: string): Promise<string> {
-    try {
-      const { data } = await context.octokit.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
-
-      return data.role_name;
-    } catch {
-      return 'none';
     }
   }
 

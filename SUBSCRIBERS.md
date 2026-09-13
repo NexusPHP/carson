@@ -927,6 +927,8 @@ On every event the subscriber computes the current violations and reconciles sta
 
 The subscriber locates its prior comment via the `<!-- carson:template-enforcer -->` marker, filtered by bot author. The marker is appended last so attacker-controlled body content cannot forge a match.
 
+`exempt_roles` lists repository roles whose members skip the check. When it is non-empty, the author's role is looked up via `repos.getCollaboratorPermissionLevel` (the sender of an edit is not consulted), and an author whose role is listed counts as having no violations, so a label left over from before the exemption is removed on their next edit. A failed lookup counts as no role. When the list is absent or empty, no lookup is made.
+
 There is no `close_on_violation` option. Closing on a first offense is hostile to contributors, and a `stale`-style auto-close after a grace period belongs in `stale` rather than here.
 
 ### Settings
@@ -935,6 +937,7 @@ There is no `close_on_violation` option. Closing on a first offense is hostile t
 | --- | --- | --- |
 | `label` | string | `needs-template` |
 | `message` | string (template) | see below |
+| `exempt_roles` | array of `admin`, `maintain`, `write`, `triage`, `read` | `[]` |
 | `issues` | per-type rule object (see below) | (none, issues are not enforced) |
 | `pull_requests` | per-type rule object | (none, PRs are not enforced) |
 
@@ -976,6 +979,7 @@ subscribers:
 settings:
   template-enforcer:
     label: needs-template
+    exempt_roles: [admin, maintain, write]
     issues:
       required_sections:
         - "## Steps to reproduce"

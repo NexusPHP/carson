@@ -74,6 +74,14 @@ const mockCreateComment = (verify: (body: { body: string }) => boolean): nock.Sc
     .reply(201, { id: 1, body: '' });
 };
 
+const mockPermission = (login: string, roleName: string | null): nock.Scope => {
+  const scope = nock('https://api.github.com').get(`/repos/acme/widgets/collaborators/${login}/permission`);
+
+  return roleName === null
+    ? scope.reply(404)
+    : scope.reply(200, { permission: 'write', role_name: roleName });
+};
+
 interface IssueOverrides {
   action?: 'opened' | 'edited';
   body?: string;
@@ -543,6 +551,116 @@ describe('template-enforcer subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  describe('exempt_roles', () => {
+    const CONFIG_WITH_EXEMPT = buildConfig([
+      '    exempt_roles: [admin, maintain, write, triage]',
+      ISSUES_REQUIRED_SECTION,
+    ].join('\n'));
+
+    it('skips the check for an author whose role is exempt', async () => {
+      mockInstallationToken();
+      mockConfig(CONFIG_WITH_EXEMPT);
+      const permissionScope = mockPermission('octocat', 'triage');
+
+      await probot.receive({
+        id: 'evt-exempt-author',
+        name: 'issues',
+        payload: issuePayload({ body: 'no sections' }) as never,
+      });
+
+      expect(permissionScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('removes a stale label from an exempt author\'s item', async () => {
+      mockInstallationToken();
+      mockConfig(CONFIG_WITH_EXEMPT);
+      mockPermission('octocat', 'admin');
+      const removeScope = mockRemoveLabel('needs-template');
+
+      await probot.receive({
+        id: 'evt-exempt-relabel',
+        name: 'issues',
+        payload: issuePayload({ action: 'edited', body: 'no sections', labels: ['needs-template'] }) as never,
+      });
+
+      expect(removeScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('still checks an author whose role is not exempt', async () => {
+      mockInstallationToken();
+      mockConfig(CONFIG_WITH_EXEMPT);
+      mockPermission('octocat', 'read');
+      mockListComments([]);
+      mockCreateComment(() => true);
+      const addScope = mockAddLabels('needs-template');
+
+      await probot.receive({
+        id: 'evt-not-exempt',
+        name: 'issues',
+        payload: issuePayload({ body: 'no sections' }) as never,
+      });
+
+      expect(addScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('treats a failed role lookup as not exempt', async () => {
+      mockInstallationToken();
+      mockConfig(CONFIG_WITH_EXEMPT);
+      mockPermission('octocat', null);
+      mockListComments([]);
+      mockCreateComment(() => true);
+      const addScope = mockAddLabels('needs-template');
+
+      await probot.receive({
+        id: 'evt-lookup-failed',
+        name: 'issues',
+        payload: issuePayload({ body: 'no sections' }) as never,
+      });
+
+      expect(addScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('does not look up the role when exempt_roles is empty', async () => {
+      mockInstallationToken();
+      mockConfig(buildConfig(['    exempt_roles: []', ISSUES_REQUIRED_SECTION].join('\n')));
+      mockListComments([]);
+      mockCreateComment(() => true);
+      const addScope = mockAddLabels('needs-template');
+
+      await probot.receive({
+        id: 'evt-empty-exempt',
+        name: 'issues',
+        payload: issuePayload({ body: 'no sections' }) as never,
+      });
+
+      expect(addScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('checks the PR author for pull requests', async () => {
+      mockInstallationToken();
+      mockConfig(buildConfig([
+        '    exempt_roles: [write]',
+        '    pull_requests:',
+        '      min_length: 30',
+      ].join('\n')));
+      const permissionScope = mockPermission('octocat', 'write');
+
+      await probot.receive({
+        id: 'evt-exempt-pr',
+        name: 'pull_request',
+        payload: prPayload({ body: 'short' }) as never,
+      });
+
+      expect(permissionScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
   });
 
   it('does nothing when the issue has no user (ghost)', async () => {
