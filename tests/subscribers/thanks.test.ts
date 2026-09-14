@@ -174,6 +174,9 @@ describe('thanks subscriber (via app)', () => {
   });
 
   it('does nothing when the PR was closed without merging', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
     await probot.receive({
       id: 'evt-thanks-not-merged',
       name: 'pull_request',
@@ -184,6 +187,9 @@ describe('thanks subscriber (via app)', () => {
   });
 
   it('does nothing when the author merged their own PR', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
     await probot.receive({
       id: 'evt-thanks-self-merge',
       name: 'pull_request',
@@ -194,6 +200,9 @@ describe('thanks subscriber (via app)', () => {
   });
 
   it('does nothing when the PR author is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
     await probot.receive({
       id: 'evt-thanks-bot-author',
       name: 'pull_request',
@@ -204,6 +213,9 @@ describe('thanks subscriber (via app)', () => {
   });
 
   it('does nothing when the sender is a bot', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+
     await probot.receive({
       id: 'evt-thanks-bot-sender',
       name: 'pull_request',

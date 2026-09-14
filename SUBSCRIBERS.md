@@ -11,6 +11,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 - [Comment markers](#comment-markers)
 - Subscribers
   - [auto-labeler](#auto-labeler)
+  - [cache-pruner](#cache-pruner)
   - [commands](#commands)
   - [conflicts-notifier](#conflicts-notifier)
   - [draft-policy](#draft-policy)
@@ -178,6 +179,62 @@ settings:
         title: ["[Cc]rash", "[Bb]roken"]
       - label: feature-request
         title: ["^\\[feature\\]"]
+```
+
+---
+
+## cache-pruner
+
+Deletes GitHub Actions caches that no run will restore again: those scoped to a closed pull request or a deleted branch, plus, on schedule, caches of pull requests that have since closed and branch caches past a configurable age.
+
+**Triggers**: `pull_request.closed`, `delete`, scheduled (cron via `on: schedule:` in the consumer workflow)
+**Permissions**: `actions: write`, `pull_requests: read`
+
+Caches created by a `pull_request` run are scoped to `refs/pull/N/merge`, so once the pull request closes nothing restores them until GitHub's own eviction reclaims the space. On `pull_request.closed` the subscriber lists the caches on that ref and deletes each one, merged or not. On `delete` with a branch ref it does the same for `refs/heads/<branch>`. Tag deletions are ignored. Bot senders are not skipped, so Dependabot pull requests are pruned too.
+
+The scheduled sweep lists every cache in the repository once and selects:
+
+- Pull request caches, according to `sweep_pull_requests`: `closed` (the default) looks up each distinct pull request once and deletes the caches of those no longer open, `all` deletes every pull request cache including open ones, and `none` leaves them alone.
+- Other caches whose `last_accessed_at` is older than `max_idle_days`, or whose `created_at` is older than `max_age_days`. Either limit alone is enough to select a cache. The repository's default branch is never touched, and `protected_refs` adds further exact refs (such as `refs/heads/develop`) to spare.
+
+When `sweep_pull_requests` is `none` and neither age limit is set, the sweep makes no API calls. GitHub already evicts caches unused for 7 days and enforces the per-repository size cap, so the age limits are for repositories that want a tighter budget than that.
+
+A cache that fails to delete is logged as a warning and does not stop the rest. Each run logs the number of caches deleted and their total size.
+
+The `actions: write` permission is broader than cache management. It also allows cancelling and re-running workflow runs and deleting artifacts. Carson uses it only for cache deletion.
+
+The consumer workflow needs the `delete` trigger for branch pruning and a cron schedule for the sweep:
+
+```yaml
+on:
+  delete:
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC
+```
+
+### Settings
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `on_close` | boolean | `true` |
+| `on_branch_delete` | boolean | `true` |
+| `sweep_pull_requests` | one of `closed`, `all`, `none` | `closed` |
+| `max_idle_days` | positive integer | (no idle limit) |
+| `max_age_days` | positive integer | (no age limit) |
+| `protected_refs` | array of full refs | `[]` (the default branch is always protected) |
+
+### Example
+
+```yaml
+version: 1
+subscribers:
+  - cache-pruner
+settings:
+  cache-pruner:
+    sweep_pull_requests: closed
+    max_idle_days: 3
+    protected_refs:
+      - refs/heads/develop
 ```
 
 ---

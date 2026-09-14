@@ -60368,6 +60368,162 @@ var AutoLabelerSubscriber = class extends Subscriber {
   }
 };
 
+// src/concurrency.ts
+var forEachConcurrent = async (items, concurrency, fn) => {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.all(items.slice(i, i + concurrency).map(fn));
+  }
+};
+
+// src/subscribers/cache-pruner.ts
+var Settings2 = external_exports.object({
+  on_close: external_exports.boolean().optional(),
+  on_branch_delete: external_exports.boolean().optional(),
+  sweep_pull_requests: external_exports.enum(["closed", "all", "none"]).optional(),
+  max_idle_days: external_exports.number().int().positive().optional(),
+  max_age_days: external_exports.number().int().positive().optional(),
+  protected_refs: external_exports.array(external_exports.string().min(1)).optional()
+});
+var PR_EVENTS2 = ["pull_request.closed"];
+var DELETE_EVENTS = ["delete"];
+var REQUIRED_KEYS = ["id", "ref", "key", "size_in_bytes", "created_at", "last_accessed_at"];
+var PULL_REF = /^refs\/pull\/(\d+)\/merge$/;
+var MS_PER_DAY = 24 * 60 * 60 * 1e3;
+var CONCURRENCY = 5;
+var isComplete = (cache2) => REQUIRED_KEYS.every((key) => cache2[key] !== void 0);
+var prNumber = (ref) => {
+  const match = PULL_REF.exec(ref);
+  return match === null ? null : Number(match[1]);
+};
+var megabytes = (bytes) => `${(bytes / 1e6).toFixed(2)} MB`;
+var olderThan = (timestamp, days, now) => days !== void 0 && new Date(timestamp).getTime() < now - days * MS_PER_DAY;
+var CachePrunerSubscriber = class extends Subscriber {
+  id = "cache-pruner";
+  description = "Deletes GitHub Actions caches left behind by closed pull requests and deleted branches, and sweeps stale caches on schedule.";
+  requiredPermissions = {
+    actions: "write",
+    pull_requests: "read"
+  };
+  register(probot) {
+    probot.on(PR_EVENTS2, async (context) => {
+      await this.#handleClosed(context);
+    });
+    probot.on(DELETE_EVENTS, async (context) => {
+      await this.#handleDelete(context);
+    });
+  }
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#sweep(context);
+    });
+  }
+  async #handleClosed(context) {
+    const enabled = await this.loadEnabledSettings(context, Settings2);
+    if (enabled === null || enabled.settings.on_close === false) {
+      return;
+    }
+    await this.#pruneRef(context.octokit, context.repo(), `refs/pull/${context.payload.pull_request.number}/merge`);
+  }
+  async #handleDelete(context) {
+    if (context.payload.ref_type !== "branch") {
+      return;
+    }
+    const enabled = await this.loadEnabledSettings(context, Settings2);
+    if (enabled === null || enabled.settings.on_branch_delete === false) {
+      return;
+    }
+    await this.#pruneRef(context.octokit, context.repo(), `refs/heads/${context.payload.ref}`);
+  }
+  async #pruneRef(octokit, target, ref) {
+    const caches = await this.#list(octokit, { ...target, ref });
+    const pruned = await this.#delete(octokit, target, caches);
+    this.log().info(`Deleted ${pluralize(pruned.count, "cache")} (${megabytes(pruned.bytes)}) for ${ref}`);
+  }
+  async #sweep(context) {
+    const enabled = await this.loadEnabledSettings(context, Settings2);
+    if (enabled === null) {
+      return;
+    }
+    const { settings } = enabled;
+    const log = this.log();
+    const mode = settings.sweep_pull_requests ?? "closed";
+    const agesConfigured = settings.max_idle_days !== void 0 || settings.max_age_days !== void 0;
+    if (mode === "none" && !agesConfigured) {
+      log.debug("Sweep has nothing to do: sweep_pull_requests is none and no age limit is set");
+      return;
+    }
+    const target = context.repo();
+    const caches = await this.#list(context.octokit, target);
+    log.debug(`Found ${pluralize(caches.length, "cache")}`);
+    const pullCaches = [];
+    const otherCaches = [];
+    for (const cache2 of caches) {
+      const number4 = prNumber(cache2.ref);
+      if (number4 === null) {
+        otherCaches.push(cache2);
+      } else {
+        pullCaches.push({ cache: cache2, number: number4 });
+      }
+    }
+    const targets = [
+      ...await this.#stalePullCaches(context, pullCaches, mode),
+      ...await this.#agedCaches(context, otherCaches, settings)
+    ];
+    const pruned = await this.#delete(context.octokit, target, targets);
+    log.info(`Deleted ${pluralize(pruned.count, "cache")} (${megabytes(pruned.bytes)}) in sweep`);
+  }
+  async #stalePullCaches(context, pullCaches, mode) {
+    if (mode === "none") {
+      return [];
+    }
+    if (mode === "all") {
+      return pullCaches.map((p) => p.cache);
+    }
+    const { owner, repo } = context.repo();
+    const numbers = [...new Set(pullCaches.map((p) => p.number))];
+    const closed = /* @__PURE__ */ new Set();
+    await forEachConcurrent(numbers, CONCURRENCY, async (number4) => {
+      const { data } = await context.octokit.rest.pulls.get({ owner, repo, pull_number: number4 });
+      if (data.state === "closed") {
+        closed.add(number4);
+      }
+    });
+    return pullCaches.filter((p) => closed.has(p.number)).map((p) => p.cache);
+  }
+  async #agedCaches(context, caches, settings) {
+    if (settings.max_idle_days === void 0 && settings.max_age_days === void 0) {
+      return [];
+    }
+    const { owner, repo } = context.repo();
+    const { data: repository } = await context.octokit.rest.repos.get({ owner, repo });
+    const protectedRefs = /* @__PURE__ */ new Set([`refs/heads/${repository.default_branch}`, ...settings.protected_refs ?? []]);
+    const now = Date.now();
+    return caches.filter(
+      (cache2) => !protectedRefs.has(cache2.ref) && (olderThan(cache2.last_accessed_at, settings.max_idle_days, now) || olderThan(cache2.created_at, settings.max_age_days, now))
+    );
+  }
+  async #list(octokit, params) {
+    const listed = await octokit.paginate(octokit.rest.actions.getActionsCacheList, { ...params, per_page: 100 });
+    return listed.filter(isComplete);
+  }
+  async #delete(octokit, { owner, repo }, caches) {
+    const log = this.log();
+    const pruned = { count: 0, bytes: 0 };
+    await forEachConcurrent(caches, CONCURRENCY, async (cache2) => {
+      try {
+        await octokit.rest.actions.deleteActionsCacheById({ owner, repo, cache_id: cache2.id });
+      } catch (error63) {
+        log.warn(`Failed to delete cache "${cache2.key}" on ${cache2.ref}: ${String(error63)}`);
+        return;
+      }
+      log.debug(`Deleted cache "${cache2.key}" (${megabytes(cache2.size_in_bytes)}) on ${cache2.ref}`);
+      pruned.count += 1;
+      pruned.bytes += cache2.size_in_bytes;
+    });
+    return pruned;
+  }
+};
+
 // src/carson.ts
 import { dirname, resolve } from "node:path";
 
@@ -60526,7 +60682,7 @@ var MAX_LABEL_LENGTH = 50;
 var LOGIN_REGEX = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 var COMMAND_LINE_REGEX = /^\/([a-z]+)(?:[ \t]+(.*))?$/;
 var FENCE_REGEX = /^(?:```|~~~)/;
-var Settings2 = external_exports.object({
+var Settings3 = external_exports.object({
   commands: external_exports.array(external_exports.enum(COMMANDS)).default([...COMMANDS]),
   roles: external_exports.array(external_exports.enum(ROLES)).default(["admin", "maintain", "write", "triage"]),
   allowed_labels: external_exports.array(external_exports.string().min(1)).optional(),
@@ -60587,7 +60743,7 @@ var CommandsSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings2, log) ?? Settings2.parse({});
+    const settings = subscriberSettings(config3, this.id, Settings3, log) ?? Settings3.parse({});
     const { owner, repo } = context.repo();
     const login = comment.user.login;
     const role = await roleOf(context.octokit, owner, repo, login);
@@ -60680,21 +60836,14 @@ var CommandsSubscriber = class extends Subscriber {
   }
 };
 
-// src/concurrency.ts
-var forEachConcurrent = async (items, concurrency, fn) => {
-  for (let i = 0; i < items.length; i += concurrency) {
-    await Promise.all(items.slice(i, i + concurrency).map(fn));
-  }
-};
-
 // src/subscribers/conflicts-notifier.ts
-var Settings3 = external_exports.object({
+var Settings4 = external_exports.object({
   message: external_exports.string().optional(),
   label: external_exports.string().min(1).optional()
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
-var CONCURRENCY = 5;
-var PR_EVENTS2 = [
+var CONCURRENCY2 = 5;
+var PR_EVENTS3 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened",
@@ -60725,7 +60874,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS2, async (context) => {
+    probot.on(PR_EVENTS3, async (context) => {
       await this.#handlePrEvent(context);
     });
     probot.on("push", async (context) => {
@@ -60760,39 +60909,39 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       state: "open",
       per_page: 100
     });
-    await forEachConcurrent(prs, CONCURRENCY, async (pr) => {
+    await forEachConcurrent(prs, CONCURRENCY2, async (pr) => {
       await this.#checkPr(context, pr.number, config3);
     });
   }
-  async #checkPr(context, prNumber, config3) {
+  async #checkPr(context, prNumber2, config3) {
     const { owner, repo } = context.repo();
     const { data: pr } = await context.octokit.rest.pulls.get({
       owner,
       repo,
-      pull_number: prNumber
+      pull_number: prNumber2
     });
     if (pr.mergeable === null) {
-      this.log().debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
+      this.log().debug(`PR #${prNumber2}: mergeable not yet computed, skipping`);
       return;
     }
     const hasConflict = !pr.mergeable;
-    const settings = subscriberSettings(config3, this.id, Settings3, this.log()) ?? {};
-    const existing = await this.#findExistingComment(context, prNumber);
+    const settings = subscriberSettings(config3, this.id, Settings4, this.log()) ?? {};
+    const existing = await this.#findExistingComment(context, prNumber2);
     if (hasConflict) {
       await this.#handleConflict(context, pr, settings, existing);
     } else {
-      await this.#handleNoConflict(context, prNumber, existing);
+      await this.#handleNoConflict(context, prNumber2, existing);
     }
     if (settings.label !== void 0) {
       await this.#syncLabel(context, pr.number, pr.labels.some((l) => l.name === settings.label), hasConflict, settings.label);
     }
   }
   // Labeling is delegated to auto-labeler through the action router.
-  async #syncLabel(context, prNumber, hasLabel, hasConflict, label) {
+  async #syncLabel(context, prNumber2, hasLabel, hasConflict, label) {
     if (hasConflict && !hasLabel) {
-      await this.dispatch("label", context, { number: prNumber, labels: [label] });
+      await this.dispatch("label", context, { number: prNumber2, labels: [label] });
     } else if (!hasConflict && hasLabel) {
-      await this.dispatch("unlabel", context, { number: prNumber, labels: [label] });
+      await this.dispatch("unlabel", context, { number: prNumber2, labels: [label] });
     }
   }
   async #handleConflict(context, pr, settings, existing) {
@@ -60814,25 +60963,25 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       this.log().info(`Reopened conflict notice on PR #${pr.number}`);
     }
   }
-  async #handleNoConflict(context, prNumber, existing) {
+  async #handleNoConflict(context, prNumber2, existing) {
     const log = this.log();
     if (existing === null) {
-      log.debug(`PR #${prNumber}: No conflict, no prior notice, nothing to do`);
+      log.debug(`PR #${prNumber2}: No conflict, no prior notice, nothing to do`);
       return;
     }
     if (this.isNoticeResolved(existing)) {
-      log.debug(`PR #${prNumber}: No conflict, prior notice already minimized`);
+      log.debug(`PR #${prNumber2}: No conflict, prior notice already minimized`);
       return;
     }
-    await this.resolveNotice(context, prNumber, existing, "RESOLVED");
-    log.info(`Resolved conflict notice on PR #${prNumber}`);
+    await this.resolveNotice(context, prNumber2, existing, "RESOLVED");
+    log.info(`Resolved conflict notice on PR #${prNumber2}`);
   }
-  async #findExistingComment(context, prNumber) {
+  async #findExistingComment(context, prNumber2) {
     const { owner, repo } = context.repo();
     const response = await context.octokit.graphql(COMMENTS_QUERY, {
       owner,
       repo,
-      number: prNumber
+      number: prNumber2
     });
     const match = findNotice(response.repository.pullRequest.comments.nodes, this.id, isBotNode);
     if (match === void 0) {
@@ -60843,19 +60992,19 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/draft-policy.ts
-var Settings4 = external_exports.object({
+var Settings5 = external_exports.object({
   message: external_exports.string().optional(),
   hours_until_close: external_exports.number().int().nonnegative().optional(),
   close_message: external_exports.string().optional()
 });
 var DEFAULT_HOURS_UNTIL_CLOSE = 24;
 var MS_PER_HOUR = 60 * 60 * 1e3;
-var CONCURRENCY2 = 5;
+var CONCURRENCY3 = 5;
 var DEFAULT_MESSAGE2 = `Hey @{{user}}, thanks for the pull request!
 
 This repository does not keep draft pull requests open. A pull request does not have to be finished to be reviewed, so please mark it "Ready for review" when you would like a first look, or close it and open a new one when you are done.`;
 var DEFAULT_CLOSE_MESSAGE = `Closing this draft pull request as it has stayed in draft for more than {{hours}} hours. Feel free to open a new one when it is ready for review.`;
-var PR_EVENTS3 = [
+var PR_EVENTS4 = [
   "pull_request.opened",
   "pull_request.reopened",
   "pull_request.converted_to_draft",
@@ -60868,7 +61017,7 @@ var DraftPolicySubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS3, async (context) => {
+    probot.on(PR_EVENTS4, async (context) => {
       await this.#handle(context);
     });
   }
@@ -60879,7 +61028,7 @@ var DraftPolicySubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings4);
+    const enabled = await this.loadEnabledSettings(context, Settings5);
     if (enabled === null) {
       return;
     }
@@ -60912,7 +61061,7 @@ var DraftPolicySubscriber = class extends Subscriber {
   }
   async #run(scheduled) {
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings5);
     if (enabled === null) {
       return;
     }
@@ -60930,7 +61079,7 @@ var DraftPolicySubscriber = class extends Subscriber {
       per_page: 100
     });
     let closed = 0;
-    await forEachConcurrent(drafts, CONCURRENCY2, async (item) => {
+    await forEachConcurrent(drafts, CONCURRENCY3, async (item) => {
       if (new Date(item.created_at).getTime() >= cutoff) {
         log.debug(`#${item.number}: opened within the grace period, skipping`);
         return;
@@ -61000,7 +61149,7 @@ var EventSettings = external_exports.object({
 }).refine((event) => event.label_field === void 0 || event.label_allowlist !== void 0, {
   message: "label_allowlist is required when label_field is set"
 });
-var Settings5 = external_exports.object({
+var Settings6 = external_exports.object({
   events: external_exports.record(external_exports.string().regex(/^[\w.-]{1,100}$/), EventSettings).refine((events) => Object.keys(events).length > 0, { message: "events must not be empty" })
 });
 var buildTemplateContext = (eventType, eventConfig, payload) => {
@@ -61044,7 +61193,7 @@ var IssueIntakeSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings5, log);
+    const settings = subscriberSettings(config3, this.id, Settings6, log);
     if (settings === void 0) {
       log.debug("No valid issue-intake settings, skipping");
       return;
@@ -61108,7 +61257,7 @@ var searchTimestamp = (epochMs) => `${new Date(epochMs).toISOString().slice(0, 1
 
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];
-var Settings6 = external_exports.object({
+var Settings7 = external_exports.object({
   days: external_exports.number().int().positive().optional(),
   reason: external_exports.enum(LOCK_REASONS).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
@@ -61118,8 +61267,8 @@ var Settings6 = external_exports.object({
 var DEFAULT_DAYS = 90;
 var DEFAULT_REASON = "resolved";
 var DEFAULT_COMMENT = "This issue has been locked after {{days}} days of inactivity since it was closed. Please open a new issue if the problem persists.";
-var MS_PER_DAY = 24 * 60 * 60 * 1e3;
-var CONCURRENCY3 = 5;
+var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY4 = 5;
 var LockOldIssuesSubscriber = class extends Subscriber {
   id = "lock-old-issues";
   description = "Locks closed issues that have been inactive past a configurable threshold.";
@@ -61144,7 +61293,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     if (config3 === null) {
       return false;
     }
-    const settings = subscriberSettings(config3, this.id, Settings6, this.log());
+    const settings = subscriberSettings(config3, this.id, Settings7, this.log());
     await this.#applyLock(context, number4, settings?.reason ?? DEFAULT_REASON);
     this.log().info(`Locked #${number4} on request`);
     return true;
@@ -61162,7 +61311,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings6, log);
+    const settings = subscriberSettings(config3, this.id, Settings7, log);
     if (!(settings?.lock_on_labels ?? []).includes(label)) {
       log.debug(`#${issue3.number}: Label "${label}" not in lock_on_labels, skipping`);
       return;
@@ -61180,7 +61329,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings6);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings7);
     if (enabled === null) {
       return;
     }
@@ -61189,7 +61338,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     const reason = settings.reason ?? DEFAULT_REASON;
     const comment = settings.comment ?? DEFAULT_COMMENT;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
-    const cutoff = Date.now() - days * MS_PER_DAY;
+    const cutoff = Date.now() - days * MS_PER_DAY2;
     const { owner, repo } = scheduled.repo();
     const issues = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
       q: `repo:${owner}/${repo} is:issue is:closed is:unlocked closed:<${searchTimestamp(cutoff)}`,
@@ -61201,7 +61350,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     let locked = 0;
     const log = this.log();
     log.debug(`Found ${pluralize(issues.length, "candidate issue")}`);
-    await forEachConcurrent(issues, CONCURRENCY3, async (issue3) => {
+    await forEachConcurrent(issues, CONCURRENCY4, async (issue3) => {
       if (issue3.locked) {
         log.debug(`#${issue3.number}: Already locked, skipping`);
         return;
@@ -61246,13 +61395,13 @@ var LockOldIssuesSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/maintainer-edits.ts
-var Settings7 = external_exports.object({
+var Settings8 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE3 = `Hey @{{user}}, it looks like "Allow edits from maintainers" is unchecked on this pull request.
 
 That is fine, but maintainers will not be able to rebase, squash, or apply small fixes for you before merging. If you would like them to, please [allow edits from maintainers](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork).`;
-var PR_EVENTS4 = ["pull_request.opened", "pull_request.ready_for_review"];
+var PR_EVENTS5 = ["pull_request.opened", "pull_request.ready_for_review"];
 var MaintainerEditsSubscriber = class extends Subscriber {
   id = "maintainer-edits";
   description = "Comments on fork pull requests that do not allow edits from maintainers.";
@@ -61260,13 +61409,13 @@ var MaintainerEditsSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS4, async (context) => {
+    probot.on(PR_EVENTS5, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings7);
+    const enabled = await this.loadEnabledSettings(context, Settings8);
     if (enabled === null) {
       return;
     }
@@ -61302,12 +61451,12 @@ var Rule2 = external_exports.object({
   base: external_exports.string().optional(),
   milestone: external_exports.string()
 });
-var Settings8 = external_exports.object({
+var Settings9 = external_exports.object({
   rules: external_exports.array(Rule2).optional(),
   override: external_exports.boolean().optional()
 });
 var NEXT_OPEN = "next-open";
-var PR_EVENTS5 = [
+var PR_EVENTS6 = [
   "pull_request.opened",
   "pull_request.ready_for_review",
   "pull_request.labeled",
@@ -61362,7 +61511,7 @@ var MilestoneSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS5, async (context) => {
+    probot.on(PR_EVENTS6, async (context) => {
       await this.#handle(context);
     });
   }
@@ -61376,7 +61525,7 @@ var MilestoneSubscriber = class extends Subscriber {
     if (pr.draft === true) {
       return;
     }
-    const enabled = await this.loadEnabledSettings(context, Settings8);
+    const enabled = await this.loadEnabledSettings(context, Settings9);
     if (enabled === null) {
       return;
     }
@@ -61417,7 +61566,7 @@ var MilestoneSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-merge-commits.ts
-var Settings9 = external_exports.object({
+var Settings10 = external_exports.object({
   name: external_exports.string().optional(),
   treat_merge_commits_as: external_exports.enum(["failure", "neutral"]).optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional(),
@@ -61430,7 +61579,7 @@ var Settings9 = external_exports.object({
 var DEFAULT_NAME = "Carson / no-merge-commits";
 var DEFAULT_TREATMENT = "failure";
 var MERGE_COMMIT_PARENTS = 2;
-var PR_EVENTS6 = [
+var PR_EVENTS7 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened",
@@ -61471,7 +61620,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS6, async (context) => {
+    probot.on(PR_EVENTS7, async (context) => {
       await this.#handle(context);
     });
   }
@@ -61480,7 +61629,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
       return;
     }
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings9);
+    const enabled = await this.loadEnabledSettings(context, Settings10);
     if (enabled === null) {
       return;
     }
@@ -61533,7 +61682,7 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-response-closer.ts
-var Settings10 = external_exports.object({
+var Settings11 = external_exports.object({
   label: external_exports.string().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
@@ -61542,8 +61691,8 @@ var Settings10 = external_exports.object({
 var DEFAULT_LABEL = "needs-info";
 var DEFAULT_DAYS_UNTIL_CLOSE = 14;
 var DEFAULT_CLOSE_MESSAGE2 = "Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.";
-var MS_PER_DAY2 = 24 * 60 * 60 * 1e3;
-var CONCURRENCY4 = 5;
+var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY5 = 5;
 var NoResponseCloserSubscriber = class extends Subscriber {
   id = "no-response-closer";
   description = "Closes issues and pull requests carrying a configurable label whose activity has been stale past a configurable threshold.";
@@ -61557,7 +61706,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings10);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings11);
     if (enabled === null) {
       return;
     }
@@ -61566,7 +61715,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE;
     const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE2;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
-    const cutoff = Date.now() - daysUntilClose * MS_PER_DAY2;
+    const cutoff = Date.now() - daysUntilClose * MS_PER_DAY3;
     const { owner, repo } = scheduled.repo();
     const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
       q: `repo:${owner}/${repo} is:open label:"${label}" updated:<${searchTimestamp(cutoff)}`,
@@ -61578,7 +61727,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     let closed = 0;
     const log = this.log();
     log.debug(`Found ${pluralize(items.length, "candidate item")} labeled "${label}"`);
-    await forEachConcurrent(items, CONCURRENCY4, async (item) => {
+    await forEachConcurrent(items, CONCURRENCY5, async (item) => {
       if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
         return;
@@ -61625,14 +61774,14 @@ var Rule3 = external_exports.object({
   mode: external_exports.enum(["require", "forbid"]).optional(),
   level: external_exports.enum(["error", "warning"]).optional()
 });
-var Settings11 = external_exports.object({
+var Settings12 = external_exports.object({
   name: external_exports.string().optional(),
   rules: external_exports.array(Rule3).optional()
 });
 var DEFAULT_NAME2 = "Carson / pr-title-linter";
 var DEFAULT_MODE = "require";
 var DEFAULT_LEVEL = "error";
-var PR_EVENTS7 = [
+var PR_EVENTS8 = [
   "pull_request.opened",
   "pull_request.edited",
   "pull_request.synchronize",
@@ -61686,13 +61835,13 @@ var PrTitleLinterSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS7, async (context) => {
+    probot.on(PR_EVENTS8, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings11);
+    const enabled = await this.loadEnabledSettings(context, Settings12);
     if (enabled === null) {
       return;
     }
@@ -61727,7 +61876,7 @@ var PrTitleLinterSubscriber = class extends Subscriber {
 
 // src/subscribers/read-only.ts
 var DEFAULT_MESSAGE4 = "This repository is read-only, so this {{type}} has been closed.";
-var Settings12 = external_exports.object({
+var Settings13 = external_exports.object({
   upstream: external_exports.string().regex(/^[\w.-]+\/[\w.-]+$/, "upstream must be owner/repo").optional(),
   message: external_exports.string().min(1).default(DEFAULT_MESSAGE4),
   lock: external_exports.boolean().default(true),
@@ -61755,7 +61904,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings12, log) ?? Settings12.parse({});
+    const settings = subscriberSettings(config3, this.id, Settings13, log) ?? Settings13.parse({});
     const payload = context.payload;
     const isIssue = "issue" in payload;
     const item = "issue" in payload ? payload.issue : payload.pull_request;
@@ -61793,13 +61942,13 @@ var ReadOnlySubscriber = class extends Subscriber {
 };
 
 // src/subscribers/signed-commits.ts
-var Settings13 = external_exports.object({
+var Settings14 = external_exports.object({
   name: external_exports.string().optional(),
   treat_unsigned_as: external_exports.enum(["failure", "neutral"]).optional()
 });
 var DEFAULT_NAME3 = "Carson / signed-commits";
 var DEFAULT_TREATMENT2 = "failure";
-var PR_EVENTS8 = [
+var PR_EVENTS9 = [
   "pull_request.opened",
   "pull_request.synchronize",
   "pull_request.reopened"
@@ -61812,12 +61961,12 @@ var SignedCommitsSubscriber = class extends Subscriber {
     pull_requests: "read"
   };
   register(probot) {
-    probot.on(PR_EVENTS8, async (context) => {
+    probot.on(PR_EVENTS9, async (context) => {
       await this.#handle(context);
     });
   }
   async #handle(context) {
-    const enabled = await this.loadEnabledSettings(context, Settings13);
+    const enabled = await this.loadEnabledSettings(context, Settings14);
     if (enabled === null) {
       return;
     }
@@ -61860,7 +62009,7 @@ var SignedCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/stale.ts
-var Settings14 = external_exports.object({
+var Settings15 = external_exports.object({
   days_until_stale: external_exports.number().int().positive().optional(),
   days_until_close: external_exports.number().int().positive().optional(),
   stale_label: external_exports.string().optional(),
@@ -61874,8 +62023,8 @@ var DEFAULT_STALE_LABEL = "stale";
 var DEFAULT_STALE_MESSAGE = "This {{type}} has been inactive for {{days_inactive}} days. It will be closed in {{days_until_close}} days without further activity.";
 var DEFAULT_CLOSE_MESSAGE3 = "Closing this {{type}} due to extended inactivity.";
 var COMMENT_MARKER = noticeMarker("stale");
-var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
-var CONCURRENCY5 = 5;
+var MS_PER_DAY4 = 24 * 60 * 60 * 1e3;
+var CONCURRENCY6 = 5;
 var ISSUE_ACTIVITY = ["issue_comment.created", "issues.edited", "issues.reopened"];
 var PR_ACTIVITY = [
   "pull_request.synchronize",
@@ -61902,7 +62051,7 @@ var StaleSubscriber = class extends Subscriber {
     if (context.isBot) {
       return;
     }
-    const enabled = await this.loadEnabledSettings(context, Settings14);
+    const enabled = await this.loadEnabledSettings(context, Settings15);
     if (enabled === null) {
       return;
     }
@@ -61938,7 +62087,7 @@ var StaleSubscriber = class extends Subscriber {
     });
   }
   async #run(scheduled) {
-    const enabled = await this.loadEnabledSettings(scheduled, Settings14);
+    const enabled = await this.loadEnabledSettings(scheduled, Settings15);
     if (enabled === null) {
       return;
     }
@@ -61949,8 +62098,8 @@ var StaleSubscriber = class extends Subscriber {
     const staleMessage = settings.stale_message ?? DEFAULT_STALE_MESSAGE;
     const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE3;
     const exemptLabels = new Set(settings.exempt_labels ?? []);
-    const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY3;
-    const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY3;
+    const staleCutoff = Date.now() - daysUntilStale * MS_PER_DAY4;
+    const closeCutoff = Date.now() - daysUntilClose * MS_PER_DAY4;
     const { owner, repo } = scheduled.repo();
     const staleItems = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
       q: `repo:${owner}/${repo} is:open label:"${staleLabel}"`,
@@ -61978,7 +62127,7 @@ var StaleSubscriber = class extends Subscriber {
     let closed = 0;
     const log = this.log();
     log.debug(`Found ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
-    await forEachConcurrent(items, CONCURRENCY5, async (item) => {
+    await forEachConcurrent(items, CONCURRENCY6, async (item) => {
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
@@ -62053,7 +62202,7 @@ var TypeSettings = external_exports.object({
   min_length: external_exports.number().int().positive().optional(),
   rules: external_exports.array(Rule4).optional()
 });
-var Settings15 = external_exports.object({
+var Settings16 = external_exports.object({
   label: external_exports.string().optional(),
   message: external_exports.string().optional(),
   exempt_roles: external_exports.array(external_exports.enum(ROLES)).optional(),
@@ -62069,7 +62218,7 @@ var DEFAULT_MESSAGE5 = [
   "Please update the description. The `{{label}}` label will be removed automatically."
 ].join("\n");
 var ISSUE_EVENTS2 = ["issues.opened", "issues.edited"];
-var PR_EVENTS9 = ["pull_request.opened", "pull_request.edited"];
+var PR_EVENTS10 = ["pull_request.opened", "pull_request.edited"];
 var compileRules2 = (rules, log) => {
   const compiled = [];
   for (const rule of rules) {
@@ -62118,7 +62267,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     probot.on(ISSUE_EVENTS2, async (context) => {
       await this.#handleIssue(context);
     });
-    probot.on(PR_EVENTS9, async (context) => {
+    probot.on(PR_EVENTS10, async (context) => {
       await this.#handlePr(context);
     });
   }
@@ -62150,7 +62299,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       return;
     }
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings15);
+    const enabled = await this.loadEnabledSettings(context, Settings16);
     if (enabled === null) {
       return;
     }
@@ -62221,7 +62370,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/thanks.ts
-var Settings16 = external_exports.object({
+var Settings17 = external_exports.object({
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE6 = "Thanks for the contribution, @{{user}}!";
@@ -62244,7 +62393,7 @@ var ThanksSubscriber = class extends Subscriber {
         log.debug(`PR #${pr.number}: self-merge by ${pr.user.login}, skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings16);
+      const enabled = await this.loadEnabledSettings(context, Settings17);
       if (enabled === null) {
         return;
       }
@@ -62262,7 +62411,7 @@ var ThanksSubscriber = class extends Subscriber {
 
 // src/subscribers/triage-labeler.ts
 var QUALIFYING_ROLES = ["admin", "maintain", "write"];
-var Settings17 = external_exports.object({
+var Settings18 = external_exports.object({
   needs_review_label: external_exports.string().optional(),
   needs_rework_label: external_exports.string().optional(),
   approved_label: external_exports.string().optional(),
@@ -62273,7 +62422,7 @@ var Settings17 = external_exports.object({
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
 var DEFAULT_APPROVED = "approved";
-var PR_EVENTS10 = [
+var PR_EVENTS11 = [
   "pull_request.opened",
   "pull_request.reopened",
   "pull_request.synchronize",
@@ -62336,7 +62485,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS10, async (context) => {
+    probot.on(PR_EVENTS11, async (context) => {
       await this.#handle(context);
     });
     probot.on(REVIEW_EVENTS, async (context) => {
@@ -62345,7 +62494,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
   }
   async #handle(context) {
     const log = this.log();
-    const enabled = await this.loadEnabledSettings(context, Settings17);
+    const enabled = await this.loadEnabledSettings(context, Settings18);
     if (enabled === null) {
       return;
     }
@@ -62397,14 +62546,14 @@ var TriageLabelerSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/unsupported-branch.ts
-var Settings18 = external_exports.object({
+var Settings19 = external_exports.object({
   branches: external_exports.array(external_exports.string()).optional(),
   message: external_exports.string().optional()
 });
 var DEFAULT_MESSAGE7 = `Hey @{{user}}, thanks for the pull request!
 
 It targets \`{{base}}\`, which is no longer maintained. Could you [change the base branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/changing-the-base-branch-of-a-pull-request) to one of these instead? {{branches}}`;
-var PR_EVENTS11 = [
+var PR_EVENTS12 = [
   "pull_request.opened",
   "pull_request.ready_for_review",
   "pull_request.edited"
@@ -62416,7 +62565,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
     pull_requests: "write"
   };
   register(probot) {
-    probot.on(PR_EVENTS11, async (context) => {
+    probot.on(PR_EVENTS12, async (context) => {
       await this.#handle(context);
     });
   }
@@ -62429,7 +62578,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
     if (pr.draft === true) {
       return;
     }
-    const enabled = await this.loadEnabledSettings(context, Settings18);
+    const enabled = await this.loadEnabledSettings(context, Settings19);
     if (enabled === null) {
       return;
     }
@@ -62521,7 +62670,7 @@ var isSafeHttpsUrl = (value) => {
   }
   return url2.protocol === "https:" && url2.username === "" && url2.password === "";
 };
-var Settings19 = external_exports.object({
+var Settings20 = external_exports.object({
   url: external_exports.string().refine(isSafeHttpsUrl, { message: "url must be https:// without userinfo" }),
   secret_env: external_exports.string().min(1),
   events: external_exports.array(external_exports.enum(EVENT_VALUES)).default(["issues.closed"]),
@@ -62543,7 +62692,7 @@ var WebhookNotifierSubscriber = class extends Subscriber {
     if (config3 === null) {
       return;
     }
-    const settings = subscriberSettings(config3, this.id, Settings19, log);
+    const settings = subscriberSettings(config3, this.id, Settings20, log);
     if (settings === void 0) {
       log.debug("No valid webhook-notifier settings, skipping");
       return;
@@ -62615,7 +62764,7 @@ var ReturningBucket = external_exports.object({
   issue: external_exports.string().optional(),
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
-var Settings20 = external_exports.object({
+var Settings21 = external_exports.object({
   first_time: FirstTimeBucket.optional(),
   returning: ReturningBucket.optional()
 });
@@ -62658,7 +62807,7 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const log = this.log();
-      const enabled = await this.loadEnabledSettings(context, Settings20);
+      const enabled = await this.loadEnabledSettings(context, Settings21);
       if (enabled === null) {
         return;
       }
@@ -62689,7 +62838,7 @@ var WelcomeSubscriber = class extends Subscriber {
         log.debug(`Issue #${issue3.number}: no user (ghost), skipping`);
         return;
       }
-      const enabled = await this.loadEnabledSettings(context, Settings20);
+      const enabled = await this.loadEnabledSettings(context, Settings21);
       if (enabled === null) {
         return;
       }
@@ -62716,6 +62865,7 @@ var WelcomeSubscriber = class extends Subscriber {
 // src/app.ts
 var carson = new Carson([
   new AutoLabelerSubscriber(),
+  new CachePrunerSubscriber(),
   new CommandsSubscriber(),
   new ConflictsNotifierSubscriber(),
   new DraftPolicySubscriber(),

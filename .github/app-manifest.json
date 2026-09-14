@@ -9,6 +9,7 @@
   },
   "public": false,
   "default_permissions": {
+    "actions": "write",
     "checks": "write",
     "contents": "read",
     "issues": "write",

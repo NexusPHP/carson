@@ -34,6 +34,7 @@ Fill in:
 - **Homepage URL**: your project URL or `https://github.com/NexusPHP/carson`.
 - **Webhook**: uncheck **Active**. Carson does not receive webhooks. It is triggered by your workflow.
 - **Repository permissions**:
+  - **Actions**: Read and write (for the `cache-pruner` cache deletions).
   - **Checks**: Read and write (for the `signed-commits` and `no-merge-commits` check runs).
   - **Contents**: Read-only (to read `.github/carson.yml`).
   - **Issues**: Read and write (to label, lock, and close issues and pull requests, and to comment on issues).
@@ -79,6 +80,7 @@ on:
   pull_request_review_comment:
     types: [created]
   push:
+  delete:
   issues:
     types: [opened, edited, closed, reopened, labeled]
   issue_comment:
@@ -149,6 +151,7 @@ Carson reads its configuration from the **default branch only**, so pull request
 See [SUBSCRIBERS.md](SUBSCRIBERS.md) for the full reference: triggers, settings, required permissions, and examples for each.
 
 - [**auto-labeler**](SUBSCRIBERS.md#auto-labeler): adds labels to PRs based on path globs, title/body regex, or branch name patterns, and to issues by title/body regex, with optional sync mode and label implications.
+- [**cache-pruner**](SUBSCRIBERS.md#cache-pruner): deletes Actions caches left behind by closed PRs and deleted branches, and sweeps stale caches on schedule.
 - [**commands**](SUBSCRIBERS.md#commands): runs slash commands (`/label`, `/close`, `/lock`, `/assign`, ...) posted in comments by repository collaborators.
 - [**conflicts-notifier**](SUBSCRIBERS.md#conflicts-notifier): comments on PRs with merge conflicts and marks the comment resolved when fixed.
 - [**draft-policy**](SUBSCRIBERS.md#draft-policy): comments on draft PRs and closes those still in draft after a grace period.
