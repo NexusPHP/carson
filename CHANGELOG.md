@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `auto-labeler` gains `sync_exempt`: labels listed there are still added by rules but never removed by `sync_labels`.
 - `template-enforcer` gains `exempt_roles`: authors whose repository role is listed skip the template check, and a leftover label is removed on their next edit.
 
+### Changed
+
+- `conflicts-notifier` logs at `info` when it skips a pull request whose mergeable state GitHub has not computed yet.
+
 ## [v1.4.3](https://github.com/NexusPHP/carson/compare/v1.4.2...v1.4.3) - 2026-09-13
 
 ### Changed

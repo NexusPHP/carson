@@ -60924,7 +60924,7 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
       pull_number: prNumber2
     });
     if (pr.mergeable === null) {
-      this.log().debug(`PR #${prNumber2}: mergeable not yet computed, skipping`);
+      this.log().info(`PR #${prNumber2}: mergeable not yet computed, skipping`);
       return;
     }
     const hasConflict = !pr.mergeable;

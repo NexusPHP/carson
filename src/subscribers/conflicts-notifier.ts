@@ -134,7 +134,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
 
     if (pr.mergeable === null) {
-      this.log().debug(`PR #${prNumber}: mergeable not yet computed, skipping`);
+      this.log().info(`PR #${prNumber}: mergeable not yet computed, skipping`);
       return;
     }
 
