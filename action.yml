@@ -17,7 +17,7 @@ inputs:
     description: 'GitHub App webhook secret. Optional.'
     required: false
   log_level:
-    description: 'Pino log level (trace, debug, info, warn, error, fatal). Defaults to warn. Overrides the LOG_LEVEL env var.'
+    description: 'Pino log level (trace, debug, info, warn, error, fatal). Defaults to warn. Overrides the LOG_LEVEL env var. A run with step debug logging enabled raises this to debug.'
     required: false
 
 runs:

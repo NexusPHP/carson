@@ -39980,6 +39980,9 @@ function setFailed(message) {
   process.exitCode = ExitCode.Failure;
   error(message);
 }
+function isDebug() {
+  return process.env["RUNNER_DEBUG"] === "1";
+}
 function error(message, properties2 = {}) {
   issueCommand("error", toCommandProperties(properties2), message instanceof Error ? message.toString() : message);
 }
@@ -70797,6 +70800,9 @@ var main = async () => {
       return;
     }
     logLevel = logLevelInput;
+  }
+  if (isDebug() && logLevel !== "trace") {
+    logLevel = "debug";
   }
   const eventName = process.env["GITHUB_EVENT_NAME"];
   const eventPath = process.env["GITHUB_EVENT_PATH"];

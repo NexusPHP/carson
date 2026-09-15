@@ -31,6 +31,10 @@ const main = async (): Promise<void> => {
     logLevel = logLevelInput;
   }
 
+  if (core.isDebug() && logLevel !== 'trace') {
+    logLevel = 'debug';
+  }
+
   const eventName = process.env['GITHUB_EVENT_NAME'];
   const eventPath = process.env['GITHUB_EVENT_PATH'];
   const runId = process.env['GITHUB_RUN_ID'];

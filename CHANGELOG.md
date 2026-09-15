@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `conflicts-notifier` logs at `info` when it skips a pull request whose mergeable state GitHub has not computed yet.
+- Re-running a workflow with debug logging enabled raises Carson's log level to `debug`, whatever `log_level` is set to.
 
 ## [v1.4.3](https://github.com/NexusPHP/carson/compare/v1.4.2...v1.4.3) - 2026-09-13
 
