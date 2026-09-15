@@ -60078,6 +60078,7 @@ var Rule = external_exports.object({
 var IssueRule = Rule.pick({ label: true, title: true, body: true });
 var Settings = external_exports.object({
   sync_labels: external_exports.boolean().optional(),
+  sync_exempt: StringArray.optional(),
   rules: external_exports.array(Rule).optional(),
   issue_rules: external_exports.array(IssueRule).optional(),
   implied_labels: external_exports.record(external_exports.string(), StringArray).optional()
@@ -60285,7 +60286,8 @@ var AutoLabelerSubscriber = class extends Subscriber {
       fields,
       filenames,
       changed: changedPrFields(context.payload),
-      syncLabels: settings.sync_labels ?? false
+      syncLabels: settings.sync_labels ?? false,
+      syncExempt: new Set(settings.sync_exempt)
     });
   }
   async #handleIssue(context) {
@@ -60309,7 +60311,8 @@ var AutoLabelerSubscriber = class extends Subscriber {
       fields: { title: issue3.title, body: issue3.body ?? "", head: "", base: "" },
       filenames: [],
       changed: changedIssueFields(context.payload),
-      syncLabels: settings.sync_labels ?? false
+      syncLabels: settings.sync_labels ?? false,
+      syncExempt: new Set(settings.sync_exempt)
     });
   }
   async #handleLabeled(context) {
@@ -60344,7 +60347,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
     }
     const current = new Set(target.current);
     const toAdd = Array.from(fresh).filter((l) => !current.has(l));
-    const toRemove = target.syncLabels ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l)) : [];
+    const toRemove = target.syncLabels ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l) && !target.syncExempt.has(l)) : [];
     if (toAdd.length > 0) {
       await context.octokit.rest.issues.addLabels({
         owner,

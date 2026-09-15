@@ -31,6 +31,7 @@ const IssueRule = Rule.pick({ label: true, title: true, body: true });
 
 const Settings = z.object({
   sync_labels: z.boolean().optional(),
+  sync_exempt: StringArray.optional(),
   rules: z.array(Rule).optional(),
   issue_rules: z.array(IssueRule).optional(),
   implied_labels: z.record(z.string(), StringArray).optional(),
@@ -332,6 +333,7 @@ export class AutoLabelerSubscriber extends Subscriber {
       filenames,
       changed: changedPrFields(context.payload),
       syncLabels: settings.sync_labels ?? false,
+      syncExempt: new Set(settings.sync_exempt),
     });
   }
 
@@ -363,6 +365,7 @@ export class AutoLabelerSubscriber extends Subscriber {
       filenames: [],
       changed: changedIssueFields(context.payload),
       syncLabels: settings.sync_labels ?? false,
+      syncExempt: new Set(settings.sync_exempt),
     });
   }
 
@@ -395,6 +398,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     filenames: readonly string[];
     changed: ReadonlySet<Field>;
     syncLabels: boolean;
+    syncExempt: ReadonlySet<string>;
   }): Promise<void> {
     const log = this.log();
     const { owner, repo } = context.repo();
@@ -417,7 +421,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     const current = new Set(target.current);
     const toAdd = Array.from(fresh).filter((l) => !current.has(l));
     const toRemove = target.syncLabels
-      ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l))
+      ? Array.from(current).filter((l) => managed.has(l) && !matched.has(l) && !target.syncExempt.has(l))
       : [];
 
     if (toAdd.length > 0) {

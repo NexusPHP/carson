@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - [cache-pruner](SUBSCRIBERS.md#cache-pruner) subscriber: deletes Actions caches of closed pull requests and deleted branches, and sweeps caches of since-closed pull requests and aged branch caches on schedule. Needs `actions: write` on the App.
+- `auto-labeler` gains `sync_exempt`: labels listed there are still added by rules but never removed by `sync_labels`.
 - `template-enforcer` gains `exempt_roles`: authors whose repository role is listed skip the template check, and a leftover label is removed on their next edit.
 
 ## [v1.4.3](https://github.com/NexusPHP/carson/compare/v1.4.2...v1.4.3) - 2026-09-13

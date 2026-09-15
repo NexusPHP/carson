@@ -640,6 +640,61 @@ describe('auto-labeler subscriber (via app)', () => {
     expect(removeScope.isDone()).toBe(true);
   });
 
+  it('keeps a sync_exempt label that no longer matches under sync_labels', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - auto-labeler',
+      'settings:',
+      '  auto-labeler:',
+      '    sync_labels: true',
+      '    sync_exempt: [enhancement]',
+      '    rules:',
+      '      - label: enhancement',
+      '        title: ["^perf: "]',
+      '      - label: hotfix',
+      '        head_branch: ["^hotfix/"]',
+      '',
+    ].join('\n'));
+    const removeScope = mockRemoveLabel('hotfix');
+
+    await probot.receive({
+      id: 'evt-sync-exempt',
+      name: 'pull_request',
+      payload: prPayload({ title: 'feat: new thing', headRef: 'main', labels: ['enhancement', 'hotfix'] }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('still adds a sync_exempt label when its rule matches', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - auto-labeler',
+      'settings:',
+      '  auto-labeler:',
+      '    sync_labels: true',
+      '    sync_exempt: [enhancement]',
+      '    rules:',
+      '      - label: enhancement',
+      '        title: ["^perf: "]',
+      '',
+    ].join('\n'));
+    const addScope = mockAddLabels(['enhancement']);
+
+    await probot.receive({
+      id: 'evt-sync-exempt-add',
+      name: 'pull_request',
+      payload: prPayload({ title: 'perf: faster' }) as never,
+    });
+
+    expect(addScope.isDone()).toBe(true);
+  });
+
   it('does not remove non-managed labels under sync_labels', async () => {
     mockInstallationToken();
     mockConfig(configWithRules([

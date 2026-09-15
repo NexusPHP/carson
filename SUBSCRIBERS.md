@@ -109,6 +109,7 @@ GitHub publishes [`actions/labeler`](https://github.com/actions/labeler) for the
 | Key | Type | Default |
 | --- | --- | --- |
 | `sync_labels` | boolean | `false` |
+| `sync_exempt` | array of label names sync never removes | `[]` |
 | `rules` | array of PR rule objects (see below) | `[]` (PR events are ignored when empty) |
 | `issue_rules` | array of issue rule objects: `label`, `title`, `body` only | `[]` (issue events are ignored when empty) |
 | `implied_labels` | map of label name to array of label names | `{}` (labeled events are ignored when empty) |
@@ -145,7 +146,7 @@ implied_labels:
 
 With `sync_labels: false` (default), Carson only adds labels. Labels removed by maintainers stay removed unless the field that matched is edited again.
 
-With `sync_labels: true`, Carson reconciles the PR's labels against the rules: any label appearing in a rule's `label` field is "managed", and managed labels currently on the PR that no longer match on any field are removed. Labels not declared in any rule (manually applied by maintainers, applied by other subscribers, etc.) are never touched.
+With `sync_labels: true`, Carson reconciles the PR's labels against the rules: any label appearing in a rule's `label` field is "managed", and managed labels currently on the PR that no longer match on any field are removed. Labels not declared in any rule (manually applied by maintainers, applied by other subscribers, etc.) are never touched. A label listed in `sync_exempt` is still added by its rules but never removed by sync, for a label that a rule can apply in some cases and a maintainer decides in others.
 
 > [!CAUTION]
 > Patterns are compiled to JavaScript `RegExp` and matched with no runtime timeout. A catastrophically backtracking pattern in `carson.yml` will hang the action. Since `carson.yml` lives on the default branch only, this is a maintainer footgun rather than a contributor attack surface, but keep patterns simple and test them locally.
