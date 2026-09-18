@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.5.0](https://github.com/NexusPHP/carson/compare/v1.4.3...v1.5.0) - 2026-09-18
+
 ### Added
 
 - [cache-pruner](SUBSCRIBERS.md#cache-pruner) subscriber: deletes Actions caches of closed pull requests and deleted branches, and sweeps caches of since-closed pull requests and aged branch caches on schedule. Needs `actions: write` on the App.
