@@ -59827,6 +59827,28 @@ var AppIdentity = class {
 };
 var appIdentity = new AppIdentity();
 
+// src/template.ts
+var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
+var universalContext = () => ({
+  app_name: appIdentity.name,
+  app_slug: appIdentity.slug,
+  app_login: appIdentity.login
+});
+var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
+var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+var itemRef = (isPr, number4, startsLine = false) => {
+  const noun = isPr ? "PR" : startsLine ? "Issue" : "issue";
+  return `${noun} #${number4}`;
+};
+var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
+var interpolate = (template, context) => {
+  const merged = { ...universalContext(), ...context };
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+    const value = merged[key];
+    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+  });
+};
+
 // src/actions.ts
 var ActionRegistrar = class {
   #handlers = /* @__PURE__ */ new Map();
@@ -60042,30 +60064,6 @@ var labelNames = (labels) => {
 
 // src/subscribers/auto-labeler.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
-
-// src/template.ts
-var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
-var universalContext = () => ({
-  app_name: appIdentity.name,
-  app_slug: appIdentity.slug,
-  app_login: appIdentity.login
-});
-var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
-var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-var itemRef = (isPr, number4, startsLine = false) => {
-  const noun = isPr ? "PR" : startsLine ? "Issue" : "issue";
-  return `${noun} #${number4}`;
-};
-var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
-var interpolate = (template, context) => {
-  const merged = { ...universalContext(), ...context };
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-    const value = merged[key];
-    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
-  });
-};
-
-// src/subscribers/auto-labeler.ts
 var StringArray = external_exports.array(external_exports.string());
 var FilesMatcher = external_exports.union([
   StringArray,
@@ -60152,6 +60150,7 @@ var compileRule = (rule, log) => ({
   }
 });
 var ALL_FIELDS = /* @__PURE__ */ new Set(["files", "title", "body", "head", "base"]);
+var quoted = (labels) => labels.map((label) => `"${label}"`).join(", ");
 var ruleMatches = (rule, fields, files, on) => {
   const m = rule.matchers;
   if (on.has("files") && m.files?.(files) === true) {
@@ -60228,7 +60227,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       }
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request2.number, labels: request2.labels });
-      this.log().info(`Added ${pluralize(request2.labels.length, "label")} to #${request2.number} on request`);
+      this.log().info(`Added ${pluralize(request2.labels.length, "label")} to #${request2.number} on request: ${quoted(request2.labels)}`);
       return true;
     });
     registrar.on("unlabel", this.id, async (context, request2) => {
@@ -60238,7 +60237,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       for (const name of request2.labels) {
         await this.#removeLabel(context, request2.number, name);
       }
-      this.log().info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request`);
+      this.log().info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request: ${quoted(request2.labels)}`);
       return true;
     });
   }
@@ -60335,7 +60334,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
     }
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
-    this.log().info(`Added ${pluralize(implied.length, "implied label")} to #${item.number} for "${context.payload.label.name}"`);
+    this.log().info(`Added ${pluralize(implied.length, "implied label")} to ${itemRef("pull_request" in context.payload, item.number)} for "${context.payload.label.name}": ${quoted(implied)}`);
   }
   async #reconcile(context, target) {
     const log = this.log();
@@ -60362,7 +60361,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
         issue_number: target.number,
         labels: toAdd
       });
-      log.info(`Added ${pluralize(toAdd.length, "label")} to ${target.kind} #${target.number}: ${toAdd.join(", ")}`);
+      log.info(`Added ${pluralize(toAdd.length, "label")} to ${target.kind} #${target.number}: ${quoted(toAdd)}`);
     }
     for (const label of toRemove) {
       await context.octokit.rest.issues.removeLabel({
@@ -60373,7 +60372,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       });
     }
     if (toRemove.length > 0) {
-      log.info(`Removed ${pluralize(toRemove.length, "label")} from ${target.kind} #${target.number}: ${toRemove.join(", ")}`);
+      log.info(`Removed ${pluralize(toRemove.length, "label")} from ${target.kind} #${target.number}: ${quoted(toRemove)}`);
     }
   }
 };

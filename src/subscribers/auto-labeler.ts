@@ -1,11 +1,11 @@
 import type { ActionContext, ActionRegistrar } from '../actions.js';
 import type { Context, Probot } from 'probot';
+import { itemRef, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
-import { pluralize } from '../template.js';
 import { z } from 'zod';
 
 const StringArray = z.array(z.string());
@@ -149,6 +149,8 @@ type Field = keyof PrFields | 'files';
 
 const ALL_FIELDS: ReadonlySet<Field> = new Set<Field>(['files', 'title', 'body', 'head', 'base']);
 
+const quoted = (labels: readonly string[]): string => labels.map((label) => `"${label}"`).join(', ');
+
 const ruleMatches = (rule: CompiledRule, fields: PrFields, files: readonly string[], on: ReadonlySet<Field>): boolean => {
   const m = rule.matchers;
 
@@ -250,7 +252,7 @@ export class AutoLabelerSubscriber extends Subscriber {
 
       const { owner, repo } = context.repo();
       await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: request.number, labels: request.labels });
-      this.log().info(`Added ${pluralize(request.labels.length, 'label')} to #${request.number} on request`);
+      this.log().info(`Added ${pluralize(request.labels.length, 'label')} to #${request.number} on request: ${quoted(request.labels)}`);
 
       return true;
     });
@@ -264,7 +266,7 @@ export class AutoLabelerSubscriber extends Subscriber {
         await this.#removeLabel(context, request.number, name);
       }
 
-      this.log().info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request`);
+      this.log().info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request: ${quoted(request.labels)}`);
 
       return true;
     });
@@ -386,7 +388,7 @@ export class AutoLabelerSubscriber extends Subscriber {
 
     const { owner, repo } = context.repo();
     await context.octokit.rest.issues.addLabels({ owner, repo, issue_number: item.number, labels: implied });
-    this.log().info(`Added ${pluralize(implied.length, 'implied label')} to #${item.number} for "${context.payload.label.name}"`);
+    this.log().info(`Added ${pluralize(implied.length, 'implied label')} to ${itemRef('pull_request' in context.payload, item.number)} for "${context.payload.label.name}": ${quoted(implied)}`);
   }
 
   async #reconcile(context: Pick<IssueContext, 'octokit' | 'log' | 'repo'>, target: {
@@ -431,7 +433,7 @@ export class AutoLabelerSubscriber extends Subscriber {
         issue_number: target.number,
         labels: toAdd,
       });
-      log.info(`Added ${pluralize(toAdd.length, 'label')} to ${target.kind} #${target.number}: ${toAdd.join(', ')}`);
+      log.info(`Added ${pluralize(toAdd.length, 'label')} to ${target.kind} #${target.number}: ${quoted(toAdd)}`);
     }
 
     for (const label of toRemove) {
@@ -444,7 +446,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     }
 
     if (toRemove.length > 0) {
-      log.info(`Removed ${pluralize(toRemove.length, 'label')} from ${target.kind} #${target.number}: ${toRemove.join(', ')}`);
+      log.info(`Removed ${pluralize(toRemove.length, 'label')} from ${target.kind} #${target.number}: ${quoted(toRemove)}`);
     }
   }
 }

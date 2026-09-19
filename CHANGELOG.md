@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `welcome` decides first time or returning by counting the author's earlier pull requests or issues in the repository, instead of reading `author_association`. GitHub reports the first-time associations on pull requests only, so issue authors without commits were never greeted, and it hides private organization members from an App. A leftover `author_association` list is ignored with a warning, except that an empty list still switches its bucket off.
 - `welcome` no longer greets a pull request opened as a draft. The greeting is posted on `pull_request.ready_for_review` instead, once.
 - Log lines name the item type wherever it is known, `PR #8` or `issue #8`, instead of a bare `#8`. The `label`, `unlabel`, and `lock` action handlers still log the bare number, since they receive only that.
+- `auto-labeler` names the labels it added or removed on request, and the implied labels it added. Every label list it logs is quoted: `"bug", "needs review"`.
 - The startup log line reads `Received push event` instead of `Received push`.
 - A run ends with `Finished in 2.4s`, or `Finished with failures in 2.4s` when a subscriber or the dispatch failed.
 
