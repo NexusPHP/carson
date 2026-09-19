@@ -18,6 +18,7 @@ interface Harness {
   updateMock: ReturnType<typeof vi.fn>;
   commentMock: ReturnType<typeof vi.fn>;
   configMock: ReturnType<typeof vi.fn>;
+  paginateMock: ReturnType<typeof vi.fn>;
 }
 
 const NOW = new Date('2026-06-30T00:00:00Z').getTime();
@@ -30,18 +31,23 @@ const makeStubLog = (): Record<string, unknown> => {
   return log;
 };
 
-const makeHarness = (items: ItemShape[], config: unknown): Harness => {
+const makeHarness = (items: ItemShape[] | Record<string, ItemShape[]>, config: unknown): Harness => {
   const updateMock = vi.fn().mockResolvedValue({});
   const commentMock = vi.fn().mockResolvedValue({});
   const configMock = vi.fn().mockResolvedValue(config);
-  const paginate = vi.fn().mockResolvedValue(items.map((i) => ({
-    number: i.number,
-    updated_at: i.updated_at,
-    labels: i.labels ?? [{ name: 'needs-info' }],
-    pull_request: i.pull_request,
-    user: i.user === undefined ? { login: 'octocat' } : i.user,
-    title: i.title ?? 'Something is broken',
-  })));
+  const paginate = vi.fn().mockImplementation(async (_fn: unknown, params: { q: string }) => {
+    const label = /label:"([^"]+)"/.exec(params.q)?.[1] ?? '';
+    const found = Array.isArray(items) ? items : items[label] ?? [];
+
+    return await Promise.resolve(found.map((i) => ({
+      number: i.number,
+      updated_at: i.updated_at,
+      labels: i.labels ?? [{ name: 'needs-info' }],
+      pull_request: i.pull_request,
+      user: i.user === undefined ? { login: 'octocat' } : i.user,
+      title: i.title ?? 'Something is broken',
+    })));
+  });
 
   const context: ScheduledContext = {
     octokit: {
@@ -62,7 +68,7 @@ const makeHarness = (items: ItemShape[], config: unknown): Harness => {
     config: configMock,
   };
 
-  return { context, updateMock, commentMock, configMock };
+  return { context, updateMock, commentMock, configMock, paginateMock: paginate };
 };
 
 const runScheduled = async (context: ScheduledContext): Promise<void> => {
@@ -291,6 +297,123 @@ describe('no-response-closer subscriber', () => {
     await runScheduled(context);
 
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  describe('rules', () => {
+    const withSettings = (settings: Record<string, unknown>): unknown => ({
+      ...ENABLED_CONFIG,
+      settings: { 'no-response-closer': settings },
+    });
+
+    const queries = (paginateMock: ReturnType<typeof vi.fn>): string[] =>
+      paginateMock.mock.calls.map((call: unknown[]) => (call[1] as { q: string }).q);
+
+    it('runs each rule with its own threshold, message, and label', async () => {
+      const { context, updateMock, commentMock } = makeHarness(
+        {
+          'waiting for info': [{ number: 1, updated_at: DAYS_AGO(20) }, { number: 2, updated_at: DAYS_AGO(5) }],
+          'needs template': [{ number: 3, updated_at: DAYS_AGO(5) }],
+        },
+        withSettings({
+          rules: [
+            { label: 'waiting for info' },
+            { label: 'needs template', days_until_close: 3, close_message: 'Closed for {{label}} after {{days_until_close}} days.' },
+          ],
+        }),
+      );
+
+      await runScheduled(context);
+
+      expect(updateMock.mock.calls.map((call: unknown[]) => (call[0] as { issue_number: number }).issue_number)).toEqual([1, 3]);
+      expect(commentMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        issue_number: 3,
+        body: 'Closed for needs template after 3 days.',
+      }));
+    });
+
+    it('uses top-level keys as defaults and lets a rule replace exempt_labels', async () => {
+      const pinned = [{ name: 'pinned' }];
+      const { context, updateMock, commentMock } = makeHarness(
+        {
+          inherits: [{ number: 1, updated_at: DAYS_AGO(40), labels: pinned }, { number: 2, updated_at: DAYS_AGO(20) }],
+          replaces: [{ number: 3, updated_at: DAYS_AGO(40), labels: pinned }],
+        },
+        withSettings({
+          days_until_close: 30,
+          close_message: 'Shared message.',
+          exempt_labels: ['pinned'],
+          rules: [{ label: 'inherits' }, { label: 'replaces', exempt_labels: [] }],
+        }),
+      );
+
+      await runScheduled(context);
+
+      expect(updateMock).toHaveBeenCalledTimes(1);
+      expect(commentMock).toHaveBeenCalledWith(expect.objectContaining({ issue_number: 3, body: 'Shared message.' }));
+    });
+
+    it('scopes the search with only', async () => {
+      const { context, paginateMock } = makeHarness([], withSettings({
+        rules: [
+          { label: 'a', only: 'issues' },
+          { label: 'b', only: 'pull_requests' },
+          { label: 'c' },
+        ],
+      }));
+
+      await runScheduled(context);
+
+      const [issues, pulls, both] = queries(paginateMock);
+
+      expect(issues).toContain('is:open is:issue label:"a"');
+      expect(pulls).toContain('is:open is:pr label:"b"');
+      expect(both).toContain('is:open label:"c"');
+    });
+
+    it('closes an item once when a later rule still finds it open', async () => {
+      const item = { number: 7, updated_at: DAYS_AGO(20) };
+      const { context, updateMock, commentMock } = makeHarness(
+        { first: [item], second: [item] },
+        withSettings({ rules: [{ label: 'first' }, { label: 'second' }] }),
+      );
+
+      await runScheduled(context);
+
+      expect(updateMock).toHaveBeenCalledTimes(1);
+      expect(commentMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when rules is empty', async () => {
+      const { context, paginateMock } = makeHarness([{ number: 1, updated_at: DAYS_AGO(20) }], withSettings({ rules: [] }));
+
+      await runScheduled(context);
+
+      expect(paginateMock).not.toHaveBeenCalled();
+    });
+
+    it('skips the run when label is combined with rules', async () => {
+      const { context, paginateMock } = makeHarness([], withSettings({ label: 'needs-info', rules: [{ label: 'a' }] }));
+
+      await runScheduled(context);
+
+      expect(paginateMock).not.toHaveBeenCalled();
+    });
+
+    it('skips the run when two rules share a label, compared case-insensitively', async () => {
+      const { context, paginateMock } = makeHarness([], withSettings({ rules: [{ label: 'Needs Template' }, { label: 'needs template' }] }));
+
+      await runScheduled(context);
+
+      expect(paginateMock).not.toHaveBeenCalled();
+    });
+
+    it('skips the run when a rule exempts its own label', async () => {
+      const { context, paginateMock } = makeHarness([], withSettings({ exempt_labels: ['Stuck'], rules: [{ label: 'stuck' }] }));
+
+      await runScheduled(context);
+
+      expect(paginateMock).not.toHaveBeenCalled();
+    });
   });
 
   it('registers no webhook handlers', () => {

@@ -61688,17 +61688,58 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
 };
 
 // src/subscribers/no-response-closer.ts
-var Settings11 = external_exports.object({
-  label: external_exports.string().optional(),
+var Overridable = {
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
   exempt_labels: external_exports.array(external_exports.string()).optional()
+};
+var Rule3 = external_exports.object({
+  label: external_exports.string().min(1),
+  only: external_exports.enum(["issues", "pull_requests"]).optional(),
+  ...Overridable
+});
+var Settings11 = external_exports.object({
+  label: external_exports.string().optional(),
+  ...Overridable,
+  rules: external_exports.array(Rule3).optional()
 });
 var DEFAULT_LABEL = "needs-info";
 var DEFAULT_DAYS_UNTIL_CLOSE = 14;
 var DEFAULT_CLOSE_MESSAGE2 = "Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.";
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY5 = 5;
+var SCOPES = { issues: " is:issue", pull_requests: " is:pr" };
+var resolveRules = (settings) => {
+  const rules = settings.rules ?? [{ label: settings.label ?? DEFAULT_LABEL }];
+  return rules.map((rule) => ({
+    label: rule.label,
+    scope: rule.only === void 0 ? "" : SCOPES[rule.only],
+    days: rule.days_until_close ?? settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE,
+    message: rule.close_message ?? settings.close_message ?? DEFAULT_CLOSE_MESSAGE2,
+    exempt: new Set(rule.exempt_labels ?? settings.exempt_labels ?? [])
+  }));
+};
+var ruleConflicts = (settings) => {
+  if (settings.rules === void 0) {
+    return [];
+  }
+  const conflicts = [];
+  const seen = /* @__PURE__ */ new Set();
+  if (settings.label !== void 0) {
+    conflicts.push('"label" cannot be combined with "rules"');
+  }
+  for (const rule of settings.rules) {
+    const key = rule.label.toLowerCase();
+    if (seen.has(key)) {
+      conflicts.push(`more than one rule for label "${rule.label}"`);
+    }
+    seen.add(key);
+    if ((rule.exempt_labels ?? settings.exempt_labels ?? []).some((l) => l.toLowerCase() === key)) {
+      conflicts.push(`rule "${rule.label}" exempts its own label`);
+    }
+  }
+  return conflicts;
+};
 var NoResponseCloserSubscriber = class extends Subscriber {
   id = "no-response-closer";
   description = "Closes issues and pull requests carrying a configurable label whose activity has been stale past a configurable threshold.";
@@ -61716,25 +61757,36 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     if (enabled === null) {
       return;
     }
-    const { settings } = enabled;
-    const label = settings.label ?? DEFAULT_LABEL;
-    const daysUntilClose = settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE;
-    const closeMessage = settings.close_message ?? DEFAULT_CLOSE_MESSAGE2;
-    const exemptLabels = new Set(settings.exempt_labels ?? []);
-    const cutoff = Date.now() - daysUntilClose * MS_PER_DAY3;
+    const conflicts = ruleConflicts(enabled.settings);
+    if (conflicts.length > 0) {
+      this.log().warn(`Skipping the run, settings conflict: ${conflicts.join(", ")}`);
+      return;
+    }
+    const closed = /* @__PURE__ */ new Set();
+    for (const rule of resolveRules(enabled.settings)) {
+      await this.#runRule(scheduled, rule, closed);
+    }
+  }
+  // The search index lags a close, so an item closed by an earlier rule can come back as open.
+  async #runRule(scheduled, rule, closed) {
+    const cutoff = Date.now() - rule.days * MS_PER_DAY3;
     const { owner, repo } = scheduled.repo();
     const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
-      q: `repo:${owner}/${repo} is:open label:"${label}" updated:<${searchTimestamp(cutoff)}`,
+      q: `repo:${owner}/${repo} is:open${rule.scope} label:"${rule.label}" updated:<${searchTimestamp(cutoff)}`,
       advanced_search: "true",
       sort: "updated",
       order: "asc",
       per_page: 100
     });
-    let closed = 0;
+    let count = 0;
     const log = this.log();
-    log.debug(`Found ${pluralize(items.length, "candidate item")} labeled "${label}"`);
+    log.debug(`Found ${pluralize(items.length, "candidate item")} labeled "${rule.label}"`);
     await forEachConcurrent(items, CONCURRENCY5, async (item) => {
-      if (labelNames(item.labels).some((name) => exemptLabels.has(name))) {
+      if (closed.has(item.number)) {
+        log.debug(`#${item.number}: Closed by an earlier rule, skipping`);
+        return;
+      }
+      if (labelNames(item.labels).some((name) => rule.exempt.has(name))) {
         log.debug(`#${item.number}: Exempt label, skipping`);
         return;
       }
@@ -61748,7 +61800,8 @@ var NoResponseCloserSubscriber = class extends Subscriber {
         repo,
         title: item.title,
         type: isPr ? "pull request" : "issue",
-        days_until_close: daysUntilClose
+        label: rule.label,
+        days_until_close: rule.days
       };
       if (item.user !== null) {
         context["user"] = item.user.login;
@@ -61757,7 +61810,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
         owner,
         repo,
         issue_number: item.number,
-        body: interpolate(closeMessage, context)
+        body: interpolate(rule.message, context)
       });
       await scheduled.octokit.rest.issues.update({
         owner,
@@ -61767,14 +61820,15 @@ var NoResponseCloserSubscriber = class extends Subscriber {
         ...isPr ? {} : { state_reason: "not_planned" }
       });
       log.debug(`#${item.number}: Closed`);
-      closed += 1;
+      closed.add(item.number);
+      count += 1;
     });
-    log.info(`Closed ${pluralize(closed, "item")} labeled "${label}" with no activity for ${pluralize(daysUntilClose, "day")}`);
+    log.info(`Closed ${pluralize(count, "item")} labeled "${rule.label}" with no activity for ${pluralize(rule.days, "day")}`);
   }
 };
 
 // src/subscribers/pr-title-linter.ts
-var Rule3 = external_exports.object({
+var Rule4 = external_exports.object({
   pattern: external_exports.string(),
   description: external_exports.string(),
   mode: external_exports.enum(["require", "forbid"]).optional(),
@@ -61782,7 +61836,7 @@ var Rule3 = external_exports.object({
 });
 var Settings12 = external_exports.object({
   name: external_exports.string().optional(),
-  rules: external_exports.array(Rule3).optional()
+  rules: external_exports.array(Rule4).optional()
 });
 var DEFAULT_NAME2 = "Carson / pr-title-linter";
 var DEFAULT_MODE = "require";
@@ -62198,7 +62252,7 @@ ${COMMENT_MARKER}`
 };
 
 // src/subscribers/template-enforcer.ts
-var Rule4 = external_exports.object({
+var Rule5 = external_exports.object({
   pattern: external_exports.string(),
   description: external_exports.string(),
   mode: external_exports.enum(["require", "forbid"]).optional()
@@ -62206,7 +62260,7 @@ var Rule4 = external_exports.object({
 var TypeSettings = external_exports.object({
   required_sections: external_exports.array(external_exports.string()).optional(),
   min_length: external_exports.number().int().positive().optional(),
-  rules: external_exports.array(Rule4).optional()
+  rules: external_exports.array(Rule5).optional()
 });
 var Settings16 = external_exports.object({
   label: external_exports.string().optional(),

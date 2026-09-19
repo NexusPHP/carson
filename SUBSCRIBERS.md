@@ -685,7 +685,13 @@ On each scheduled run the subscriber:
 3. Posts `close_message` as a comment before closing.
 5. Closes the item. Issues are closed with `state_reason: 'not_planned'` (rendered in GitHub's UI as the gray "not planned" close icon). PRs are closed without a state reason.
 
-The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
+To close on several labels, each with its own grace period and message, list them under `rules`. Each rule runs its own search, in the listed order, so the cost grows with the number of rules and not with the size of the repository. An item carrying the labels of two rules is closed once, by the first rule whose threshold it has passed. The top-level `days_until_close`, `close_message`, and `exempt_labels` become defaults for every rule, and a rule's `exempt_labels` replaces the top-level list instead of extending it, so a rule can opt out of a shared exemption. `only` restricts a rule to `issues` or `pull_requests`.
+
+Without `rules`, the top-level keys describe a single rule, so existing configurations need no change. `rules: []` runs nothing. Three conflicts make the subscriber log a warning and skip the run instead of guessing: a top-level `label` next to `rules`, two rules for the same label (compared case-insensitively, as GitHub does), and a rule whose label is in its own exempt list.
+
+The default `close_message` talks about requested information, so a rule about anything else should set its own, or share one that names `{{label}}`. Search requests are limited to 30 a minute per installation and shared with the other scheduled subscribers, which a handful of rules stays well inside.
+
+The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. A label change by another subscriber counts too, which matters more with a threshold of a few days. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
 
 Add a cron schedule to your `.github/workflows/carson.yml`:
 
@@ -712,6 +718,17 @@ They are complementary. A repo can enable both, with non-overlapping label scope
 | `days_until_close` | positive integer | `14` |
 | `close_message` | string | `Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.` |
 | `exempt_labels` | array of strings | `[]` |
+| `rules` | array of rule objects (see below) | (none, the keys above describe one rule) |
+
+Each rule object:
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `label` | string, required, unique across rules | none |
+| `days_until_close` | positive integer | top-level value, else `14` |
+| `close_message` | string | top-level value, else the default message |
+| `exempt_labels` | array of strings, replaces the top-level list | top-level value, else `[]` |
+| `only` | `issues` or `pull_requests` | both |
 
 ### Context (for `close_message`)
 
@@ -722,7 +739,8 @@ They are complementary. A repo can enable both, with non-overlapping label scope
 | `{{repo}}` | Repository name |
 | `{{title}}` | Item title |
 | `{{type}}` | `issue` or `pull request` |
-| `{{days_until_close}}` | The configured `days_until_close` value |
+| `{{label}}` | The label of the rule that closed the item |
+| `{{days_until_close}}` | The `days_until_close` value of that rule |
 
 ### Example
 
@@ -741,6 +759,27 @@ settings:
       Closing this {{type}} after {{days_until_close}} days without further
       information, @{{user}}. Feel free to reopen with more details if this
       still matters.
+```
+
+With several labels:
+
+```yaml
+settings:
+  no-response-closer:
+    days_until_close: 14
+    exempt_labels: [pinned]
+    rules:
+      - label: waiting for info
+      - label: needs template
+        days_until_close: 3
+        only: issues
+        close_message: |-
+          Closing this {{type}}: the description still does not follow the template after {{days_until_close}} days.
+          Please open a new issue using the bug report form.
+      - label: wrong branch
+        days_until_close: 7
+        only: pull_requests
+        exempt_labels: [pinned, keep open]
 ```
 
 ---
