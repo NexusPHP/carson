@@ -62814,14 +62814,15 @@ var WebhookNotifierSubscriber = class extends Subscriber {
 // src/subscribers/welcome.ts
 var FIRST_TIME_ASSOCIATIONS = ["FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"];
 var RETURNING_ASSOCIATIONS = ["CONTRIBUTOR", "MEMBER", "COLLABORATOR", "OWNER"];
+var Message = external_exports.union([external_exports.string(), external_exports.literal(false)]).optional();
 var FirstTimeBucket = external_exports.object({
-  pull_request: external_exports.string().optional(),
-  issue: external_exports.string().optional(),
+  pull_request: Message,
+  issue: Message,
   author_association: external_exports.array(external_exports.enum(FIRST_TIME_ASSOCIATIONS)).optional()
 });
 var ReturningBucket = external_exports.object({
-  pull_request: external_exports.string().optional(),
-  issue: external_exports.string().optional(),
+  pull_request: Message,
+  issue: Message,
   author_association: external_exports.array(external_exports.enum(RETURNING_ASSOCIATIONS)).optional()
 });
 var Settings21 = external_exports.object({
@@ -62855,7 +62856,8 @@ var bucketFor2 = (settings, association) => {
   return null;
 };
 var messageFor = (settings, bucket, event) => {
-  return settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+  const message = settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+  return message === false || message === "" ? null : message;
 };
 var WelcomeSubscriber = class extends Subscriber {
   id = "welcome";
@@ -62879,7 +62881,12 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       log.debug(`PR #${context.payload.pull_request.number}: association "${association}" resolved to bucket "${bucket}"`);
-      const body = interpolate(messageFor(settings, bucket, "pull_request"), {
+      const message = messageFor(settings, bucket, "pull_request");
+      if (message === null) {
+        log.debug(`PR #${context.payload.pull_request.number}: greeting for "${bucket}" pull requests is switched off, skipping`);
+        return;
+      }
+      const body = interpolate(message, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
         number: context.payload.pull_request.number,
@@ -62910,7 +62917,12 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       log.debug(`Issue #${issue3.number}: association "${association}" resolved to bucket "${bucket}"`);
-      const body = interpolate(messageFor(settings, bucket, "issue"), {
+      const message = messageFor(settings, bucket, "issue");
+      if (message === null) {
+        log.debug(`Issue #${issue3.number}: greeting for "${bucket}" issues is switched off, skipping`);
+        return;
+      }
+      const body = interpolate(message, {
         user: issue3.user.login,
         repo: context.payload.repository.name,
         number: issue3.number,

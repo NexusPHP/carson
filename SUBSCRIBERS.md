@@ -1347,13 +1347,13 @@ Carson resolves the author's `author_association` to one of two buckets, `first_
 
 | Key | Type | `first_time` default | `returning` default |
 | --- | --- | --- | --- |
-| `pull_request` | string | `Thanks for opening your first pull request, @{{user}}!` | `Thanks for the pull request, @{{user}}!` |
-| `issue` | string | `Thanks for opening your first issue, @{{user}}!` | `Thanks for filing this, @{{user}}!` |
+| `pull_request` | string, or `false` for no greeting | `Thanks for opening your first pull request, @{{user}}!` | `Thanks for the pull request, @{{user}}!` |
+| `issue` | string, or `false` for no greeting | `Thanks for opening your first issue, @{{user}}!` | `Thanks for filing this, @{{user}}!` |
 | `author_association` | array | `[FIRST_TIMER, FIRST_TIME_CONTRIBUTOR]` | `[CONTRIBUTOR, MEMBER, COLLABORATOR, OWNER]` |
 
 `author_association` lets you narrow the set of [associations](https://docs.github.com/en/graphql/reference/enums#commentauthorassociation) each bucket reacts to. The values allowed in each bucket are constrained to its default list. The `first_time` bucket only accepts `FIRST_TIMER` and `FIRST_TIME_CONTRIBUTOR`. The `returning` bucket only accepts `CONTRIBUTOR`, `MEMBER`, `COLLABORATOR`, and `OWNER`. Listing a value outside the allowed set fails schema validation.
 
-Use an empty list (`author_association: []`) to disable a whole bucket. Associations that fall outside both bucket lists (notably `NONE` and `MANNEQUIN`, also any value you exclude via a narrowed list) get no greeting.
+Set `pull_request: false` or `issue: false` to switch off one greeting and keep the other, for example to greet first-time contributors on pull requests only. An empty string does the same. Use an empty list (`author_association: []`) to disable a whole bucket. Associations that fall outside both bucket lists (notably `NONE` and `MANNEQUIN`, also any value you exclude via a narrowed list) get no greeting.
 
 ### Context
 

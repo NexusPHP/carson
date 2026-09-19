@@ -391,6 +391,50 @@ describe('welcome subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
+  it('switches off first-time issue greetings with issue: false', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    first_time:',
+      '      issue: false',
+      '',
+    ].join('\n'));
+
+    await probot.receive({
+      id: 'evt-first-issue-off',
+      name: 'issues',
+      payload: issuesOpenedPayload() as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('switches off returning pull request greetings with an empty message', async () => {
+    mockInstallationToken();
+    mockConfig([
+      'version: 1',
+      'subscribers:',
+      '  - welcome',
+      'settings:',
+      '  welcome:',
+      '    returning:',
+      '      pull_request: ""',
+      '',
+    ].join('\n'));
+
+    await probot.receive({
+      id: 'evt-ret-pr-off',
+      name: 'pull_request',
+      payload: prOpenedPayload({ association: 'CONTRIBUTOR' }) as never,
+    });
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   it('still greets first-timers even when returning bucket is disabled', async () => {
     mockInstallationToken();
     mockConfig([

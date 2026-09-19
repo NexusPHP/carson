@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `no-response-closer` gains `rules`: several labels, each with its own `days_until_close`, `close_message`, `exempt_labels`, and an `only` scope for issues or pull requests. The top-level keys act as defaults, and a configuration without `rules` behaves as before.
 - `no-response-closer` exposes `{{label}}` to `close_message`.
+- `welcome` accepts `false` for `pull_request` and `issue` in either bucket to switch that greeting off. An empty message, which used to post an empty comment, now does the same.
 
 ## [v1.5.0](https://github.com/NexusPHP/carson/compare/v1.4.3...v1.5.0) - 2026-09-18
 

@@ -6,15 +6,17 @@ import { z } from 'zod';
 const FIRST_TIME_ASSOCIATIONS = ['FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR'] as const;
 const RETURNING_ASSOCIATIONS = ['CONTRIBUTOR', 'MEMBER', 'COLLABORATOR', 'OWNER'] as const;
 
+const Message = z.union([z.string(), z.literal(false)]).optional();
+
 const FirstTimeBucket = z.object({
-  pull_request: z.string().optional(),
-  issue: z.string().optional(),
+  pull_request: Message,
+  issue: Message,
   author_association: z.array(z.enum(FIRST_TIME_ASSOCIATIONS)).optional(),
 });
 
 const ReturningBucket = z.object({
-  pull_request: z.string().optional(),
-  issue: z.string().optional(),
+  pull_request: Message,
+  issue: Message,
   author_association: z.array(z.enum(RETURNING_ASSOCIATIONS)).optional(),
 });
 
@@ -58,8 +60,10 @@ const bucketFor = (settings: ParsedSettings, association: string): BucketKey | n
   return null;
 };
 
-const messageFor = (settings: ParsedSettings, bucket: BucketKey, event: 'pull_request' | 'issue'): string => {
-  return settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+const messageFor = (settings: ParsedSettings, bucket: BucketKey, event: 'pull_request' | 'issue'): string | null => {
+  const message = settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+
+  return message === false || message === '' ? null : message;
 };
 
 export class WelcomeSubscriber extends Subscriber {
@@ -91,7 +95,14 @@ export class WelcomeSubscriber extends Subscriber {
 
       log.debug(`PR #${context.payload.pull_request.number}: association "${association}" resolved to bucket "${bucket}"`);
 
-      const body = interpolate(messageFor(settings, bucket, 'pull_request'), {
+      const message = messageFor(settings, bucket, 'pull_request');
+
+      if (message === null) {
+        log.debug(`PR #${context.payload.pull_request.number}: greeting for "${bucket}" pull requests is switched off, skipping`);
+        return;
+      }
+
+      const body = interpolate(message, {
         user: context.payload.pull_request.user.login,
         repo: context.payload.repository.name,
         number: context.payload.pull_request.number,
@@ -133,7 +144,14 @@ export class WelcomeSubscriber extends Subscriber {
 
       log.debug(`Issue #${issue.number}: association "${association}" resolved to bucket "${bucket}"`);
 
-      const body = interpolate(messageFor(settings, bucket, 'issue'), {
+      const message = messageFor(settings, bucket, 'issue');
+
+      if (message === null) {
+        log.debug(`Issue #${issue.number}: greeting for "${bucket}" issues is switched off, skipping`);
+        return;
+      }
+
+      const body = interpolate(message, {
         user: issue.user.login,
         repo: context.payload.repository.name,
         number: issue.number,
