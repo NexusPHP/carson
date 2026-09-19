@@ -123,7 +123,7 @@ describe('lock-old-issues subscriber', () => {
     await runScheduled(context);
 
     expect(paginateMock).toHaveBeenCalledWith('search-fn', {
-      q: 'repo:acme/widgets is:issue is:closed is:unlocked closed:<2025-10-03T00:00:00+00:00',
+      q: 'repo:acme/widgets is:issue is:closed is:unlocked closed:<2025-10-03T00:00:00Z',
       advanced_search: 'true',
       sort: 'created',
       order: 'asc',

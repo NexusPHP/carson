@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `no-response-closer` exposes `{{label}}` to `close_message`.
 - `welcome` accepts `false` for `pull_request` and `issue` in either bucket to switch that greeting off. An empty message, which used to post an empty comment, now does the same.
 
+### Fixed
+
+- Scheduled searches in `draft-policy`, `lock-old-issues`, `no-response-closer`, and `stale` sent their cutoff as `+00:00`, which reaches GitHub as a space followed by the search term `00:00`. Only items whose text contained `00:00` matched, a small fraction of the real candidates. The cutoff is now sent in the `Z` form.
+
 ## [v1.5.0](https://github.com/NexusPHP/carson/compare/v1.4.3...v1.5.0) - 2026-09-18
 
 ### Added

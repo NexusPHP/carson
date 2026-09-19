@@ -140,7 +140,7 @@ describe('no-response-closer subscriber', () => {
     await runScheduled(context);
 
     expect(context.octokit.paginate).toHaveBeenCalledWith('search-fn', {
-      q: 'repo:acme/widgets is:open label:"awaiting-info" updated:<2026-06-16T00:00:00+00:00',
+      q: 'repo:acme/widgets is:open label:"awaiting-info" updated:<2026-06-16T00:00:00Z',
       advanced_search: 'true',
       sort: 'updated',
       order: 'asc',

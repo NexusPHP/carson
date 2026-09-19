@@ -61259,7 +61259,7 @@ ${marker}`;
 };
 
 // src/github/search.ts
-var searchTimestamp = (epochMs) => `${new Date(epochMs).toISOString().slice(0, 19)}+00:00`;
+var searchTimestamp = (epochMs) => `${new Date(epochMs).toISOString().slice(0, 19)}Z`;
 
 // src/subscribers/lock-old-issues.ts
 var LOCK_REASONS = ["off-topic", "too heated", "resolved", "spam"];

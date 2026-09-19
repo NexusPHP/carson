@@ -105,7 +105,7 @@ describe('stale subscriber', () => {
       q: 'repo:acme/widgets is:open label:"stale"',
     }));
     expect(context.octokit.paginate).toHaveBeenNthCalledWith(2, 'search-fn', expect.objectContaining({
-      q: 'repo:acme/widgets is:open -label:"stale" updated:<2025-11-02T00:00:00+00:00',
+      q: 'repo:acme/widgets is:open -label:"stale" updated:<2025-11-02T00:00:00Z',
     }));
   });
 
