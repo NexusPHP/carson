@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.6.0](https://github.com/NexusPHP/carson/compare/v1.5.0...v1.6.0) - 2026-09-19
+
 ### Added
 
 - `no-response-closer` gains `rules`: several labels, each with its own `days_until_close`, `close_message`, `exempt_labels`, and an `only` scope for issues or pull requests. The top-level keys act as defaults, and a configuration without `rules` behaves as before.
