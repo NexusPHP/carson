@@ -103,6 +103,9 @@ The trigger list above covers every event Carson's bundled subscribers register.
 > [!IMPORTANT]
 > Carson uses `pull_request_target` so that secrets (and the App's PEM) are available on pull requests opened from forks. Under `pull_request_target`, GitHub Actions runs the workflow file **from the base branch**, so changes to `.github/workflows/carson.yml` in a pull request will not take effect until that PR is merged. Carson never checks out or executes PR code, so the usual `pull_request_target` footgun (running untrusted code with secrets) does not apply. The action treats `pull_request_target` and `pull_request` as the same event internally, so you can use either trigger.
 
+> [!WARNING]
+> Do not add a `concurrency` group keyed on the issue or pull request number. A group holds one running and one pending run, and `cancel-in-progress: false` protects only the running one: each newly queued run cancels the pending run before it. A pull request opened with labels already attached, as Dependabot does, fires `opened` and one `labeled` per label in the same second, so the `opened` run is often the one dropped, and every subscriber that acts on it misses the pull request. Labels added by Carson itself queue further runs into the same group. Carson's handlers are idempotent and a run takes seconds, so the workflow needs no concurrency control.
+
 Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.5.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
 
 ### External triggers (`repository_dispatch`)
