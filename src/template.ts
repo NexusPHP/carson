@@ -23,6 +23,12 @@ export const escapeMarkdown = (s: string): string => s.replace(/[\\`[\]()<>!]/g,
 /** Formats a count with its noun, adding an `s` unless the count is exactly one. */
 export const pluralize = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
+export const itemRef = (isPr: boolean, number: number, startsLine = false): string => {
+  const noun = isPr ? 'PR' : startsLine ? 'Issue' : 'issue';
+
+  return `${noun} #${number}`;
+};
+
 export const firstLine = (text: string): string => text.replace(/\n[\s\S]*/, '');
 
 export const interpolate = (template: string, context: TemplateContext): string => {

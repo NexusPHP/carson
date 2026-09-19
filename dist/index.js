@@ -60052,6 +60052,10 @@ var universalContext = () => ({
 });
 var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
 var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+var itemRef = (isPr, number4, startsLine = false) => {
+  const noun = isPr ? "PR" : startsLine ? "Issue" : "issue";
+  return `${noun} #${number4}`;
+};
 var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
 var interpolate = (template, context) => {
   const merged = { ...universalContext(), ...context };
@@ -60752,23 +60756,24 @@ var CommandsSubscriber = class extends Subscriber {
     const settings = subscriberSettings(config3, this.id, Settings3, log) ?? Settings3.parse({});
     const { owner, repo } = context.repo();
     const login = comment.user.login;
+    const ref = itemRef(issue3.pull_request !== void 0, issue3.number, true);
     const role = await roleOf(context.octokit, owner, repo, login);
     if (!settings.roles.includes(role)) {
-      log.debug(`#${issue3.number}: "${login}" has "${role}" role, commands ignored`);
+      log.debug(`${ref}: "${login}" has "${role}" role, commands ignored`);
       return;
     }
     let succeeded = 0;
     for (const command of commands) {
       if (!settings.commands.includes(command.name)) {
-        log.debug(`#${issue3.number}: /${command.name} not enabled, skipping`);
+        log.debug(`${ref}: /${command.name} not enabled, skipping`);
         continue;
       }
       try {
         await this.#execute(context, command, settings, login);
         succeeded += 1;
-        log.info(`#${issue3.number}: /${command.name} by ${login}`);
+        log.info(`${ref}: /${command.name} by ${login}`);
       } catch (error63) {
-        log.warn({ err: error63 }, `#${issue3.number}: /${command.name} failed`);
+        log.warn({ err: error63 }, `${ref}: /${command.name} failed`);
       }
     }
     if (succeeded > 0 && settings.react) {
@@ -61087,7 +61092,7 @@ var DraftPolicySubscriber = class extends Subscriber {
     let closed = 0;
     await forEachConcurrent(drafts, CONCURRENCY3, async (item) => {
       if (new Date(item.created_at).getTime() >= cutoff) {
-        log.debug(`#${item.number}: opened within the grace period, skipping`);
+        log.debug(`PR #${item.number}: opened within the grace period, skipping`);
         return;
       }
       const comments = await scheduled.octokit.paginate(scheduled.octokit.rest.issues.listComments, {
@@ -61098,7 +61103,7 @@ var DraftPolicySubscriber = class extends Subscriber {
       });
       const notice = findNotice(comments, this.id, isBotComment);
       if (notice === void 0 || new Date(notice.created_at).getTime() >= cutoff) {
-        log.debug(`#${item.number}: ${notice === void 0 ? "no draft notice" : "within grace period"}, skipping`);
+        log.debug(`PR #${item.number}: ${notice === void 0 ? "no draft notice" : "within grace period"}, skipping`);
         return;
       }
       const templateContext = {
@@ -61114,7 +61119,7 @@ var DraftPolicySubscriber = class extends Subscriber {
         body: interpolate(closeMessage, templateContext)
       });
       await scheduled.octokit.rest.issues.update({ owner, repo, issue_number: item.number, state: "closed" });
-      log.debug(`#${item.number}: Closed (draft past grace period)`);
+      log.debug(`PR #${item.number}: Closed (draft past grace period)`);
       closed += 1;
     });
     log.info(`Closed ${pluralize(closed, "draft pull request")}`);
@@ -61319,11 +61324,11 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     }
     const settings = subscriberSettings(config3, this.id, Settings7, log);
     if (!(settings?.lock_on_labels ?? []).includes(label)) {
-      log.debug(`#${issue3.number}: Label "${label}" not in lock_on_labels, skipping`);
+      log.debug(`Issue #${issue3.number}: Label "${label}" not in lock_on_labels, skipping`);
       return;
     }
     await this.#applyLock(context, issue3.number, settings?.reason ?? DEFAULT_REASON);
-    log.info(`Locked #${issue3.number} on label "${label}"`);
+    log.info(`Locked issue #${issue3.number} on label "${label}"`);
   }
   async #applyLock(context, number4, reason) {
     const { owner, repo } = context.repo();
@@ -61358,19 +61363,19 @@ var LockOldIssuesSubscriber = class extends Subscriber {
     log.debug(`Found ${pluralize(issues.length, "candidate issue")}`);
     await forEachConcurrent(issues, CONCURRENCY4, async (issue3) => {
       if (issue3.locked) {
-        log.debug(`#${issue3.number}: Already locked, skipping`);
+        log.debug(`Issue #${issue3.number}: Already locked, skipping`);
         return;
       }
       if (issue3.closed_at === null) {
-        log.debug(`#${issue3.number}: No closed_at, skipping`);
+        log.debug(`Issue #${issue3.number}: No closed_at, skipping`);
         return;
       }
       if (new Date(issue3.closed_at).getTime() > cutoff) {
-        log.debug(`#${issue3.number}: Closed too recently, skipping`);
+        log.debug(`Issue #${issue3.number}: Closed too recently, skipping`);
         return;
       }
       if (labelNames(issue3.labels).some((name) => exemptLabels.has(name))) {
-        log.debug(`#${issue3.number}: Exempt label, skipping`);
+        log.debug(`Issue #${issue3.number}: Exempt label, skipping`);
         return;
       }
       const context = {
@@ -61393,7 +61398,7 @@ var LockOldIssuesSubscriber = class extends Subscriber {
         issue_number: issue3.number,
         lock_reason: reason
       });
-      log.debug(`#${issue3.number}: Locked`);
+      log.debug(`Issue #${issue3.number}: Locked`);
       locked += 1;
     });
     log.info(`Locked ${pluralize(locked, "issue")} older than ${pluralize(days, "day")}`);
@@ -61782,19 +61787,20 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     const log = this.log();
     log.debug(`Found ${pluralize(items.length, "candidate item")} labeled "${rule.label}"`);
     await forEachConcurrent(items, CONCURRENCY5, async (item) => {
+      const isPr = item.pull_request !== void 0;
+      const ref = itemRef(isPr, item.number, true);
       if (closed.has(item.number)) {
-        log.debug(`#${item.number}: Closed by an earlier rule, skipping`);
+        log.debug(`${ref}: Closed by an earlier rule, skipping`);
         return;
       }
       if (labelNames(item.labels).some((name) => rule.exempt.has(name))) {
-        log.debug(`#${item.number}: Exempt label, skipping`);
+        log.debug(`${ref}: Exempt label, skipping`);
         return;
       }
       if (new Date(item.updated_at).getTime() > cutoff) {
-        log.debug(`#${item.number}: Recent activity, skipping`);
+        log.debug(`${ref}: Recent activity, skipping`);
         return;
       }
-      const isPr = item.pull_request !== void 0;
       const context = {
         number: item.number,
         repo,
@@ -61819,7 +61825,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
         state: "closed",
         ...isPr ? {} : { state_reason: "not_planned" }
       });
-      log.debug(`#${item.number}: Closed`);
+      log.debug(`${ref}: Closed`);
       closed.add(item.number);
       count += 1;
     });
@@ -61969,7 +61975,7 @@ var ReadOnlySubscriber = class extends Subscriber {
     const isIssue = "issue" in payload;
     const item = "issue" in payload ? payload.issue : payload.pull_request;
     if (isIssue ? !settings.issues : !settings.pull_requests) {
-      log.debug(`#${item.number}: ${isIssue ? "Issues" : "Pull requests"} not guarded, skipping`);
+      log.debug(`${itemRef(!isIssue, item.number, true)}: ${isIssue ? "Issues" : "Pull requests"} not guarded, skipping`);
       return;
     }
     const { owner, repo } = context.repo();
@@ -61994,7 +62000,7 @@ var ReadOnlySubscriber = class extends Subscriber {
       state: "closed",
       ...isIssue ? { state_reason: "not_planned" } : {}
     });
-    log.info(`Closed ${templateContext["type"]} #${item.number}`);
+    log.info(`Closed ${itemRef(!isIssue, item.number)}`);
     if (settings.lock) {
       await this.dispatch("lock", context, { number: item.number });
     }
@@ -62100,14 +62106,16 @@ var StaleSubscriber = class extends Subscriber {
   register(probot) {
     probot.on(ISSUE_ACTIVITY, async (context) => {
       const ctx = context;
-      await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);
+      const issue3 = ctx.payload.issue;
+      await this.#processActivity(ctx, itemRef(issue3.pull_request !== void 0, issue3.number), issue3.number, issue3.labels);
     });
     probot.on(PR_ACTIVITY, async (context) => {
       const ctx = context;
-      await this.#processActivity(ctx, ctx.payload.pull_request.number, ctx.payload.pull_request.labels);
+      const pr = ctx.payload.pull_request;
+      await this.#processActivity(ctx, itemRef(true, pr.number), pr.number, pr.labels);
     });
   }
-  async #processActivity(context, issueNumber, rawLabels) {
+  async #processActivity(context, ref, issueNumber, rawLabels) {
     if (context.isBot) {
       return;
     }
@@ -62137,9 +62145,9 @@ var StaleSubscriber = class extends Subscriber {
     const log = this.log();
     if (stalePost !== void 0) {
       await minimizeComment(context.octokit, stalePost.node_id, "OUTDATED");
-      log.info(`Minimized stale notice on #${issueNumber}`);
+      log.info(`Minimized stale notice on ${ref}`);
     }
-    log.info(`Removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`Removed "${staleLabel}" from ${ref} after activity`);
   }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
@@ -62188,9 +62196,10 @@ var StaleSubscriber = class extends Subscriber {
     const log = this.log();
     log.debug(`Found ${pluralize(staleItems.length, "stale item")} and ${pluralize(freshItems.length, "newly inactive item")}`);
     await forEachConcurrent(items, CONCURRENCY6, async (item) => {
+      const ref = itemRef(item.pull_request !== void 0, item.number, true);
       const names = labelNames(item.labels);
       if (names.some((name) => exemptLabels.has(name))) {
-        log.debug(`#${item.number}: Exempt label, skipping`);
+        log.debug(`${ref}: Exempt label, skipping`);
         return;
       }
       const updatedAt = new Date(item.updated_at).getTime();
@@ -62221,10 +62230,10 @@ var StaleSubscriber = class extends Subscriber {
             issue_number: item.number,
             state: "closed"
           });
-          log.debug(`#${item.number}: Closed (stale and past close cutoff)`);
+          log.debug(`${ref}: Closed (stale and past close cutoff)`);
           closed += 1;
         } else {
-          log.debug(`#${item.number}: Stale but within grace period`);
+          log.debug(`${ref}: Stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -62241,10 +62250,10 @@ var StaleSubscriber = class extends Subscriber {
 
 ${COMMENT_MARKER}`
         });
-        log.debug(`#${item.number}: Marked stale`);
+        log.debug(`${ref}: Marked stale`);
         staled += 1;
       } else {
-        log.debug(`#${item.number}: Not yet stale`);
+        log.debug(`${ref}: Not yet stale`);
       }
     });
     log.info(`Marked ${staled} stale, closed ${closed}`);
@@ -62372,6 +62381,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     const label = settings.label ?? DEFAULT_LABEL2;
     const messageTemplate = settings.message ?? DEFAULT_MESSAGE5;
     const hasLabel = item.labels.includes(label);
+    const ref = itemRef(kind === "pull_request", item.number);
     const { owner, repo } = context.repo();
     const exempt = await this.#isExempt(context, owner, repo, item.user, settings.exempt_roles ?? []);
     const violations = exempt ? [] : collectViolations(item.body, typeRules, log);
@@ -62383,7 +62393,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
           issue_number: item.number,
           name: label
         });
-        log.info(`Removed "${label}" from #${item.number}`);
+        log.info(`Removed "${label}" from ${ref}`);
       }
       return;
     }
@@ -62404,7 +62414,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
         violations: renderViolations(violations)
       });
       this.notice(context, item.number, body);
-      log.info(`Posted template-enforcer comment on #${item.number}`);
+      log.info(`Posted template-enforcer comment on ${ref}`);
     }
     if (!hasLabel) {
       await context.octokit.rest.issues.addLabels({
@@ -62413,7 +62423,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
         issue_number: item.number,
         labels: [label]
       });
-      log.info(`Added "${label}" to #${item.number}`);
+      log.info(`Added "${label}" to ${ref}`);
     }
   }
   async #isExempt(context, owner, repo, user, exemptRoles) {
@@ -62901,7 +62911,7 @@ var WelcomeSubscriber = class extends Subscriber {
     }
     const { settings } = enabled;
     const log = this.log();
-    const item = `${opened.kind === "issue" ? "Issue" : "PR"} #${opened.number}`;
+    const item = itemRef(opened.kind === "pull_request", opened.number, true);
     if (usesAssociations(settings)) {
       log.warn("author_association is no longer supported: first-time status is looked up instead, and exempt_roles skips maintainers. An empty list still switches its bucket off.");
     }
@@ -62954,7 +62964,7 @@ var WelcomeSubscriber = class extends Subscriber {
       title: opened.title
     });
     this.notice(context, opened.number, body);
-    log.info(`Commented on ${opened.kind === "issue" ? "issue" : "PR"} #${opened.number}`);
+    log.info(`Commented on ${itemRef(opened.kind === "pull_request", opened.number)}`);
   }
   // The new item is excluded by date because the search index may or may not hold it yet.
   async #bucketOf(context, opened) {

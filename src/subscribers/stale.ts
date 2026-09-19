@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment, noticeMarker } from '../github/notices.js';
-import { interpolate, pluralize } from '../template.js';
+import { interpolate, itemRef, pluralize } from '../template.js';
 import { type LabelLike, labelNames } from '../github/labels.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
@@ -48,17 +48,22 @@ export class StaleSubscriber extends Subscriber {
   public override register(probot: Probot): void {
     probot.on(ISSUE_ACTIVITY, async (context): Promise<void> => {
       const ctx = context as Context<IssueActivityEvent>;
-      await this.#processActivity(ctx, ctx.payload.issue.number, ctx.payload.issue.labels);
+      const issue = ctx.payload.issue;
+
+      await this.#processActivity(ctx, itemRef(issue.pull_request !== undefined, issue.number), issue.number, issue.labels);
     });
 
     probot.on(PR_ACTIVITY, async (context): Promise<void> => {
       const ctx = context as Context<PrActivityEvent>;
-      await this.#processActivity(ctx, ctx.payload.pull_request.number, ctx.payload.pull_request.labels);
+      const pr = ctx.payload.pull_request;
+
+      await this.#processActivity(ctx, itemRef(true, pr.number), pr.number, pr.labels);
     });
   }
 
   async #processActivity(
     context: Context<IssueActivityEvent | PrActivityEvent>,
+    ref: string,
     issueNumber: number,
     rawLabels: readonly LabelLike[] | undefined,
   ): Promise<void> {
@@ -99,10 +104,10 @@ export class StaleSubscriber extends Subscriber {
 
     if (stalePost !== undefined) {
       await minimizeComment(context.octokit, stalePost.node_id, 'OUTDATED');
-      log.info(`Minimized stale notice on #${issueNumber}`);
+      log.info(`Minimized stale notice on ${ref}`);
     }
 
-    log.info(`Removed "${staleLabel}" from #${issueNumber} after activity`);
+    log.info(`Removed "${staleLabel}" from ${ref} after activity`);
   }
 
   public override registerScheduled(registrar: ScheduledRegistrar): void {
@@ -160,10 +165,11 @@ export class StaleSubscriber extends Subscriber {
     log.debug(`Found ${pluralize(staleItems.length, 'stale item')} and ${pluralize(freshItems.length, 'newly inactive item')}`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
+      const ref = itemRef(item.pull_request !== undefined, item.number, true);
       const names = labelNames(item.labels);
 
       if (names.some((name) => exemptLabels.has(name))) {
-        log.debug(`#${item.number}: Exempt label, skipping`);
+        log.debug(`${ref}: Exempt label, skipping`);
         return;
       }
 
@@ -198,10 +204,10 @@ export class StaleSubscriber extends Subscriber {
             issue_number: item.number,
             state: 'closed',
           });
-          log.debug(`#${item.number}: Closed (stale and past close cutoff)`);
+          log.debug(`${ref}: Closed (stale and past close cutoff)`);
           closed += 1;
         } else {
-          log.debug(`#${item.number}: Stale but within grace period`);
+          log.debug(`${ref}: Stale but within grace period`);
         }
       } else if (updatedAt < staleCutoff) {
         await scheduled.octokit.rest.issues.addLabels({
@@ -216,10 +222,10 @@ export class StaleSubscriber extends Subscriber {
           issue_number: item.number,
           body: `${interpolate(staleMessage, context)}\n\n${COMMENT_MARKER}`,
         });
-        log.debug(`#${item.number}: Marked stale`);
+        log.debug(`${ref}: Marked stale`);
         staled += 1;
       } else {
-        log.debug(`#${item.number}: Not yet stale`);
+        log.debug(`${ref}: Not yet stale`);
       }
     });
 

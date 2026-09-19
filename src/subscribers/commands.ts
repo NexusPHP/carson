@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
+import { itemRef } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -115,10 +116,11 @@ export class CommandsSubscriber extends Subscriber {
     const settings = subscriberSettings(config, this.id, Settings, log) ?? Settings.parse({});
     const { owner, repo } = context.repo();
     const login = comment.user.login;
+    const ref = itemRef(issue.pull_request !== undefined, issue.number, true);
     const role = await roleOf(context.octokit, owner, repo, login);
 
     if (!(settings.roles as readonly string[]).includes(role)) {
-      log.debug(`#${issue.number}: "${login}" has "${role}" role, commands ignored`);
+      log.debug(`${ref}: "${login}" has "${role}" role, commands ignored`);
       return;
     }
 
@@ -126,16 +128,16 @@ export class CommandsSubscriber extends Subscriber {
 
     for (const command of commands) {
       if (!settings.commands.includes(command.name)) {
-        log.debug(`#${issue.number}: /${command.name} not enabled, skipping`);
+        log.debug(`${ref}: /${command.name} not enabled, skipping`);
         continue;
       }
 
       try {
         await this.#execute(context, command, settings, login);
         succeeded += 1;
-        log.info(`#${issue.number}: /${command.name} by ${login}`);
+        log.info(`${ref}: /${command.name} by ${login}`);
       } catch (error) {
-        log.warn({ err: error }, `#${issue.number}: /${command.name} failed`);
+        log.warn({ err: error }, `${ref}: /${command.name} failed`);
       }
     }
 

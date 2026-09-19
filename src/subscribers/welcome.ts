@@ -1,9 +1,9 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment } from '../github/notices.js';
+import { interpolate, itemRef } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
-import { interpolate } from '../template.js';
 import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
 
@@ -136,7 +136,7 @@ export class WelcomeSubscriber extends Subscriber {
 
     const { settings } = enabled;
     const log = this.log();
-    const item = `${opened.kind === 'issue' ? 'Issue' : 'PR'} #${opened.number}`;
+    const item = itemRef(opened.kind === 'pull_request', opened.number, true);
 
     if (usesAssociations(settings)) {
       log.warn('author_association is no longer supported: first-time status is looked up instead, and exempt_roles skips maintainers. An empty list still switches its bucket off.');
@@ -210,7 +210,7 @@ export class WelcomeSubscriber extends Subscriber {
 
     this.notice(context, opened.number, body);
 
-    log.info(`Commented on ${opened.kind === 'issue' ? 'issue' : 'PR'} #${opened.number}`);
+    log.info(`Commented on ${itemRef(opened.kind === 'pull_request', opened.number)}`);
   }
 
   // The new item is excluded by date because the search index may or may not hold it yet.

@@ -121,7 +121,7 @@ export class DraftPolicySubscriber extends Subscriber {
 
     await forEachConcurrent(drafts, CONCURRENCY, async (item) => {
       if (new Date(item.created_at).getTime() >= cutoff) {
-        log.debug(`#${item.number}: opened within the grace period, skipping`);
+        log.debug(`PR #${item.number}: opened within the grace period, skipping`);
 
         return;
       }
@@ -135,7 +135,7 @@ export class DraftPolicySubscriber extends Subscriber {
       const notice = findNotice(comments, this.id, isBotComment);
 
       if (notice === undefined || new Date(notice.created_at).getTime() >= cutoff) {
-        log.debug(`#${item.number}: ${notice === undefined ? 'no draft notice' : 'within grace period'}, skipping`);
+        log.debug(`PR #${item.number}: ${notice === undefined ? 'no draft notice' : 'within grace period'}, skipping`);
 
         return;
       }
@@ -154,7 +154,7 @@ export class DraftPolicySubscriber extends Subscriber {
         body: interpolate(closeMessage, templateContext),
       });
       await scheduled.octokit.rest.issues.update({ owner, repo, issue_number: item.number, state: 'closed' });
-      log.debug(`#${item.number}: Closed (draft past grace period)`);
+      log.debug(`PR #${item.number}: Closed (draft past grace period)`);
       closed += 1;
     });
 

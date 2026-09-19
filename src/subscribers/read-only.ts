@@ -1,7 +1,7 @@
 import type { Context, Probot } from 'probot';
+import { interpolate, itemRef } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
-import { interpolate } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
@@ -51,7 +51,7 @@ export class ReadOnlySubscriber extends Subscriber {
     const item = 'issue' in payload ? payload.issue : payload.pull_request;
 
     if (isIssue ? !settings.issues : !settings.pull_requests) {
-      log.debug(`#${item.number}: ${isIssue ? 'Issues' : 'Pull requests'} not guarded, skipping`);
+      log.debug(`${itemRef(!isIssue, item.number, true)}: ${isIssue ? 'Issues' : 'Pull requests'} not guarded, skipping`);
       return;
     }
 
@@ -82,7 +82,7 @@ export class ReadOnlySubscriber extends Subscriber {
       ...(isIssue ? { state_reason: 'not_planned' as const } : {}),
     });
 
-    log.info(`Closed ${templateContext['type']} #${item.number}`);
+    log.info(`Closed ${itemRef(!isIssue, item.number)}`);
 
     if (settings.lock) {
       await this.dispatch('lock', context, { number: item.number });

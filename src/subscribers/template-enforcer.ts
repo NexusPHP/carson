@@ -1,9 +1,9 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment } from '../github/notices.js';
+import { interpolate, itemRef } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
-import { interpolate } from '../template.js';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
@@ -179,6 +179,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
     const label = settings.label ?? DEFAULT_LABEL;
     const messageTemplate = settings.message ?? DEFAULT_MESSAGE;
     const hasLabel = item.labels.includes(label);
+    const ref = itemRef(kind === 'pull_request', item.number);
     const { owner, repo } = context.repo();
     const exempt = await this.#isExempt(context, owner, repo, item.user, settings.exempt_roles ?? []);
     const violations = exempt ? [] : collectViolations(item.body, typeRules, log);
@@ -191,7 +192,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
           issue_number: item.number,
           name: label,
         });
-        log.info(`Removed "${label}" from #${item.number}`);
+        log.info(`Removed "${label}" from ${ref}`);
       }
 
       return;
@@ -216,7 +217,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
       });
 
       this.notice(context, item.number, body);
-      log.info(`Posted template-enforcer comment on #${item.number}`);
+      log.info(`Posted template-enforcer comment on ${ref}`);
     }
 
     if (!hasLabel) {
@@ -226,7 +227,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
         issue_number: item.number,
         labels: [label],
       });
-      log.info(`Added "${label}" to #${item.number}`);
+      log.info(`Added "${label}" to ${ref}`);
     }
   }
 

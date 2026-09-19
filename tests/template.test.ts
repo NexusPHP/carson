@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { escapeMarkdown, interpolate, pluralize } from '../src/template.js';
+import { escapeMarkdown, interpolate, itemRef, pluralize } from '../src/template.js';
 import { appIdentity } from '../src/app-identity.js';
 
 describe('interpolate', () => {
@@ -76,6 +76,18 @@ describe('escapeMarkdown', () => {
 
   it('leaves cosmetic markdown untouched', () => {
     expect(escapeMarkdown('*bold* _em_ ~strike~ plain')).toBe('*bold* _em_ ~strike~ plain');
+  });
+});
+
+describe('itemRef', () => {
+  it('names a pull request the same way in any position', () => {
+    expect(itemRef(true, 8)).toBe('PR #8');
+    expect(itemRef(true, 8, true)).toBe('PR #8');
+  });
+
+  it('capitalizes an issue only at the start of a line', () => {
+    expect(itemRef(false, 8)).toBe('issue #8');
+    expect(itemRef(false, 8, true)).toBe('Issue #8');
   });
 });
 

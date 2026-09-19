@@ -83,12 +83,12 @@ export class LockOldIssuesSubscriber extends Subscriber {
     const settings = subscriberSettings(config, this.id, Settings, log);
 
     if (!(settings?.lock_on_labels ?? []).includes(label)) {
-      log.debug(`#${issue.number}: Label "${label}" not in lock_on_labels, skipping`);
+      log.debug(`Issue #${issue.number}: Label "${label}" not in lock_on_labels, skipping`);
       return;
     }
 
     await this.#applyLock(context, issue.number, settings?.reason ?? DEFAULT_REASON);
-    log.info(`Locked #${issue.number} on label "${label}"`);
+    log.info(`Locked issue #${issue.number} on label "${label}"`);
   }
 
   async #applyLock(context: ActionContext, number: number, reason: (typeof LOCK_REASONS)[number]): Promise<void> {
@@ -132,22 +132,22 @@ export class LockOldIssuesSubscriber extends Subscriber {
 
     await forEachConcurrent(issues, CONCURRENCY, async (issue) => {
       if (issue.locked) {
-        log.debug(`#${issue.number}: Already locked, skipping`);
+        log.debug(`Issue #${issue.number}: Already locked, skipping`);
         return;
       }
 
       if (issue.closed_at === null) {
-        log.debug(`#${issue.number}: No closed_at, skipping`);
+        log.debug(`Issue #${issue.number}: No closed_at, skipping`);
         return;
       }
 
       if (new Date(issue.closed_at).getTime() > cutoff) {
-        log.debug(`#${issue.number}: Closed too recently, skipping`);
+        log.debug(`Issue #${issue.number}: Closed too recently, skipping`);
         return;
       }
 
       if (labelNames(issue.labels).some((name) => exemptLabels.has(name))) {
-        log.debug(`#${issue.number}: Exempt label, skipping`);
+        log.debug(`Issue #${issue.number}: Exempt label, skipping`);
         return;
       }
 
@@ -174,7 +174,7 @@ export class LockOldIssuesSubscriber extends Subscriber {
         issue_number: issue.number,
         lock_reason: reason,
       });
-      log.debug(`#${issue.number}: Locked`);
+      log.debug(`Issue #${issue.number}: Locked`);
       locked += 1;
     });
 

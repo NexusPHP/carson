@@ -1,4 +1,4 @@
-import { interpolate, pluralize } from '../template.js';
+import { interpolate, itemRef, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import { forEachConcurrent } from '../concurrency.js';
@@ -137,25 +137,26 @@ export class NoResponseCloserSubscriber extends Subscriber {
     log.debug(`Found ${pluralize(items.length, 'candidate item')} labeled "${rule.label}"`);
 
     await forEachConcurrent(items, CONCURRENCY, async (item) => {
+      const isPr = item.pull_request !== undefined;
+      const ref = itemRef(isPr, item.number, true);
+
       if (closed.has(item.number)) {
-        log.debug(`#${item.number}: Closed by an earlier rule, skipping`);
+        log.debug(`${ref}: Closed by an earlier rule, skipping`);
 
         return;
       }
 
       if (labelNames(item.labels).some((name) => rule.exempt.has(name))) {
-        log.debug(`#${item.number}: Exempt label, skipping`);
+        log.debug(`${ref}: Exempt label, skipping`);
 
         return;
       }
 
       if (new Date(item.updated_at).getTime() > cutoff) {
-        log.debug(`#${item.number}: Recent activity, skipping`);
+        log.debug(`${ref}: Recent activity, skipping`);
 
         return;
       }
-
-      const isPr = item.pull_request !== undefined;
 
       const context: Record<string, string | number> = {
         number: item.number,
@@ -185,7 +186,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
         ...(isPr ? {} : { state_reason: 'not_planned' as const }),
       });
 
-      log.debug(`#${item.number}: Closed`);
+      log.debug(`${ref}: Closed`);
       closed.add(item.number);
       count += 1;
     });
