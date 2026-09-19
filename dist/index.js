@@ -70877,6 +70877,7 @@ import { readFile } from "node:fs/promises";
 var LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
 var isLogLevel = (value) => LOG_LEVELS.includes(value);
 var main = async () => {
+  const startedAt = Date.now();
   const appId = getInput("app_id", { required: true });
   const privateKey = getInput("private_key", { required: true });
   const webhookSecret = getInput("webhook_secret");
@@ -70926,35 +70927,42 @@ var main = async () => {
   if (appIdentity.current !== null) {
     log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
-  if (eventName === "schedule") {
-    log.info("Received schedule event");
-    const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
-    if (result.failed) {
-      handlerFailed = true;
+  let completed = false;
+  try {
+    if (eventName === "schedule") {
+      log.info("Received schedule event");
+      const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
+      if (result.failed) {
+        handlerFailed = true;
+      }
+    } else {
+      const name = eventName === "pull_request_target" ? "pull_request" : eventName;
+      const parsed = parseRepository(repository);
+      if (parsed === null) {
+        setFailed(INVALID_REPOSITORY_MESSAGE);
+        return;
+      }
+      const { owner, repo } = parsed;
+      const appOctokit = await probot.auth();
+      const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+      const action = payload.action;
+      const eventLabel = typeof action === "string" ? `${name}.${action}` : name;
+      log.info(`Received ${eventLabel} event`);
+      log.debug(`Resolved installation ${installation.id}`);
+      const enrichedPayload = {
+        ...payload,
+        installation: { id: installation.id }
+      };
+      await probot.receive({
+        id: runId,
+        name,
+        payload: enrichedPayload
+      });
     }
-  } else {
-    const name = eventName === "pull_request_target" ? "pull_request" : eventName;
-    const parsed = parseRepository(repository);
-    if (parsed === null) {
-      setFailed(INVALID_REPOSITORY_MESSAGE);
-      return;
-    }
-    const { owner, repo } = parsed;
-    const appOctokit = await probot.auth();
-    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-    const action = payload.action;
-    const eventLabel = typeof action === "string" ? `${name}.${action}` : name;
-    log.info(`Received ${eventLabel} event`);
-    log.debug(`Resolved installation ${installation.id}`);
-    const enrichedPayload = {
-      ...payload,
-      installation: { id: installation.id }
-    };
-    await probot.receive({
-      id: runId,
-      name,
-      payload: enrichedPayload
-    });
+    completed = true;
+  } finally {
+    const outcome = completed && !handlerFailed ? "Finished" : "Finished with failures";
+    log.info(`${outcome} in ${((Date.now() - startedAt) / 1e3).toFixed(1)}s`);
   }
   if (handlerFailed) {
     setFailed("One or more subscribers failed");

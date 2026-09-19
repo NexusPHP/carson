@@ -16,6 +16,7 @@ const isLogLevel = (value: string): value is LogLevel =>
   (LOG_LEVELS as readonly string[]).includes(value);
 
 const main = async (): Promise<void> => {
+  const startedAt = Date.now();
   const appId = core.getInput('app_id', { required: true });
   const privateKey = core.getInput('private_key', { required: true });
   const webhookSecret = core.getInput('webhook_secret');
@@ -79,42 +80,52 @@ const main = async (): Promise<void> => {
     log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
 
-  if (eventName === 'schedule') {
-    log.info('Received schedule event');
-    const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
+  let completed = false;
 
-    if (result.failed) {
-      handlerFailed = true;
+  try {
+    if (eventName === 'schedule') {
+      log.info('Received schedule event');
+      const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
+
+      if (result.failed) {
+        handlerFailed = true;
+      }
+    } else {
+      // pull_request_target has the same payload as pull_request. Route both
+      // to the same handlers so subscribers register one event name.
+      const name = eventName === 'pull_request_target' ? 'pull_request' : eventName;
+      // GITHUB_EVENT_PATH payloads omit the installation key that Probot needs
+      // to mint a per-installation token, so resolve it from the repository.
+      const parsed = parseRepository(repository);
+
+      if (parsed === null) {
+        core.setFailed(INVALID_REPOSITORY_MESSAGE);
+        return;
+      }
+
+      const { owner, repo } = parsed;
+      const appOctokit = await probot.auth();
+      const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+      const action = (payload as { action?: unknown }).action;
+      const eventLabel = typeof action === 'string' ? `${name}.${action}` : name;
+      log.info(`Received ${eventLabel} event`);
+      log.debug(`Resolved installation ${installation.id}`);
+      const enrichedPayload = {
+        ...(payload as Record<string, unknown>),
+        installation: { id: installation.id },
+      };
+      await probot.receive({
+        id: runId,
+        name,
+        payload: enrichedPayload,
+      } as EmitterWebhookEvent);
     }
-  } else {
-    // pull_request_target has the same payload as pull_request. Route both
-    // to the same handlers so subscribers register one event name.
-    const name = eventName === 'pull_request_target' ? 'pull_request' : eventName;
-    // GITHUB_EVENT_PATH payloads omit the installation key that Probot needs
-    // to mint a per-installation token, so resolve it from the repository.
-    const parsed = parseRepository(repository);
 
-    if (parsed === null) {
-      core.setFailed(INVALID_REPOSITORY_MESSAGE);
-      return;
-    }
+    completed = true;
+  } finally {
+    const outcome = completed && !handlerFailed ? 'Finished' : 'Finished with failures';
 
-    const { owner, repo } = parsed;
-    const appOctokit = await probot.auth();
-    const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-    const action = (payload as { action?: unknown }).action;
-    const eventLabel = typeof action === 'string' ? `${name}.${action}` : name;
-    log.info(`Received ${eventLabel} event`);
-    log.debug(`Resolved installation ${installation.id}`);
-    const enrichedPayload = {
-      ...(payload as Record<string, unknown>),
-      installation: { id: installation.id },
-    };
-    await probot.receive({
-      id: runId,
-      name,
-      payload: enrichedPayload,
-    } as EmitterWebhookEvent);
+    log.info(`${outcome} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
   }
 
   if (handlerFailed) {
