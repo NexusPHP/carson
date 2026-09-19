@@ -1,4 +1,5 @@
 import type { Context, Probot } from 'probot';
+import { findNotice, isBotComment } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
@@ -20,7 +21,7 @@ const Settings = z.object({
   exempt_roles: z.array(z.enum(ROLES)).optional(),
 });
 
-const PR_EVENTS = ['pull_request.opened'] satisfies EmitterWebhookEventName[];
+const PR_EVENTS = ['pull_request.opened', 'pull_request.ready_for_review'] satisfies EmitterWebhookEventName[];
 const ISSUE_EVENTS = ['issues.opened'] satisfies EmitterWebhookEventName[];
 const BUCKETS = ['first_time', 'returning'] as const;
 
@@ -35,6 +36,7 @@ interface Opened {
   login: string;
   title: string;
   createdAt: string;
+  mayBeGreeted: boolean;
 }
 
 const DEFAULT_MESSAGES: Readonly<Record<BucketKey, Record<ItemKind, string>>> = {
@@ -83,6 +85,13 @@ export class WelcomeSubscriber extends Subscriber {
       }
 
       const pr = context.payload.pull_request;
+      const becameReady = context.payload.action === 'ready_for_review';
+
+      if (!becameReady && pr.draft === true) {
+        this.log().debug(`PR #${pr.number}: draft, greeting waits until it is ready for review`);
+
+        return;
+      }
 
       await this.#greet(context, {
         kind: 'pull_request',
@@ -90,6 +99,7 @@ export class WelcomeSubscriber extends Subscriber {
         login: pr.user.login,
         title: pr.title,
         createdAt: pr.created_at,
+        mayBeGreeted: becameReady,
       });
     });
 
@@ -112,6 +122,7 @@ export class WelcomeSubscriber extends Subscriber {
         login: issue.user.login,
         title: issue.title,
         createdAt: issue.created_at,
+        mayBeGreeted: false,
       });
     });
   }
@@ -143,6 +154,22 @@ export class WelcomeSubscriber extends Subscriber {
     }
 
     const { owner, repo } = context.repo();
+
+    if (opened.mayBeGreeted) {
+      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: opened.number,
+        per_page: 100,
+      });
+
+      if (findNotice(comments, this.id, isBotComment) !== undefined) {
+        log.debug(`${item}: already greeted, skipping`);
+
+        return;
+      }
+    }
+
     const exemptRoles: readonly string[] = settings.exempt_roles ?? [];
 
     if (exemptRoles.length > 0) {

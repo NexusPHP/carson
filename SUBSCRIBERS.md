@@ -1336,8 +1336,10 @@ on:
 
 Greets contributors on pull requests and issues. First-time and returning contributors are configured independently.
 
-**Triggers**: `pull_request.opened`, `issues.opened`
+**Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, `issues.opened`
 **Permissions**: `issues: write`, `pull_requests: write`
+
+A pull request opened as a draft is not greeted until it is marked ready for review, so a message about reviewers does not arrive while the author is still working. A pull request that goes back to draft and becomes ready again is not greeted twice: on `ready_for_review` Carson first looks for its earlier welcome notice.
 
 Carson sorts the author into one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
 

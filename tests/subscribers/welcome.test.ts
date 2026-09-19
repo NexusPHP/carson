@@ -62,6 +62,8 @@ const mockComment = (number: number, expected: string): nock.Scope =>
     .reply(201, {});
 
 interface PayloadOverrides {
+  action?: 'opened' | 'ready_for_review';
+  draft?: boolean;
   senderType?: string;
   user?: { login: string } | null;
   title?: string;
@@ -69,14 +71,21 @@ interface PayloadOverrides {
 
 const opened = (overrides: PayloadOverrides, number: number, title: string): Record<string, unknown> => ({
   number,
+  draft: overrides.draft ?? false,
   user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
   title: overrides.title ?? title,
   created_at: '2026-09-19T08:00:00Z',
   labels: [],
 });
 
+const mockComments = (bodies: string[]): nock.Scope =>
+  nock(API)
+    .get(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`)
+    .query({ per_page: '100' })
+    .reply(200, bodies.map((body, i) => ({ id: 9000 + i, body, user: { login: 'carson[bot]', type: 'Bot' } })));
+
 const prOpenedPayload = (overrides: PayloadOverrides = {}): Record<string, unknown> => ({
-  action: 'opened',
+  action: overrides.action ?? 'opened',
   installation: { id: INSTALLATION_ID },
   pull_request: opened(overrides, PR_NUMBER, 'Fix the thing'),
   repository: { owner: { login: 'acme' }, name: 'widgets' },
@@ -280,6 +289,41 @@ describe('welcome subscriber (via app)', () => {
     await expect(receivePr('evt-lookup-fails')).resolves.toBeUndefined();
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  describe('draft pull requests', () => {
+    it('does not greet a pull request opened as a draft', async () => {
+      mockInstallationToken();
+      mockConfig(enabledOnlyYaml);
+
+      await receivePr('evt-draft-opened', { draft: true });
+
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('greets when the pull request becomes ready for review', async () => {
+      mockInstallationToken();
+      mockConfig(enabledOnlyYaml);
+      mockComments(['An unrelated comment']);
+      mockEarlierItems('pr', 0);
+      const commentScope = mockComment(PR_NUMBER, 'Thanks for opening your first pull request, @octocat!');
+
+      await receivePr('evt-ready', { action: 'ready_for_review' });
+
+      expect(commentScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('does not greet again when a welcome notice is already on the pull request', async () => {
+      mockInstallationToken();
+      mockConfig(enabledOnlyYaml);
+      const commentsScope = mockComments([`Thanks for opening your first pull request, @octocat!\n\n${MARKER}`]);
+
+      await receivePr('evt-ready-again', { action: 'ready_for_review' });
+
+      expect(commentsScope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
   });
 
   describe('exempt_roles', () => {

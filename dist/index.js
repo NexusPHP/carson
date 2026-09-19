@@ -62823,7 +62823,7 @@ var Settings21 = external_exports.object({
   returning: external_exports.union([Bucket, external_exports.literal(false)]).optional(),
   exempt_roles: external_exports.array(external_exports.enum(ROLES)).optional()
 });
-var PR_EVENTS13 = ["pull_request.opened"];
+var PR_EVENTS13 = ["pull_request.opened", "pull_request.ready_for_review"];
 var ISSUE_EVENTS3 = ["issues.opened"];
 var BUCKETS = ["first_time", "returning"];
 var DEFAULT_MESSAGES = {
@@ -62861,12 +62861,18 @@ var WelcomeSubscriber = class extends Subscriber {
         return;
       }
       const pr = context.payload.pull_request;
+      const becameReady = context.payload.action === "ready_for_review";
+      if (!becameReady && pr.draft === true) {
+        this.log().debug(`PR #${pr.number}: draft, greeting waits until it is ready for review`);
+        return;
+      }
       await this.#greet(context, {
         kind: "pull_request",
         number: pr.number,
         login: pr.user.login,
         title: pr.title,
-        createdAt: pr.created_at
+        createdAt: pr.created_at,
+        mayBeGreeted: becameReady
       });
     });
     probot.on(ISSUE_EVENTS3, async (context) => {
@@ -62883,7 +62889,8 @@ var WelcomeSubscriber = class extends Subscriber {
         number: issue3.number,
         login: issue3.user.login,
         title: issue3.title,
-        createdAt: issue3.created_at
+        createdAt: issue3.created_at,
+        mayBeGreeted: false
       });
     });
   }
@@ -62907,6 +62914,18 @@ var WelcomeSubscriber = class extends Subscriber {
       return;
     }
     const { owner, repo } = context.repo();
+    if (opened.mayBeGreeted) {
+      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: opened.number,
+        per_page: 100
+      });
+      if (findNotice(comments, this.id, isBotComment) !== void 0) {
+        log.debug(`${item}: already greeted, skipping`);
+        return;
+      }
+    }
     const exemptRoles = settings.exempt_roles ?? [];
     if (exemptRoles.length > 0) {
       const role = await roleOf(context.octokit, owner, repo, opened.login);
