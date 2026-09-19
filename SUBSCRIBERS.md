@@ -1339,21 +1339,30 @@ Greets contributors on pull requests and issues. First-time and returning contri
 **Triggers**: `pull_request.opened`, `issues.opened`
 **Permissions**: `issues: write`, `pull_requests: write`
 
-Carson resolves the author's `author_association` to one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
+Carson sorts the author into one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
+
+The bucket comes from one search request that counts the author's earlier items of the same type in the repository: no earlier pull request makes a pull request author first time, and no earlier issue makes an issue author first time, merged or not, open or closed. Someone with ten issues who opens their first pull request is first time for that pull request. This differs from GitHub's own "First-time contributor" badge, which stays until a commit is merged. The request is skipped when the answer cannot change the outcome: both greetings for the event are off, or both buckets share one message. If the request fails, the greeting is skipped with a warning and the run does not fail.
+
+`exempt_roles` lists repository roles that are never greeted, typically `[admin, maintain, write]` to leave the team alone. When it is non-empty, the author's role is looked up via `repos.getCollaboratorPermissionLevel` before anything else, and an exempt author costs no search request.
 
 ### Settings
 
-`settings.welcome` has two parallel sub-objects, `first_time` and `returning`, each with the same shape:
+| Key | Type | Default |
+| --- | --- | --- |
+| `first_time` | bucket object (see below), or `false` to switch the bucket off | default messages |
+| `returning` | bucket object, or `false` to switch the bucket off | default messages |
+| `exempt_roles` | array of `admin`, `maintain`, `write`, `triage`, `read` | `[]` (no role lookup) |
+
+Each bucket object:
 
 | Key | Type | `first_time` default | `returning` default |
 | --- | --- | --- | --- |
 | `pull_request` | string, or `false` for no greeting | `Thanks for opening your first pull request, @{{user}}!` | `Thanks for the pull request, @{{user}}!` |
 | `issue` | string, or `false` for no greeting | `Thanks for opening your first issue, @{{user}}!` | `Thanks for filing this, @{{user}}!` |
-| `author_association` | array | `[FIRST_TIMER, FIRST_TIME_CONTRIBUTOR]` | `[CONTRIBUTOR, MEMBER, COLLABORATOR, OWNER]` |
 
-`author_association` lets you narrow the set of [associations](https://docs.github.com/en/graphql/reference/enums#commentauthorassociation) each bucket reacts to. The values allowed in each bucket are constrained to its default list. The `first_time` bucket only accepts `FIRST_TIMER` and `FIRST_TIME_CONTRIBUTOR`. The `returning` bucket only accepts `CONTRIBUTOR`, `MEMBER`, `COLLABORATOR`, and `OWNER`. Listing a value outside the allowed set fails schema validation.
+Set `pull_request: false` or `issue: false` to switch off one greeting and keep the other, for example to greet first-time contributors on pull requests only. An empty string does the same. Set the bucket itself to `false` to switch off both.
 
-Set `pull_request: false` or `issue: false` to switch off one greeting and keep the other, for example to greet first-time contributors on pull requests only. An empty string does the same. Use an empty list (`author_association: []`) to disable a whole bucket. Associations that fall outside both bucket lists (notably `NONE` and `MANNEQUIN`, also any value you exclude via a narrowed list) get no greeting.
+`author_association` is no longer supported. GitHub reports the first-time values on pull requests only, so issue authors were almost never greeted, and it reports private organization members to an App as `CONTRIBUTOR` or `NONE`. A leftover list is ignored with a warning, except that an empty list still switches its bucket off, so a bucket disabled that way stays disabled. Prefer `first_time: false` or `returning: false`.
 
 ### Context
 
@@ -1377,5 +1386,6 @@ settings:
       issue: "Hi @{{user}}, thanks for filing your first issue."
     returning:
       pull_request: "Thanks for the PR, @{{user}}!"
-      author_association: [CONTRIBUTOR, COLLABORATOR]
+      issue: false
+    exempt_roles: [admin, maintain, write]
 ```

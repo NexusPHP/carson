@@ -300,7 +300,7 @@ describe('unsupported-branch subscriber (via app)', () => {
 
   it('does nothing when unsupported-branch is not enabled', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig('version: 1\nsubscribers:\n  - issue-intake\n');
 
     await probot.receive({
       id: 'evt-ub-disabled',

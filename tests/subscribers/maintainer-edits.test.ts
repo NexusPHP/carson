@@ -231,7 +231,7 @@ describe('maintainer-edits subscriber (via app)', () => {
 
   it('does nothing when maintainer-edits is not enabled', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig('version: 1\nsubscribers:\n  - issue-intake\n');
 
     await probot.receive({
       id: 'evt-me-disabled',

@@ -1,34 +1,43 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import { roleOf, ROLES } from '../github/roles.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { interpolate } from '../template.js';
+import { searchTimestamp } from '../github/search.js';
 import { z } from 'zod';
-
-const FIRST_TIME_ASSOCIATIONS = ['FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR'] as const;
-const RETURNING_ASSOCIATIONS = ['CONTRIBUTOR', 'MEMBER', 'COLLABORATOR', 'OWNER'] as const;
 
 const Message = z.union([z.string(), z.literal(false)]).optional();
 
-const FirstTimeBucket = z.object({
+const Bucket = z.object({
   pull_request: Message,
   issue: Message,
-  author_association: z.array(z.enum(FIRST_TIME_ASSOCIATIONS)).optional(),
-});
-
-const ReturningBucket = z.object({
-  pull_request: Message,
-  issue: Message,
-  author_association: z.array(z.enum(RETURNING_ASSOCIATIONS)).optional(),
+  author_association: z.unknown().optional(),
 });
 
 const Settings = z.object({
-  first_time: FirstTimeBucket.optional(),
-  returning: ReturningBucket.optional(),
+  first_time: z.union([Bucket, z.literal(false)]).optional(),
+  returning: z.union([Bucket, z.literal(false)]).optional(),
+  exempt_roles: z.array(z.enum(ROLES)).optional(),
 });
 
-type BucketKey = 'first_time' | 'returning';
+const PR_EVENTS = ['pull_request.opened'] satisfies EmitterWebhookEventName[];
+const ISSUE_EVENTS = ['issues.opened'] satisfies EmitterWebhookEventName[];
+const BUCKETS = ['first_time', 'returning'] as const;
+
+type WelcomeContext = Context<(typeof PR_EVENTS)[number] | (typeof ISSUE_EVENTS)[number]>;
+type BucketKey = (typeof BUCKETS)[number];
+type ItemKind = 'pull_request' | 'issue';
 type ParsedSettings = z.infer<typeof Settings>;
 
-const DEFAULT_MESSAGES: Readonly<Record<BucketKey, { pull_request: string; issue: string }>> = {
+interface Opened {
+  kind: ItemKind;
+  number: number;
+  login: string;
+  title: string;
+  createdAt: string;
+}
+
+const DEFAULT_MESSAGES: Readonly<Record<BucketKey, Record<ItemKind, string>>> = {
   first_time: {
     pull_request: 'Thanks for opening your first pull request, @{{user}}!',
     issue: 'Thanks for opening your first issue, @{{user}}!',
@@ -39,29 +48,25 @@ const DEFAULT_MESSAGES: Readonly<Record<BucketKey, { pull_request: string; issue
   },
 };
 
-const DEFAULT_ASSOCIATIONS: Readonly<Record<BucketKey, readonly string[]>> = {
-  first_time: FIRST_TIME_ASSOCIATIONS,
-  returning: RETURNING_ASSOCIATIONS,
-};
+const usesAssociations = (settings: ParsedSettings): boolean =>
+  BUCKETS.some((key) => {
+    const bucket = settings[key];
 
-const associationsFor = (settings: ParsedSettings, bucket: BucketKey): readonly string[] => {
-  return settings[bucket]?.author_association ?? DEFAULT_ASSOCIATIONS[bucket];
-};
+    return bucket !== undefined && bucket !== false && bucket.author_association !== undefined;
+  });
 
-const bucketFor = (settings: ParsedSettings, association: string): BucketKey | null => {
-  if (associationsFor(settings, 'first_time').includes(association)) {
-    return 'first_time';
+const messageFor = (settings: ParsedSettings, key: BucketKey, kind: ItemKind): string | null => {
+  const bucket = settings[key];
+
+  if (bucket === false) {
+    return null;
   }
 
-  if (associationsFor(settings, 'returning').includes(association)) {
-    return 'returning';
+  if (Array.isArray(bucket?.author_association) && bucket.author_association.length === 0) {
+    return null;
   }
 
-  return null;
-};
-
-const messageFor = (settings: ParsedSettings, bucket: BucketKey, event: 'pull_request' | 'issue'): string | null => {
-  const message = settings[bucket]?.[event] ?? DEFAULT_MESSAGES[bucket][event];
+  const message = bucket?.[kind] ?? DEFAULT_MESSAGES[key][kind];
 
   return message === false || message === '' ? null : message;
 };
@@ -72,95 +77,133 @@ export class WelcomeSubscriber extends Subscriber {
   public readonly requiredPermissions: RequiredPermissions = { issues: 'write', pull_requests: 'write' };
 
   public override register(probot: Probot): void {
-    probot.on('pull_request.opened', async (context: Context<'pull_request.opened'>): Promise<void> => {
+    probot.on(PR_EVENTS, async (context): Promise<void> => {
       if (context.isBot) {
         return;
       }
 
-      const log = this.log();
-      const enabled = await this.loadEnabledSettings(context, Settings);
+      const pr = context.payload.pull_request;
 
-      if (enabled === null) {
-        return;
-      }
-
-      const { settings } = enabled;
-      const association = context.payload.pull_request.author_association;
-      const bucket = bucketFor(settings, association);
-
-      if (bucket === null) {
-        log.debug(`PR #${context.payload.pull_request.number}: association "${association}" not in any bucket, skipping`);
-        return;
-      }
-
-      log.debug(`PR #${context.payload.pull_request.number}: association "${association}" resolved to bucket "${bucket}"`);
-
-      const message = messageFor(settings, bucket, 'pull_request');
-
-      if (message === null) {
-        log.debug(`PR #${context.payload.pull_request.number}: greeting for "${bucket}" pull requests is switched off, skipping`);
-        return;
-      }
-
-      const body = interpolate(message, {
-        user: context.payload.pull_request.user.login,
-        repo: context.payload.repository.name,
-        number: context.payload.pull_request.number,
-        title: context.payload.pull_request.title,
+      await this.#greet(context, {
+        kind: 'pull_request',
+        number: pr.number,
+        login: pr.user.login,
+        title: pr.title,
+        createdAt: pr.created_at,
       });
-
-      this.notice(context, context.payload.pull_request.number, body);
-
-      log.info(`Commented on PR #${context.payload.pull_request.number}`);
     });
 
-    probot.on('issues.opened', async (context: Context<'issues.opened'>): Promise<void> => {
+    probot.on(ISSUE_EVENTS, async (context): Promise<void> => {
       if (context.isBot) {
         return;
       }
 
-      const log = this.log();
       const issue = context.payload.issue;
 
       if (issue.user === null) {
-        log.debug(`Issue #${issue.number}: no user (ghost), skipping`);
+        this.log().debug(`Issue #${issue.number}: no user (ghost), skipping`);
+
         return;
       }
 
-      const enabled = await this.loadEnabledSettings(context, Settings);
+      await this.#greet(context, {
+        kind: 'issue',
+        number: issue.number,
+        login: issue.user.login,
+        title: issue.title,
+        createdAt: issue.created_at,
+      });
+    });
+  }
 
-      if (enabled === null) {
+  async #greet(context: WelcomeContext, opened: Opened): Promise<void> {
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null) {
+      return;
+    }
+
+    const { settings } = enabled;
+    const log = this.log();
+    const item = `${opened.kind === 'issue' ? 'Issue' : 'PR'} #${opened.number}`;
+
+    if (usesAssociations(settings)) {
+      log.warn('author_association is no longer supported: first-time status is looked up instead, and exempt_roles skips maintainers. An empty list still switches its bucket off.');
+    }
+
+    const messages = {
+      first_time: messageFor(settings, 'first_time', opened.kind),
+      returning: messageFor(settings, 'returning', opened.kind),
+    };
+
+    if (messages.first_time === null && messages.returning === null) {
+      log.debug(`${item}: greetings are switched off, skipping`);
+
+      return;
+    }
+
+    const { owner, repo } = context.repo();
+    const exemptRoles: readonly string[] = settings.exempt_roles ?? [];
+
+    if (exemptRoles.length > 0) {
+      const role = await roleOf(context.octokit, owner, repo, opened.login);
+
+      if (exemptRoles.includes(role)) {
+        log.debug(`${item}: "${opened.login}" has "${role}" role, exempt from greetings`);
+
         return;
       }
+    }
 
-      const { settings } = enabled;
-      const association = issue.author_association;
-      const bucket = bucketFor(settings, association);
+    let message = messages.first_time;
+
+    if (messages.first_time !== messages.returning) {
+      const bucket = await this.#bucketOf(context, opened);
 
       if (bucket === null) {
-        log.debug(`Issue #${issue.number}: association "${association}" not in any bucket, skipping`);
         return;
       }
 
-      log.debug(`Issue #${issue.number}: association "${association}" resolved to bucket "${bucket}"`);
+      log.debug(`${item}: "${opened.login}" resolved to bucket "${bucket}"`);
+      message = messages[bucket];
+    }
 
-      const message = messageFor(settings, bucket, 'issue');
+    if (message === null) {
+      log.debug(`${item}: greeting for this bucket is switched off, skipping`);
 
-      if (message === null) {
-        log.debug(`Issue #${issue.number}: greeting for "${bucket}" issues is switched off, skipping`);
-        return;
-      }
+      return;
+    }
 
-      const body = interpolate(message, {
-        user: issue.user.login,
-        repo: context.payload.repository.name,
-        number: issue.number,
-        title: issue.title,
+    const body = interpolate(message, {
+      user: opened.login,
+      repo: context.payload.repository.name,
+      number: opened.number,
+      title: opened.title,
+    });
+
+    this.notice(context, opened.number, body);
+
+    log.info(`Commented on ${opened.kind === 'issue' ? 'issue' : 'PR'} #${opened.number}`);
+  }
+
+  // The new item is excluded by date because the search index may or may not hold it yet.
+  async #bucketOf(context: WelcomeContext, opened: Opened): Promise<BucketKey | null> {
+    const { owner, repo } = context.repo();
+    const type = opened.kind === 'issue' ? 'is:issue' : 'is:pr';
+    const before = searchTimestamp(new Date(opened.createdAt).getTime());
+
+    try {
+      const { data } = await context.octokit.rest.search.issuesAndPullRequests({
+        q: `repo:${owner}/${repo} ${type} author:${opened.login} created:<${before}`,
+        advanced_search: 'true',
+        per_page: 1,
       });
 
-      this.notice(context, issue.number, body);
+      return data.total_count === 0 ? 'first_time' : 'returning';
+    } catch (error) {
+      this.log().warn(`Could not look up earlier items by "${opened.login}", skipping the greeting: ${String(error)}`);
 
-      log.info(`Commented on issue #${context.payload.issue.number}`);
-    });
+      return null;
+    }
   }
 }

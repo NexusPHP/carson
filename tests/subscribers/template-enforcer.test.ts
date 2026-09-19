@@ -183,7 +183,7 @@ describe('template-enforcer subscriber (via app)', () => {
 
   it('does nothing when template-enforcer is not listed in subscribers', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig('version: 1\nsubscribers:\n  - issue-intake\n');
 
     await probot.receive({
       id: 'evt-not-enabled',
@@ -661,6 +661,18 @@ describe('template-enforcer subscriber (via app)', () => {
       expect(permissionScope.isDone()).toBe(true);
       expect(nock.pendingMocks()).toEqual([]);
     });
+  });
+
+  it('treats an issue payload without labels as unlabeled', async () => {
+    mockInstallationToken();
+    mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
+    const payload = issuePayload({ body: '## Steps to reproduce\n1. do x\n## Expected behavior\nshould work' });
+
+    delete (payload['issue'] as Record<string, unknown>)['labels'];
+
+    await probot.receive({ id: 'evt-issue-no-labels', name: 'issues', payload: payload as never });
+
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing when the issue has no user (ghost)', async () => {

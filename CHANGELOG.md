@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `no-response-closer` gains `rules`: several labels, each with its own `days_until_close`, `close_message`, `exempt_labels`, and an `only` scope for issues or pull requests. The top-level keys act as defaults, and a configuration without `rules` behaves as before.
 - `no-response-closer` exposes `{{label}}` to `close_message`.
-- `welcome` accepts `false` for `pull_request` and `issue` in either bucket to switch that greeting off. An empty message, which used to post an empty comment, now does the same.
+- `welcome` accepts `false` for `pull_request` and `issue` in either bucket to switch that greeting off, and `false` for a whole bucket. An empty message, which used to post an empty comment, now does the same.
+- `welcome` gains `exempt_roles`: authors whose repository role is listed are never greeted.
+
+### Changed
+
+- `welcome` decides first time or returning by counting the author's earlier pull requests or issues in the repository, instead of reading `author_association`. GitHub reports the first-time associations on pull requests only, so issue authors without commits were never greeted, and it hides private organization members from an App. A leftover `author_association` list is ignored with a warning, except that an empty list still switches its bucket off.
 
 ### Fixed
 

@@ -159,7 +159,7 @@ describe('triage-labeler subscriber (via app)', () => {
 
   it('does nothing when triage-labeler is not listed in subscribers', async () => {
     mockInstallationToken();
-    mockConfig('version: 1\nsubscribers:\n  - welcome\n');
+    mockConfig('version: 1\nsubscribers:\n  - issue-intake\n');
 
     await probot.receive({
       id: 'evt-not-enabled',
