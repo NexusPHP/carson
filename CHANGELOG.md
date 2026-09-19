@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `welcome` decides first time or returning by counting the author's earlier pull requests or issues in the repository, instead of reading `author_association`. GitHub reports the first-time associations on pull requests only, so issue authors without commits were never greeted, and it hides private organization members from an App. A leftover `author_association` list is ignored with a warning, except that an empty list still switches its bucket off.
+- The startup log line reads `Received push event` instead of `Received push`.
 
 ### Fixed
 

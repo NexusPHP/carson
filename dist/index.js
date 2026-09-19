@@ -70927,7 +70927,7 @@ var main = async () => {
     log.info(`Running as ${appIdentity.login} ("${appIdentity.name}")`);
   }
   if (eventName === "schedule") {
-    log.info("Received schedule");
+    log.info("Received schedule event");
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload);
     if (result.failed) {
       handlerFailed = true;
@@ -70944,7 +70944,7 @@ var main = async () => {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     const action = payload.action;
     const eventLabel = typeof action === "string" ? `${name}.${action}` : name;
-    log.info(`Received ${eventLabel}`);
+    log.info(`Received ${eventLabel} event`);
     log.debug(`Resolved installation ${installation.id}`);
     const enrichedPayload = {
       ...payload,

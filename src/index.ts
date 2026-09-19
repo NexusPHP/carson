@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
   }
 
   if (eventName === 'schedule') {
-    log.info('Received schedule');
+    log.info('Received schedule event');
     const result = await dispatchScheduled(probot, carson.scheduled, repository, payload as SchedulePayload);
 
     if (result.failed) {
@@ -104,7 +104,7 @@ const main = async (): Promise<void> => {
     const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
     const action = (payload as { action?: unknown }).action;
     const eventLabel = typeof action === 'string' ? `${name}.${action}` : name;
-    log.info(`Received ${eventLabel}`);
+    log.info(`Received ${eventLabel} event`);
     log.debug(`Resolved installation ${installation.id}`);
     const enrichedPayload = {
       ...(payload as Record<string, unknown>),
