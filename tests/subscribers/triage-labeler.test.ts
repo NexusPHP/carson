@@ -1,9 +1,12 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Probot, ProbotOctokit } from 'probot';
+import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
 import app from '../../src/app.js';
 import { generateKeyPairSync } from 'node:crypto';
+import { logger } from '../../src/logger.js';
 import nock from 'nock';
 import { resetConfigCache } from '../../src/configuration/cache.js';
+import { TriageLabelerSubscriber } from '../../src/subscribers/triage-labeler.js';
 
 const { privateKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -578,5 +581,199 @@ describe('triage-labeler subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+});
+
+interface OpenPr {
+  number: number;
+  labels?: string[];
+  draft?: boolean;
+  sha?: string;
+}
+
+interface SweepReview {
+  state: string;
+  login: string;
+  commit_id?: string;
+}
+
+interface SweepHarness {
+  context: ScheduledContext;
+  addLabelsMock: ReturnType<typeof vi.fn>;
+  removeLabelMock: ReturnType<typeof vi.fn>;
+  permissionMock: ReturnType<typeof vi.fn>;
+  paginateMock: ReturnType<typeof vi.fn>;
+}
+
+const makeStubLog = (): Record<string, unknown> => {
+  const log: Record<string, unknown> = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+  log['child'] = vi.fn().mockReturnValue(log);
+
+  return log;
+};
+
+const makeSweepHarness = (prs: OpenPr[], reviews: Record<number, SweepReview[]>, config: unknown): SweepHarness => {
+  const addLabelsMock = vi.fn().mockResolvedValue({});
+  const removeLabelMock = vi.fn().mockResolvedValue({});
+  const permissionMock = vi.fn().mockImplementation(async ({ username }: { username: string }) =>
+    await Promise.resolve({ data: { role_name: username === 'outsider' ? 'read' : 'write' } }),
+  );
+  const paginateMock = vi.fn().mockImplementation(async (fn: string, params: { pull_number?: number }) => {
+    if (fn === 'list-fn') {
+      return await Promise.resolve(prs.map((pr) => ({
+        number: pr.number,
+        draft: pr.draft ?? false,
+        labels: (pr.labels ?? []).map((name) => ({ name })),
+        head: { sha: pr.sha ?? 'head-sha' },
+      })));
+    }
+
+    return await Promise.resolve((reviews[params.pull_number ?? 0] ?? []).map((review) => ({
+      state: review.state,
+      user: { login: review.login },
+      commit_id: review.commit_id ?? 'head-sha',
+    })));
+  });
+
+  const context: ScheduledContext = {
+    octokit: {
+      paginate: paginateMock,
+      rest: {
+        pulls: { list: 'list-fn', listReviews: 'reviews-fn' },
+        issues: { addLabels: addLabelsMock, removeLabel: removeLabelMock },
+        repos: { getCollaboratorPermissionLevel: permissionMock },
+      },
+    } as never,
+    log: makeStubLog() as never,
+    payload: { schedule: '0 * * * *', workflow: '.github/workflows/cron.yml' },
+    repo: () => ({ owner: 'acme', repo: 'widgets' }),
+    config: vi.fn().mockResolvedValue(config),
+  };
+
+  return { context, addLabelsMock, removeLabelMock, permissionMock, paginateMock };
+};
+
+const runSweep = async (context: ScheduledContext): Promise<void> => {
+  const registrar = new ScheduledRegistrar();
+
+  new TriageLabelerSubscriber().registerScheduled(registrar);
+
+  for (const handler of registrar.handlers) {
+    await handler(context);
+  }
+};
+
+const sweepConfig = (settings: Record<string, unknown> = { sweep: true }): unknown => ({
+  version: 1,
+  subscribers: ['triage-labeler'],
+  settings: { 'triage-labeler': settings },
+});
+
+describe('triage-labeler subscriber (scheduled sweep)', () => {
+  let stubLog: Record<string, unknown>;
+
+  beforeEach(() => {
+    resetConfigCache();
+    stubLog = makeStubLog();
+    logger.init(stubLog as never);
+  });
+
+  afterEach(() => {
+    logger.reset();
+  });
+
+  it('adds the missing label to an open pull request an event never reached', async () => {
+    const { context, addLabelsMock, removeLabelMock } = makeSweepHarness([{ number: 13 }], {}, sweepConfig());
+
+    await runSweep(context);
+
+    expect(addLabelsMock).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 13, labels: ['needs-review'] });
+    expect(removeLabelMock).not.toHaveBeenCalled();
+    expect(stubLog['info']).toHaveBeenCalledWith('Reconciled 1 of 1 open PR');
+  });
+
+  it('applies a review that arrived while the event could not be handled', async () => {
+    const { context, addLabelsMock, removeLabelMock } = makeSweepHarness(
+      [{ number: 7, labels: ['needs-review', 'bug'] }],
+      { 7: [{ state: 'APPROVED', login: 'maintainer' }] },
+      sweepConfig(),
+    );
+
+    await runSweep(context);
+
+    expect(removeLabelMock).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 7, name: 'needs-review' });
+    expect(addLabelsMock).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 7, labels: ['approved'] });
+  });
+
+  it('leaves pull requests that are already correct untouched', async () => {
+    const { context, addLabelsMock, removeLabelMock } = makeSweepHarness(
+      [{ number: 1, labels: ['needs-review'] }, { number: 2, labels: ['approved'] }],
+      { 2: [{ state: 'APPROVED', login: 'maintainer' }] },
+      sweepConfig(),
+    );
+
+    await runSweep(context);
+
+    expect(addLabelsMock).not.toHaveBeenCalled();
+    expect(removeLabelMock).not.toHaveBeenCalled();
+    expect(stubLog['info']).toHaveBeenCalledWith('Reconciled 0 of 2 open PRs');
+  });
+
+  it('removes a managed label from a draft without reading its reviews', async () => {
+    const { context, removeLabelMock, paginateMock } = makeSweepHarness([{ number: 5, draft: true, labels: ['needs-review'] }], {}, sweepConfig());
+
+    await runSweep(context);
+
+    expect(removeLabelMock).toHaveBeenCalledTimes(1);
+    expect(paginateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores reviews from reviewers without a qualifying role', async () => {
+    const { context, addLabelsMock } = makeSweepHarness(
+      [{ number: 9, labels: ['needs-review'] }],
+      { 9: [{ state: 'APPROVED', login: 'outsider' }] },
+      sweepConfig(),
+    );
+
+    await runSweep(context);
+
+    expect(addLabelsMock).not.toHaveBeenCalled();
+  });
+
+  it('looks up each reviewer role once per run', async () => {
+    const approved = [{ state: 'APPROVED', login: 'maintainer' }];
+    const { context, permissionMock } = makeSweepHarness(
+      [{ number: 1 }, { number: 2 }, { number: 3 }],
+      { 1: approved, 2: approved, 3: approved },
+      sweepConfig(),
+    );
+
+    await runSweep(context);
+
+    expect(permissionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing by default', async () => {
+    const { context, paginateMock } = makeSweepHarness([{ number: 13 }], {}, sweepConfig({}));
+
+    await runSweep(context);
+
+    expect(paginateMock).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when sweep is false', async () => {
+    const { context, paginateMock } = makeSweepHarness([{ number: 13 }], {}, sweepConfig({ sweep: false }));
+
+    await runSweep(context);
+
+    expect(paginateMock).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when triage-labeler is not enabled', async () => {
+    const { context, paginateMock } = makeSweepHarness([{ number: 13 }], {}, { version: 1, subscribers: ['issue-intake'] });
+
+    await runSweep(context);
+
+    expect(paginateMock).not.toHaveBeenCalled();
   });
 });

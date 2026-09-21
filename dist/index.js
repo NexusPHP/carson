@@ -62523,7 +62523,8 @@ var Settings18 = external_exports.object({
   approved_label: external_exports.string().optional(),
   qualifying_roles: external_exports.array(external_exports.enum(QUALIFYING_ROLES)).optional(),
   qualifying_associations: external_exports.unknown().optional(),
-  reset_on_push: external_exports.boolean().optional()
+  reset_on_push: external_exports.boolean().optional(),
+  sweep: external_exports.boolean().optional()
 });
 var DEFAULT_NEEDS_REVIEW = "needs-review";
 var DEFAULT_NEEDS_REWORK = "needs-rework";
@@ -62583,6 +62584,15 @@ var labelFor = (desired, settings) => {
   }
   return settings.needsReviewLabel;
 };
+var CONCURRENCY7 = 5;
+var cachedRoles = (octokit, { owner, repo }) => {
+  const cache2 = /* @__PURE__ */ new Map();
+  return async (username) => {
+    const known = cache2.get(username) ?? roleOf(octokit, owner, repo, username);
+    cache2.set(username, known);
+    return await known;
+  };
+};
 var TriageLabelerSubscriber = class extends Subscriber {
   id = "triage-labeler";
   description = "Labels pull requests with their current review state: needs-review, needs-rework, or approved. Reviews from users without write access are ignored.";
@@ -62598,6 +62608,11 @@ var TriageLabelerSubscriber = class extends Subscriber {
       await this.#handle(context);
     });
   }
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#sweep(context);
+    });
+  }
   async #handle(context) {
     const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings18);
@@ -62608,41 +62623,74 @@ var TriageLabelerSubscriber = class extends Subscriber {
     if (raw.qualifying_associations !== void 0) {
       log.warn("qualifying_associations is no longer supported, use qualifying_roles instead");
     }
-    const settings = resolveSettings(raw);
     const pr = context.payload.pull_request;
-    const { owner, repo } = context.repo();
+    const target = context.repo();
+    const { desiredLabel } = await this.#reconcile(context.octokit, target, resolveSettings(raw), cachedRoles(context.octokit, target), {
+      number: pr.number,
+      draft: pr.draft === true,
+      labels: pr.labels.map((l) => l.name),
+      headSha: pr.head.sha
+    });
+    log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? "none"}`);
+  }
+  async #sweep(scheduled) {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings18);
+    if (enabled?.settings.sweep !== true) {
+      return;
+    }
+    const log = this.log();
+    const settings = resolveSettings(enabled.settings);
+    const target = scheduled.repo();
+    const roles = cachedRoles(scheduled.octokit, target);
+    const prs = await scheduled.octokit.paginate(scheduled.octokit.rest.pulls.list, { ...target, state: "open", per_page: 100 });
+    let changed = 0;
+    log.debug(`Found ${pluralize(prs.length, "open PR")}`);
+    await forEachConcurrent(prs, CONCURRENCY7, async (pr) => {
+      const result = await this.#reconcile(scheduled.octokit, target, settings, roles, {
+        number: pr.number,
+        draft: pr.draft === true,
+        labels: pr.labels.map((l) => l.name),
+        headSha: pr.head.sha
+      });
+      if (result.changed) {
+        changed += 1;
+        log.info(`Triage label for PR #${pr.number}: ${result.desiredLabel ?? "none"}`);
+      }
+    });
+    log.info(`Reconciled ${changed} of ${pluralize(prs.length, "open PR")}`);
+  }
+  async #reconcile(octokit, { owner, repo }, settings, roles, pr) {
     const managed = [settings.needsReviewLabel, settings.needsReworkLabel, settings.approvedLabel];
-    const currentManaged = pr.labels.map((l) => l.name).filter((n) => managed.includes(n));
+    const currentManaged = pr.labels.filter((n) => managed.includes(n));
     let desiredLabel = null;
-    if (pr.draft !== true) {
-      const reviews = await context.octokit.paginate(context.octokit.rest.pulls.listReviews, {
+    if (!pr.draft) {
+      const reviews = await octokit.paginate(octokit.rest.pulls.listReviews, {
         owner,
         repo,
         pull_number: pr.number,
         per_page: 100
       });
-      const qualifies = async (username) => settings.qualifyingRoles.has(await roleOf(context.octokit, owner, repo, username));
       const desired = await computeDesired(reviews, {
-        headSha: pr.head.sha,
+        headSha: pr.headSha,
         resetOnPush: settings.resetOnPush,
-        qualifies
+        qualifies: async (username) => settings.qualifyingRoles.has(await roles(username))
       });
       desiredLabel = labelFor(desired, settings);
     }
-    for (const label of currentManaged) {
-      if (label !== desiredLabel) {
-        await removeLabel(context.octokit, { owner, repo, issue_number: pr.number, name: label });
-      }
+    const outdated = currentManaged.filter((label) => label !== desiredLabel);
+    const missing = desiredLabel !== null && !currentManaged.includes(desiredLabel);
+    for (const label of outdated) {
+      await removeLabel(octokit, { owner, repo, issue_number: pr.number, name: label });
     }
-    if (desiredLabel !== null && !currentManaged.includes(desiredLabel)) {
-      await context.octokit.rest.issues.addLabels({
+    if (desiredLabel !== null && missing) {
+      await octokit.rest.issues.addLabels({
         owner,
         repo,
         issue_number: pr.number,
         labels: [desiredLabel]
       });
     }
-    log.info(`Triage label for PR #${pr.number}: ${desiredLabel ?? "none"}`);
+    return { desiredLabel, changed: missing || outdated.length > 0 };
   }
 };
 

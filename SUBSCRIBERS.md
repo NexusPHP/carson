@@ -1171,7 +1171,7 @@ settings:
 
 Labels pull requests with their current review state: `needs-review`, `needs-rework`, or `approved`. The three labels are mutually exclusive: applying one removes the others (other labels on the PR are untouched).
 
-**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`, `pull_request_review.dismissed`
+**Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.synchronize`, `pull_request.ready_for_review`, `pull_request.converted_to_draft`, `pull_request_review.submitted`, `pull_request_review.dismissed`, scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `issues: write`, `pull_requests: write`
 
 For each event the subscriber paginates `pulls.listReviews`, reduces to the latest review per reviewer, ignores `COMMENTED` reviews and reviews from users without a qualifying repository role, then derives the target state:
@@ -1188,7 +1188,9 @@ A reviewer "qualifies" when their repository role, looked up via `repos.getColla
 
 Bot senders are not skipped, so pull requests opened by Dependabot and similar bots are triaged.
 
-On a pull request from a fork, `pull_request_review` runs without secrets and is skipped (see the note in the [README](README.md#workflow)), so the label does not change at the moment a review is submitted or dismissed. Every run re-reads all reviews, so the label catches up on the pull request's next `pull_request_target` event, such as a push.
+With `sweep: true`, each scheduled run also reconciles every open pull request: it re-reads the reviews and sets or clears the managed label wherever it differs from what an event would have produced. Nothing new is decided there. It repairs pull requests an event never reached, such as a run cancelled by the workflow or a review on a fork, so it is worth enabling on repositories that take pull requests from forks. It costs one listing of open pull requests, one reviews request per open pull request, and one role lookup per distinct reviewer, with label writes only where something is wrong. Pull requests already correct are logged at debug level only. The first run after enabling it labels every open pull request that has no managed label yet, including ones older than `triage-labeler` itself, and each of those labels fires a `labeled` event.
+
+On a pull request from a fork, `pull_request_review` runs without secrets and is skipped (see the note in the [README](README.md#workflow)), so the label does not change at the moment a review is submitted or dismissed. Every run re-reads all reviews, so the label catches up on the pull request's next `pull_request_target` event, such as a push, or on the next scheduled run when `sweep` is enabled, whichever comes first.
 
 Labels are auto-created by GitHub on first use with a random color. To control the colors, create the labels manually in the repository's label settings before enabling the subscriber.
 
@@ -1203,6 +1205,7 @@ If the existing managed label already matches the desired state, no label API ca
 | `approved_label` | string | `approved` |
 | `qualifying_roles` | array of `admin`, `maintain`, `write` | `[admin, maintain, write]` |
 | `reset_on_push` | boolean | `false` |
+| `sweep` | boolean | `false` |
 
 ### Example
 
