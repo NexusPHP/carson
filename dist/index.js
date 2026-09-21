@@ -59845,6 +59845,20 @@ var interpolate = (template, context) => {
   });
 };
 
+// src/github/labels.ts
+var removeLabel = async (octokit, removal) => {
+  try {
+    await octokit.rest.issues.removeLabel(removal);
+  } catch (error63) {
+    if (error63.status !== 404) {
+      throw error63;
+    }
+  }
+};
+var labelNames = (labels) => {
+  return (labels ?? []).map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string");
+};
+
 // src/actions.ts
 var ActionRegistrar = class {
   #handlers = /* @__PURE__ */ new Map();
@@ -60053,11 +60067,6 @@ var Subscriber = class {
   }
 };
 
-// src/github/labels.ts
-var labelNames = (labels) => {
-  return (labels ?? []).map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string");
-};
-
 // src/subscribers/auto-labeler.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
 var StringArray = external_exports.array(external_exports.string());
@@ -60230,23 +60239,13 @@ var AutoLabelerSubscriber = class extends Subscriber {
       if (await this.loadEnabledConfig(context) === null) {
         return false;
       }
+      const { owner, repo } = context.repo();
       for (const name of request2.labels) {
-        await this.#removeLabel(context, request2.number, name);
+        await removeLabel(context.octokit, { owner, repo, issue_number: request2.number, name });
       }
       this.log().info(`Removed ${pluralize(request2.labels.length, "label")} from #${request2.number} on request: ${quoted(request2.labels)}`);
       return true;
     });
-  }
-  // A label that is already absent is the requested end state, not a failure.
-  async #removeLabel(context, number4, name) {
-    const { owner, repo } = context.repo();
-    try {
-      await context.octokit.rest.issues.removeLabel({ owner, repo, issue_number: number4, name });
-    } catch (error63) {
-      if (error63.status !== 404) {
-        throw error63;
-      }
-    }
   }
   async #handlePullRequest(context) {
     const log = this.log();
@@ -60360,12 +60359,7 @@ var AutoLabelerSubscriber = class extends Subscriber {
       log.info(`Added ${pluralize(toAdd.length, "label")} to ${target.kind} #${target.number}: ${quoted(toAdd)}`);
     }
     for (const label of toRemove) {
-      await context.octokit.rest.issues.removeLabel({
-        owner,
-        repo,
-        issue_number: target.number,
-        name: label
-      });
+      await removeLabel(context.octokit, { owner, repo, issue_number: target.number, name: label });
     }
     if (toRemove.length > 0) {
       log.info(`Removed ${pluralize(toRemove.length, "label")} from ${target.kind} #${target.number}: ${quoted(toRemove)}`);
@@ -62169,12 +62163,7 @@ var StaleSubscriber = class extends Subscriber {
       return;
     }
     const { owner, repo } = context.repo();
-    await context.octokit.rest.issues.removeLabel({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      name: staleLabel
-    });
+    await removeLabel(context.octokit, { owner, repo, issue_number: issueNumber, name: staleLabel });
     const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
       owner,
       repo,
@@ -62427,12 +62416,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     const violations = exempt ? [] : collectViolations(item.body, typeRules, log);
     if (violations.length === 0) {
       if (hasLabel) {
-        await context.octokit.rest.issues.removeLabel({
-          owner,
-          repo,
-          issue_number: item.number,
-          name: label
-        });
+        await removeLabel(context.octokit, { owner, repo, issue_number: item.number, name: label });
         log.info(`Removed "${label}" from ${ref}`);
       }
       return;
@@ -62635,12 +62619,7 @@ var TriageLabelerSubscriber = class extends Subscriber {
     }
     for (const label of currentManaged) {
       if (label !== desiredLabel) {
-        await context.octokit.rest.issues.removeLabel({
-          owner,
-          repo,
-          issue_number: pr.number,
-          name: label
-        });
+        await removeLabel(context.octokit, { owner, repo, issue_number: pr.number, name: label });
       }
     }
     if (desiredLabel !== null && !currentManaged.includes(desiredLabel)) {

@@ -1,9 +1,9 @@
-import type { ActionContext, ActionRegistrar } from '../actions.js';
 import type { Context, Probot } from 'probot';
 import { itemRef, pluralize } from '../template.js';
+import { labelNames, removeLabel } from '../github/labels.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { ActionRegistrar } from '../actions.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
-import { labelNames } from '../github/labels.js';
 import type { Logger } from 'pino';
 import picomatch from 'picomatch';
 import { z } from 'zod';
@@ -262,27 +262,16 @@ export class AutoLabelerSubscriber extends Subscriber {
         return false;
       }
 
+      const { owner, repo } = context.repo();
+
       for (const name of request.labels) {
-        await this.#removeLabel(context, request.number, name);
+        await removeLabel(context.octokit, { owner, repo, issue_number: request.number, name });
       }
 
       this.log().info(`Removed ${pluralize(request.labels.length, 'label')} from #${request.number} on request: ${quoted(request.labels)}`);
 
       return true;
     });
-  }
-
-  // A label that is already absent is the requested end state, not a failure.
-  async #removeLabel(context: ActionContext, number: number, name: string): Promise<void> {
-    const { owner, repo } = context.repo();
-
-    try {
-      await context.octokit.rest.issues.removeLabel({ owner, repo, issue_number: number, name });
-    } catch (error) {
-      if ((error as { status?: unknown }).status !== 404) {
-        throw error;
-      }
-    }
   }
 
   async #handlePullRequest(context: LabelContext): Promise<void> {
@@ -437,12 +426,7 @@ export class AutoLabelerSubscriber extends Subscriber {
     }
 
     for (const label of toRemove) {
-      await context.octokit.rest.issues.removeLabel({
-        owner,
-        repo,
-        issue_number: target.number,
-        name: label,
-      });
+      await removeLabel(context.octokit, { owner, repo, issue_number: target.number, name: label });
     }
 
     if (toRemove.length > 0) {

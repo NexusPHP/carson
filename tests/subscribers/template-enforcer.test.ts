@@ -281,6 +281,26 @@ describe('template-enforcer subscriber (via app)', () => {
     expect(nock.pendingMocks()).toEqual([]);
   });
 
+  it('does not fail when the label was removed by someone else in the meantime', async () => {
+    mockInstallationToken();
+    mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
+    const removeScope = nock('https://api.github.com')
+      .delete(`/repos/acme/widgets/issues/${ITEM_NUMBER}/labels/needs-template`)
+      .reply(404, { message: 'Label does not exist' });
+
+    await expect(probot.receive({
+      id: 'evt-issue-label-gone',
+      name: 'issues',
+      payload: issuePayload({
+        action: 'edited',
+        body: '## Steps to reproduce\n1. do x\n## Expected behavior\nshould work',
+        labels: ['needs-template'],
+      }) as never,
+    })).resolves.toBeUndefined();
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
   it('adds the label when a prior carson comment exists but the label was manually removed', async () => {
     mockInstallationToken();
     mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));

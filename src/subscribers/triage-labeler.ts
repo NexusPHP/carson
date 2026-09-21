@@ -1,6 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
+import { removeLabel } from '../github/labels.js';
 import { roleOf } from '../github/roles.js';
 import { z } from 'zod';
 
@@ -178,12 +179,7 @@ export class TriageLabelerSubscriber extends Subscriber {
 
     for (const label of currentManaged) {
       if (label !== desiredLabel) {
-        await context.octokit.rest.issues.removeLabel({
-          owner,
-          repo,
-          issue_number: pr.number,
-          name: label,
-        });
+        await removeLabel(context.octokit, { owner, repo, issue_number: pr.number, name: label });
       }
     }
 

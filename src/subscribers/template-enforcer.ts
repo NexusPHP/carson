@@ -5,6 +5,7 @@ import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import type { Logger } from 'pino';
+import { removeLabel } from '../github/labels.js';
 import { z } from 'zod';
 
 const Rule = z.object({
@@ -186,12 +187,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
 
     if (violations.length === 0) {
       if (hasLabel) {
-        await context.octokit.rest.issues.removeLabel({
-          owner,
-          repo,
-          issue_number: item.number,
-          name: label,
-        });
+        await removeLabel(context.octokit, { owner, repo, issue_number: item.number, name: label });
         log.info(`Removed "${label}" from ${ref}`);
       }
 

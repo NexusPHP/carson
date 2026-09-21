@@ -1,7 +1,7 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, isBotComment, noticeMarker } from '../github/notices.js';
 import { interpolate, itemRef, pluralize } from '../template.js';
-import { type LabelLike, labelNames } from '../github/labels.js';
+import { type LabelLike, labelNames, removeLabel } from '../github/labels.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
@@ -85,12 +85,7 @@ export class StaleSubscriber extends Subscriber {
     }
 
     const { owner, repo } = context.repo();
-    await context.octokit.rest.issues.removeLabel({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      name: staleLabel,
-    });
+    await removeLabel(context.octokit, { owner, repo, issue_number: issueNumber, name: staleLabel });
 
     const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
       owner,
