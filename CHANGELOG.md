@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `no-response-closer` gains `unlabel_on_response`: when the item's author comments, pushes to the pull request, or replies in a review thread, the rule's label is removed, so an answered item is no longer closed for lack of a response. Off by default, set per rule or at the top level. Needs `auto-labeler` enabled.
+- An [Actions](SUBSCRIBERS.md#actions) section in SUBSCRIBERS.md lists each cross-subscriber action, its owner, who requests it, and which subscribers label directly.
 
 ### Fixed
 

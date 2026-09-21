@@ -9,6 +9,7 @@ To use a subscriber, list its ID under `subscribers:` in your repository's `.git
 
 - [Template interpolation](#template-interpolation)
 - [Comment markers](#comment-markers)
+- [Actions](#actions)
 - Subscribers
   - [auto-labeler](#auto-labeler)
   - [cache-pruner](#cache-pruner)
@@ -77,6 +78,25 @@ Event-driven notices are collected while an event is handled and posted once it 
 | `<!-- carson:thanks -->` | [thanks](#thanks) |
 | `<!-- carson:unsupported-branch -->` | [unsupported-branch](#unsupported-branch) |
 | `<!-- carson:welcome -->` | [welcome](#welcome) |
+
+## Actions
+
+Each subscriber does one job. When a subscriber needs a job that belongs to another one, it does not call GitHub itself: it sends a request through Carson's action router, and the subscriber that owns the job carries it out with its own settings. `read-only` closing a pull request and wanting it locked is the typical case: the lock reason is configured once, on `lock-old-issues`.
+
+| Action | Owner | Requested by |
+| --- | --- | --- |
+| `label` | [auto-labeler](#auto-labeler) | [commands](#commands) (`/label`), [conflicts-notifier](#conflicts-notifier) (the `label` setting) |
+| `unlabel` | [auto-labeler](#auto-labeler) | [commands](#commands) (`/unlabel`), [conflicts-notifier](#conflicts-notifier), [no-response-closer](#no-response-closer) (`unlabel_on_response`) |
+| `lock` | [lock-old-issues](#lock-old-issues) | [commands](#commands) (`/lock`), [read-only](#read-only) |
+
+**The owner must be enabled.** An action is only served when its owner is listed under `subscribers:`. When it is not, the request is dropped, a warning is logged, and the requesting subscriber carries on without it: the run does not fail. An owner can be enabled purely to serve requests, with no settings of its own, such as `auto-labeler` with no rules.
+
+**Which subscribers label through `auto-labeler`, and which do not.** The line is whether the label is the subscriber's own state:
+
+- A subscriber whose label is its own state applies and removes it directly and needs nothing else enabled. `stale` (the stale label), `template-enforcer` (the needs-template label), and `triage-labeler` (the review-state labels) work this way.
+- A subscriber that touches a label as a side effect, one it does not own, asks `auto-labeler`. That covers the optional conflict label of `conflicts-notifier`, any label a user names in `/label`, and the label `no-response-closer` clears when the author responds, which a maintainer or another subscriber applied.
+
+Either way, removing a label that is already gone counts as done and never fails the run.
 
 ---
 
