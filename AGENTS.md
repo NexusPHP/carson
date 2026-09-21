@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## What Carson is
 
@@ -63,6 +63,8 @@ A `probot.onError` handler flips a `handlerFailed` flag so the action fails the 
 ### Cross-subscriber actions
 
 Subscribers do one job each. When one needs another's job done (a mirror guard that closes a PR and wants it locked), it does not call the API itself: it dispatches an action through the router in [src/actions.ts](src/actions.ts), and the subscriber that owns that job handles it. Owners claim an action in `registerActions(registrar)` via `registrar.on('lock', this.id, handler)`. Exactly one owner per action, enforced at registration. Requesters call the inherited `this.dispatch('lock', context, { number })`, which resolves `false` when no enabled subscriber owns the action (after a warning) or when the owner declines it (it is registered but not enabled for the repo, as happens in tests that load the whole app), so a missing owner degrades rather than fails the run. Owners return `true` only when they actually acted. The action vocabulary is the `ActionRequests` interface: add a key there to introduce a new action. Owners are whichever subscribers override `registerActions`.
+
+Labels follow one rule. A subscriber whose label is its own state (`stale`, `template-enforcer`, `triage-labeler`) adds and removes it directly, so it works without `auto-labeler` enabled. A subscriber that touches a label it does not own (`conflicts-notifier`, `commands`, `no-response-closer`) dispatches `label` / `unlabel`. Both paths remove through `removeLabel` in [src/github/labels.ts](src/github/labels.ts), which treats an already absent label as done. The user-facing version is the [Actions](SUBSCRIBERS.md#actions) section of SUBSCRIBERS.md: update its table when an action gains an owner or a requester.
 
 All registered subscriber IDs are pushed into [src/configuration/cache.ts](src/configuration/cache.ts) via `setRegisteredSubscribers` so the cache layer can warn about unknown IDs in user config.
 
