@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `no-response-closer` gains `unlabel_on_response`: when the item's author comments, pushes to the pull request, or replies in a review thread, the rule's label is removed, so an answered item is no longer closed for lack of a response. Off by default, set per rule or at the top level. Needs `auto-labeler` enabled.
+
 ## [v1.6.0](https://github.com/NexusPHP/carson/compare/v1.5.0...v1.6.0) - 2026-09-19
 
 ### Added

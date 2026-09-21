@@ -80,6 +80,21 @@ describe('Carson', () => {
     expect(sub.actionsCalls).toEqual([carson.actions]);
   });
 
+  it('run() accepts a subscriber that registers no webhook handlers', () => {
+    class ScheduledOnlySubscriber extends Subscriber {
+      public readonly id = 'scheduled-only';
+      public readonly description = 'subscriber without webhook handlers';
+      public readonly requiredPermissions: RequiredPermissions = {};
+    }
+
+    const on = vi.fn();
+    const probot = Object.assign(makeProbot(), { on });
+
+    new Carson([new ScheduledOnlySubscriber()]).run(probot);
+
+    expect(on).not.toHaveBeenCalled();
+  });
+
   it('run() binds the action router so subscribers can dispatch to each other', async () => {
     const sub = new FakeSubscriber();
     const carson = new Carson([sub]);

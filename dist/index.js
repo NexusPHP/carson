@@ -61691,7 +61691,8 @@ var NoMergeCommitsSubscriber = class extends Subscriber {
 var Overridable = {
   days_until_close: external_exports.number().int().positive().optional(),
   close_message: external_exports.string().optional(),
-  exempt_labels: external_exports.array(external_exports.string()).optional()
+  exempt_labels: external_exports.array(external_exports.string()).optional(),
+  unlabel_on_response: external_exports.boolean().optional()
 };
 var Rule3 = external_exports.object({
   label: external_exports.string().min(1),
@@ -61709,14 +61710,17 @@ var DEFAULT_CLOSE_MESSAGE2 = "Closing this {{type}}: no response for {{days_unti
 var MS_PER_DAY3 = 24 * 60 * 60 * 1e3;
 var CONCURRENCY5 = 5;
 var SCOPES = { issues: " is:issue", pull_requests: " is:pr" };
+var COMMENT_EVENTS = ["issue_comment.created"];
+var PR_RESPONSE_EVENTS = ["pull_request.synchronize", "pull_request_review_comment.created"];
 var resolveRules = (settings) => {
   const rules = settings.rules ?? [{ label: settings.label ?? DEFAULT_LABEL }];
   return rules.map((rule) => ({
     label: rule.label,
-    scope: rule.only === void 0 ? "" : SCOPES[rule.only],
+    only: rule.only,
     days: rule.days_until_close ?? settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE,
     message: rule.close_message ?? settings.close_message ?? DEFAULT_CLOSE_MESSAGE2,
-    exempt: new Set(rule.exempt_labels ?? settings.exempt_labels ?? [])
+    exempt: new Set(rule.exempt_labels ?? settings.exempt_labels ?? []),
+    unlabelOnResponse: rule.unlabel_on_response ?? settings.unlabel_on_response ?? false
   }));
 };
 var ruleConflicts = (settings) => {
@@ -61747,10 +61751,51 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     issues: "write",
     pull_requests: "write"
   };
+  register(probot) {
+    probot.on(COMMENT_EVENTS, async (context) => {
+      const issue3 = context.payload.issue;
+      await this.#handleResponse(context, {
+        number: issue3.number,
+        isPr: issue3.pull_request !== void 0,
+        isOpen: issue3.state === "open",
+        author: issue3.user.login,
+        labels: labelNames(issue3.labels)
+      });
+    });
+    probot.on(PR_RESPONSE_EVENTS, async (context) => {
+      const pr = context.payload.pull_request;
+      await this.#handleResponse(context, {
+        number: pr.number,
+        isPr: true,
+        isOpen: pr.state === "open",
+        author: pr.user?.login,
+        labels: labelNames(pr.labels)
+      });
+    });
+  }
   registerScheduled(registrar) {
     registrar.on(async (context) => {
       await this.#run(context);
     });
+  }
+  async #handleResponse(context, item) {
+    if (context.isBot || !item.isOpen || item.author !== context.payload.sender.login) {
+      return;
+    }
+    const enabled = await this.loadEnabledSettings(context, Settings11);
+    if (enabled === null || ruleConflicts(enabled.settings).length > 0) {
+      return;
+    }
+    const carried = new Set(item.labels.map((name) => name.toLowerCase()));
+    const kind = item.isPr ? "pull_requests" : "issues";
+    const labels = resolveRules(enabled.settings).filter((rule) => rule.unlabelOnResponse && (rule.only ?? kind) === kind && carried.has(rule.label.toLowerCase())).map((rule) => rule.label);
+    if (labels.length === 0) {
+      return;
+    }
+    if (await this.dispatch("unlabel", context, { number: item.number, labels })) {
+      const names = labels.map((label) => `"${label}"`).join(", ");
+      this.log().info(`Removed ${names} from ${itemRef(item.isPr, item.number)} after a response from its author`);
+    }
   }
   async #run(scheduled) {
     const enabled = await this.loadEnabledSettings(scheduled, Settings11);
@@ -61772,7 +61817,7 @@ var NoResponseCloserSubscriber = class extends Subscriber {
     const cutoff = Date.now() - rule.days * MS_PER_DAY3;
     const { owner, repo } = scheduled.repo();
     const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
-      q: `repo:${owner}/${repo} is:open${rule.scope} label:"${rule.label}" updated:<${searchTimestamp(cutoff)}`,
+      q: `repo:${owner}/${repo} is:open${rule.only === void 0 ? "" : SCOPES[rule.only]} label:"${rule.label}" updated:<${searchTimestamp(cutoff)}`,
       advanced_search: "true",
       sort: "updated",
       order: "asc",

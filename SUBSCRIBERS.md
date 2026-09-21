@@ -675,7 +675,7 @@ settings:
 
 Closes open issues and pull requests carrying a configurable label whose activity has been stale past a configurable threshold. Designed for the common "we asked for more info, then never heard back" workflow.
 
-**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow)
+**Triggers**: scheduled (cron via `on: schedule:` in the consumer workflow), `issue_comment.created`, `pull_request.synchronize`, `pull_request_review_comment.created`
 **Permissions**: `issues: write`, `pull_requests: write`
 
 On each scheduled run the subscriber:
@@ -690,6 +690,8 @@ To close on several labels, each with its own grace period and message, list the
 Without `rules`, the top-level keys describe a single rule, so existing configurations need no change. `rules: []` runs nothing. Three conflicts make the subscriber log a warning and skip the run instead of guessing: a top-level `label` next to `rules`, two rules for the same label (compared case-insensitively, as GitHub does), and a rule whose label is in its own exempt list.
 
 The default `close_message` talks about requested information, so a rule about anything else should set its own, or share one that names `{{label}}`. Search requests are limited to 30 a minute per installation and shared with the other scheduled subscribers, which a handful of rules stays well inside.
+
+With `unlabel_on_response: true`, the label comes off as soon as the item's author responds, so an answered item is not closed later for lack of a response. A response is a new comment, a push to the pull request, or a reply in a review thread, made by the author on an open item. The same action by anyone else does not count: a maintainer's comment or an "Update branch" push leaves the label in place. Set it per rule, or at the top level as the default. It suits labels that ask the author for something, and not labels that another check clears, such as one applied by `template-enforcer`. The removal goes through `auto-labeler`'s `unlabel` action, so `auto-labeler` must be enabled. Without it the label stays and a warning is logged. Any response clears the label, including one that does not answer the question, and re-applying the label restarts the clock.
 
 The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. A label change by another subscriber counts too, which matters more with a threshold of a few days. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
 
@@ -718,6 +720,7 @@ They are complementary. A repo can enable both, with non-overlapping label scope
 | `days_until_close` | positive integer | `14` |
 | `close_message` | string | `Closing this {{type}}: no response for {{days_until_close}} days after information was requested. Comment with the requested details and it can be reopened.` |
 | `exempt_labels` | array of strings | `[]` |
+| `unlabel_on_response` | boolean | `false` |
 | `rules` | array of rule objects (see below) | (none, the keys above describe one rule) |
 
 Each rule object:
@@ -728,6 +731,7 @@ Each rule object:
 | `days_until_close` | positive integer | top-level value, else `14` |
 | `close_message` | string | top-level value, else the default message |
 | `exempt_labels` | array of strings, replaces the top-level list | top-level value, else `[]` |
+| `unlabel_on_response` | boolean | top-level value, else `false` |
 | `only` | `issues` or `pull_requests` | both |
 
 ### Context (for `close_message`)
@@ -770,6 +774,7 @@ settings:
     exempt_labels: [pinned]
     rules:
       - label: waiting for info
+        unlabel_on_response: true
       - label: needs template
         days_until_close: 3
         only: issues

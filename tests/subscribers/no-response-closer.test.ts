@@ -1,8 +1,278 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Probot, ProbotOctokit } from 'probot';
 import { type ScheduledContext, ScheduledRegistrar } from '../../src/scheduled.js';
+import app from '../../src/app.js';
+import { generateKeyPairSync } from 'node:crypto';
 import { logger } from '../../src/logger.js';
+import nock from 'nock';
 import { NoResponseCloserSubscriber } from '../../src/subscribers/no-response-closer.js';
 import { resetConfigCache } from '../../src/configuration/cache.js';
+
+const { privateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+});
+
+const API = 'https://api.github.com';
+const INSTALLATION_ID = 12345;
+const ITEM_NUMBER = 42;
+
+const mockInstallationToken = (): void => {
+  nock(API)
+    .post(`/app/installations/${INSTALLATION_ID}/access_tokens`)
+    .reply(201, { token: 'inst-token', expires_at: '2099-01-01T00:00:00Z' });
+};
+
+const mockConfig = (yaml: string): void => {
+  nock(API).get('/repos/acme/widgets/contents/.github%2Fcarson.yml').reply(200, yaml);
+};
+
+const mockRemoveLabel = (label: string): nock.Scope =>
+  nock(API).delete(`/repos/acme/widgets/issues/${ITEM_NUMBER}/labels/${encodeURIComponent(label)}`).reply(200, []);
+
+const responseConfig = (settings: string[], subscribers = ['auto-labeler', 'no-response-closer']): string => [
+  'version: 1',
+  'subscribers:',
+  ...subscribers.map((id) => `  - ${id}`),
+  'settings:',
+  '  no-response-closer:',
+  ...settings.map((line) => `    ${line}`),
+  '',
+].join('\n');
+
+const WAITING_RULE = ['rules:', '  - label: waiting for info', '    unlabel_on_response: true'];
+
+interface ResponseOverrides {
+  sender?: string;
+  senderType?: string;
+  author?: string | null;
+  labels?: string[];
+  state?: 'open' | 'closed';
+  isPr?: boolean;
+}
+
+const item = (overrides: ResponseOverrides): Record<string, unknown> => ({
+  number: ITEM_NUMBER,
+  state: overrides.state ?? 'open',
+  user: overrides.author === null ? null : { login: overrides.author ?? 'octocat' },
+  labels: (overrides.labels ?? ['waiting for info']).map((name) => ({ name })),
+  title: 'Something is broken',
+});
+
+const base = (overrides: ResponseOverrides): Record<string, unknown> => ({
+  installation: { id: INSTALLATION_ID },
+  repository: { owner: { login: 'acme' }, name: 'widgets' },
+  sender: { login: overrides.sender ?? 'octocat', type: overrides.senderType ?? 'User' },
+});
+
+const commentPayload = (overrides: ResponseOverrides = {}): Record<string, unknown> => ({
+  ...base(overrides),
+  action: 'created',
+  issue: { ...item(overrides), ...(overrides.isPr === true ? { pull_request: { url: 'https://example.test' } } : {}) },
+  comment: { id: 1, body: 'Here are the details.', user: { login: overrides.sender ?? 'octocat' } },
+});
+
+const pushPayload = (overrides: ResponseOverrides = {}): Record<string, unknown> => ({
+  ...base(overrides),
+  action: 'synchronize',
+  pull_request: { ...item(overrides), draft: false, head: { sha: 'abc1234', ref: 'feature/x' }, base: { ref: 'main' } },
+});
+
+const reviewCommentPayload = (overrides: ResponseOverrides = {}): Record<string, unknown> => ({
+  ...base(overrides),
+  action: 'created',
+  pull_request: { ...item(overrides), draft: false, head: { sha: 'abc1234', ref: 'feature/x' }, base: { ref: 'main' } },
+  comment: { id: 2, body: 'Done.', user: { login: overrides.sender ?? 'octocat' } },
+});
+
+describe('no-response-closer subscriber (author responses, via app)', () => {
+  let probot: Probot;
+
+  const receive = async (id: string, name: string, payload: Record<string, unknown>): Promise<void> => {
+    await probot.receive({ id, name, payload } as never);
+  };
+
+  beforeAll(() => {
+    nock.disableNetConnect();
+  });
+
+  afterAll(() => {
+    nock.enableNetConnect();
+  });
+
+  beforeEach(async () => {
+    resetConfigCache();
+    probot = new Probot({
+      appId: 123,
+      privateKey,
+      logLevel: 'fatal',
+      Octokit: ProbotOctokit.defaults({ retry: { enabled: false }, throttle: { enabled: false } }),
+    });
+    await probot.load(app);
+  });
+
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
+  it('removes the label when the author comments', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+    const removeScope = mockRemoveLabel('waiting for info');
+
+    await receive('evt-author-comment', 'issue_comment', commentPayload());
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('removes the label when the author pushes to the pull request', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+    const removeScope = mockRemoveLabel('waiting for info');
+
+    await receive('evt-author-push', 'pull_request', pushPayload());
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('removes the label when the author replies in a review thread', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+    const removeScope = mockRemoveLabel('waiting for info');
+
+    await receive('evt-author-review-reply', 'pull_request_review_comment', reviewCommentPayload());
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('matches the carried label case-insensitively', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+    const removeScope = mockRemoveLabel('waiting for info');
+
+    await receive('evt-label-case', 'issue_comment', commentPayload({ labels: ['Waiting For Info'] }));
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('accepts unlabel_on_response at the top level for the single-rule form', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(['unlabel_on_response: true']));
+    const removeScope = mockRemoveLabel('needs-info');
+
+    await receive('evt-top-level', 'issue_comment', commentPayload({ labels: ['needs-info'] }));
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('ignores a comment by someone other than the author', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+
+    await receive('evt-other-comment', 'issue_comment', commentPayload({ sender: 'maintainer' }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores a push by someone other than the author', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+
+    await receive('evt-other-push', 'pull_request', pushPayload({ sender: 'maintainer' }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores a pull request whose author is a ghost', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+
+    await receive('evt-ghost-author', 'pull_request', pushPayload({ author: null }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores bot senders', async () => {
+    await receive('evt-bot', 'issue_comment', commentPayload({ senderType: 'Bot' }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('ignores closed items', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+
+    await receive('evt-closed', 'issue_comment', commentPayload({ state: 'closed' }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('leaves the label when the rule has not opted in', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(['rules:', '  - label: waiting for info']));
+
+    await receive('evt-not-opted-in', 'issue_comment', commentPayload());
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('leaves the label when the item does not carry it', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE));
+
+    await receive('evt-no-label', 'issue_comment', commentPayload({ labels: ['bug'] }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('respects the rule scope: an issues-only rule ignores a pull request', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig([...WAITING_RULE, '    only: issues']));
+
+    await receive('evt-scope', 'issue_comment', commentPayload({ isPr: true }));
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('applies a pull-requests-only rule to a comment on a pull request', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig([...WAITING_RULE, '    only: pull_requests']));
+    const removeScope = mockRemoveLabel('waiting for info');
+
+    await receive('evt-scope-pr', 'issue_comment', commentPayload({ isPr: true }));
+
+    expect(removeScope.isDone()).toBe(true);
+  });
+
+  it('leaves the label when auto-labeler is not enabled to serve the request', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(WAITING_RULE, ['no-response-closer']));
+
+    await receive('evt-no-owner', 'issue_comment', commentPayload());
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing when the settings conflict', async () => {
+    mockInstallationToken();
+    mockConfig(responseConfig(['label: needs-info', ...WAITING_RULE]));
+
+    await receive('evt-conflict', 'issue_comment', commentPayload());
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing when no-response-closer is not enabled', async () => {
+    mockInstallationToken();
+    mockConfig('version: 1\nsubscribers:\n  - issue-intake\n');
+
+    await receive('evt-not-enabled', 'issue_comment', commentPayload());
+
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+});
 
 interface ItemShape {
   number: number;
@@ -82,6 +352,7 @@ const runScheduled = async (context: ScheduledContext): Promise<void> => {
 
 describe('no-response-closer subscriber', () => {
   beforeEach(() => {
+    resetConfigCache();
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     logger.init(makeStubLog() as never);
@@ -414,12 +685,5 @@ describe('no-response-closer subscriber', () => {
 
       expect(paginateMock).not.toHaveBeenCalled();
     });
-  });
-
-  it('registers no webhook handlers', () => {
-    const subscriber = new NoResponseCloserSubscriber();
-    const onSpy = vi.fn();
-    subscriber.register({ on: onSpy } as never);
-    expect(onSpy).not.toHaveBeenCalled();
   });
 });

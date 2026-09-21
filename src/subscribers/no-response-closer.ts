@@ -1,6 +1,8 @@
+import type { Context, Probot } from 'probot';
 import { interpolate, itemRef, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { forEachConcurrent } from '../concurrency.js';
 import { labelNames } from '../github/labels.js';
 import { searchTimestamp } from '../github/search.js';
@@ -10,6 +12,7 @@ const Overridable = {
   days_until_close: z.number().int().positive().optional(),
   close_message: z.string().optional(),
   exempt_labels: z.array(z.string()).optional(),
+  unlabel_on_response: z.boolean().optional(),
 };
 
 const Rule = z.object({
@@ -28,10 +31,19 @@ type Settings = z.infer<typeof Settings>;
 
 interface ResolvedRule {
   label: string;
-  scope: string;
+  only: 'issues' | 'pull_requests' | undefined;
   days: number;
   message: string;
   exempt: ReadonlySet<string>;
+  unlabelOnResponse: boolean;
+}
+
+interface Responded {
+  number: number;
+  isPr: boolean;
+  isOpen: boolean;
+  author: string | undefined;
+  labels: readonly string[];
 }
 
 const DEFAULT_LABEL = 'needs-info';
@@ -41,15 +53,21 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 5;
 const SCOPES = { issues: ' is:issue', pull_requests: ' is:pr' } as const;
 
+const COMMENT_EVENTS = ['issue_comment.created'] satisfies EmitterWebhookEventName[];
+const PR_RESPONSE_EVENTS = ['pull_request.synchronize', 'pull_request_review_comment.created'] satisfies EmitterWebhookEventName[];
+
+type ResponseContext = Context<(typeof COMMENT_EVENTS)[number] | (typeof PR_RESPONSE_EVENTS)[number]>;
+
 const resolveRules = (settings: Settings): ResolvedRule[] => {
   const rules: z.infer<typeof Rule>[] = settings.rules ?? [{ label: settings.label ?? DEFAULT_LABEL }];
 
   return rules.map((rule) => ({
     label: rule.label,
-    scope: rule.only === undefined ? '' : SCOPES[rule.only],
+    only: rule.only,
     days: rule.days_until_close ?? settings.days_until_close ?? DEFAULT_DAYS_UNTIL_CLOSE,
     message: rule.close_message ?? settings.close_message ?? DEFAULT_CLOSE_MESSAGE,
     exempt: new Set(rule.exempt_labels ?? settings.exempt_labels ?? []),
+    unlabelOnResponse: rule.unlabel_on_response ?? settings.unlabel_on_response ?? false,
   }));
 };
 
@@ -90,10 +108,64 @@ export class NoResponseCloserSubscriber extends Subscriber {
     pull_requests: 'write',
   };
 
+  public override register(probot: Probot): void {
+    probot.on(COMMENT_EVENTS, async (context): Promise<void> => {
+      const issue = context.payload.issue;
+
+      await this.#handleResponse(context, {
+        number: issue.number,
+        isPr: issue.pull_request !== undefined,
+        isOpen: issue.state === 'open',
+        author: issue.user.login,
+        labels: labelNames(issue.labels),
+      });
+    });
+
+    probot.on(PR_RESPONSE_EVENTS, async (context): Promise<void> => {
+      const pr = context.payload.pull_request;
+
+      await this.#handleResponse(context, {
+        number: pr.number,
+        isPr: true,
+        isOpen: pr.state === 'open',
+        author: pr.user?.login,
+        labels: labelNames(pr.labels),
+      });
+    });
+  }
+
   public override registerScheduled(registrar: ScheduledRegistrar): void {
     registrar.on(async (context) => {
       await this.#run(context);
     });
+  }
+
+  async #handleResponse(context: ResponseContext, item: Responded): Promise<void> {
+    if (context.isBot || !item.isOpen || item.author !== context.payload.sender.login) {
+      return;
+    }
+
+    const enabled = await this.loadEnabledSettings(context, Settings);
+
+    if (enabled === null || ruleConflicts(enabled.settings).length > 0) {
+      return;
+    }
+
+    const carried = new Set(item.labels.map((name) => name.toLowerCase()));
+    const kind = item.isPr ? 'pull_requests' : 'issues';
+    const labels = resolveRules(enabled.settings)
+      .filter((rule) => rule.unlabelOnResponse && (rule.only ?? kind) === kind && carried.has(rule.label.toLowerCase()))
+      .map((rule) => rule.label);
+
+    if (labels.length === 0) {
+      return;
+    }
+
+    if (await this.dispatch('unlabel', context, { number: item.number, labels })) {
+      const names = labels.map((label) => `"${label}"`).join(', ');
+
+      this.log().info(`Removed ${names} from ${itemRef(item.isPr, item.number)} after a response from its author`);
+    }
   }
 
   async #run(scheduled: ScheduledContext): Promise<void> {
@@ -124,7 +196,7 @@ export class NoResponseCloserSubscriber extends Subscriber {
     const { owner, repo } = scheduled.repo();
 
     const items = await scheduled.octokit.paginate(scheduled.octokit.rest.search.issuesAndPullRequests, {
-      q: `repo:${owner}/${repo} is:open${rule.scope} label:"${rule.label}" updated:<${searchTimestamp(cutoff)}`,
+      q: `repo:${owner}/${repo} is:open${rule.only === undefined ? '' : SCOPES[rule.only]} label:"${rule.label}" updated:<${searchTimestamp(cutoff)}`,
       advanced_search: 'true',
       sort: 'updated',
       order: 'asc',
