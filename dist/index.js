@@ -39989,9 +39989,21 @@ function error(message, properties = {}) {
 function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function notice(message, properties = {}) {
+  issueCommand("notice", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
 
 // src/github/repository.ts
 var INVALID_REPOSITORY_MESSAGE = "GITHUB_REPOSITORY must be in owner/repo format";
+var SECRETLESS_ON_FORKS = ["pull_request", "pull_request_review", "pull_request_review_comment"];
+var runsWithoutSecrets = (eventName, payload) => {
+  if (!SECRETLESS_ON_FORKS.includes(eventName)) {
+    return false;
+  }
+  const pr = payload.pull_request;
+  const base = pr?.base?.repo?.full_name;
+  return typeof base === "string" && pr?.head?.repo?.full_name !== base;
+};
 var parseRepository = (input2) => {
   const slash = input2.indexOf("/");
   if (slash === -1) {
@@ -61041,9 +61053,9 @@ var DraftPolicySubscriber = class extends Subscriber {
         issue_number: pr.number,
         per_page: 100
       });
-      const notice = findNotice(comments, this.id, isBotComment);
-      if (notice !== void 0) {
-        await this.resolveNotice(context, pr.number, fromRestComment(notice), "RESOLVED");
+      const notice2 = findNotice(comments, this.id, isBotComment);
+      if (notice2 !== void 0) {
+        await this.resolveNotice(context, pr.number, fromRestComment(notice2), "RESOLVED");
         log.info(`Resolved draft notice on PR #${pr.number}`);
       }
       return;
@@ -61090,9 +61102,9 @@ var DraftPolicySubscriber = class extends Subscriber {
         issue_number: item.number,
         per_page: 100
       });
-      const notice = findNotice(comments, this.id, isBotComment);
-      if (notice === void 0 || new Date(notice.created_at).getTime() >= cutoff) {
-        log.debug(`PR #${item.number}: ${notice === void 0 ? "no draft notice" : "within grace period"}, skipping`);
+      const notice2 = findNotice(comments, this.id, isBotComment);
+      if (notice2 === void 0 || new Date(notice2.created_at).getTime() >= cutoff) {
+        log.debug(`PR #${item.number}: ${notice2 === void 0 ? "no draft notice" : "within grace period"}, skipping`);
         return;
       }
       const templateContext = {
@@ -61430,8 +61442,8 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findNotice(comments, this.id, isBotComment);
-    if (notice !== void 0) {
+    const notice2 = findNotice(comments, this.id, isBotComment);
+    if (notice2 !== void 0) {
       log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
       return;
     }
@@ -62685,15 +62697,15 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       issue_number: pr.number,
       per_page: 100
     });
-    const notice = findNotice(comments, this.id, isBotComment);
+    const notice2 = findNotice(comments, this.id, isBotComment);
     if (supported) {
-      if (notice !== void 0) {
-        await this.resolveNotice(context, pr.number, fromRestComment(notice), "OUTDATED");
+      if (notice2 !== void 0) {
+        await this.resolveNotice(context, pr.number, fromRestComment(notice2), "OUTDATED");
         log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
       }
       return;
     }
-    if (notice !== void 0) {
+    if (notice2 !== void 0) {
       log.debug(`PR #${pr.number} already carries an unsupported-branch notice, skipping`);
       return;
     }
@@ -70926,8 +70938,8 @@ var LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
 var isLogLevel = (value) => LOG_LEVELS.includes(value);
 var main = async () => {
   const startedAt = Date.now();
-  const appId = getInput("app_id", { required: true });
-  const privateKey = getInput("private_key", { required: true });
+  const appId = getInput("app_id");
+  const privateKey = getInput("private_key");
   const webhookSecret = getInput("webhook_secret");
   const logLevelInput = getInput("log_level");
   let logLevel;
@@ -70950,6 +70962,16 @@ var main = async () => {
     return;
   }
   const payload = JSON.parse(await readFile(eventPath, "utf8"));
+  if (appId.length === 0 && privateKey.length === 0 && runsWithoutSecrets(eventName, payload)) {
+    notice(`Skipped: GitHub does not pass secrets to ${eventName} on pull requests from forks, so Carson cannot authenticate. The pull request is picked up on its next pull_request_target event.`);
+    return;
+  }
+  for (const [name, value] of [["app_id", appId], ["private_key", privateKey]]) {
+    if (value.length === 0) {
+      setFailed(`Input required and not supplied: ${name}`);
+      return;
+    }
+  }
   const probot = createProbot({
     overrides: {
       appId,

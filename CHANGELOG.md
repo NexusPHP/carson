@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Review events on a pull request from a fork no longer produce a failed run. GitHub passes no secrets to `pull_request_review` and `pull_request_review_comment` there, so Carson could not authenticate and failed on the missing `app_id`. It now ends the run successfully with a notice. Empty credentials in any other situation still fail. The README and the `no-response-closer`, `stale`, and `triage-labeler` sections say what this means for fork pull requests.
 - `stale`, `template-enforcer`, `triage-labeler`, and `auto-labeler`'s sync no longer fail the run when the label they are removing is already gone, for example removed by a maintainer in the same moment.
 
 ## [v1.6.0](https://github.com/NexusPHP/carson/compare/v1.5.0...v1.6.0) - 2026-09-19

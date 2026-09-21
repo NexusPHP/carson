@@ -711,7 +711,7 @@ Without `rules`, the top-level keys describe a single rule, so existing configur
 
 The default `close_message` talks about requested information, so a rule about anything else should set its own, or share one that names `{{label}}`. Search requests are limited to 30 a minute per installation and shared with the other scheduled subscribers, which a handful of rules stays well inside.
 
-With `unlabel_on_response: true`, the label comes off as soon as the item's author responds, so an answered item is not closed later for lack of a response. A response is a new comment, a push to the pull request, or a reply in a review thread, made by the author on an open item. The same action by anyone else does not count: a maintainer's comment or an "Update branch" push leaves the label in place. Set it per rule, or at the top level as the default. It suits labels that ask the author for something, and not labels that another check clears, such as one applied by `template-enforcer`. The removal goes through `auto-labeler`'s `unlabel` action, so `auto-labeler` must be enabled. Without it the label stays and a warning is logged. Any response clears the label, including one that does not answer the question, and re-applying the label restarts the clock.
+With `unlabel_on_response: true`, the label comes off as soon as the item's author responds, so an answered item is not closed later for lack of a response. A response is a new comment, a push to the pull request, or a reply in a review thread, made by the author on an open item. The same action by anyone else does not count: a maintainer's comment or an "Update branch" push leaves the label in place. Set it per rule, or at the top level as the default. It suits labels that ask the author for something, and not labels that another check clears, such as one applied by `template-enforcer`. The removal goes through `auto-labeler`'s `unlabel` action, so `auto-labeler` must be enabled. Without it the label stays and a warning is logged. Any response clears the label, including one that does not answer the question, and re-applying the label restarts the clock. On a pull request from a fork, a reply in a review thread cannot be seen, because GitHub runs that event without secrets (see the note in the [README](README.md#workflow)). A regular comment or a push is what clears the label there.
 
 The activity check uses the item's `updated_at` field, so **any** comment or edit (including from bots) resets the timer. A label change by another subscriber counts too, which matters more with a threshold of a few days. This is the same semantic `stale` uses. Stricter "the author has not responded since the label was added" tracking would require per-item timeline + comments fetches, and is a possible future enhancement.
 
@@ -968,6 +968,8 @@ The stale notice is identified by the hidden marker `<!-- carson:stale -->` appe
 
 Bot senders (including Carson's own stale comment and Dependabot's auto-rebase) do not un-stale. The signal is meant to capture maintainer attention specifically. To re-enable a closed-by-stale item, a maintainer can reopen it manually. The next scheduled run will not re-stale it for `days_until_stale` more days.
 
+On a pull request from a fork, review and review-comment events run without secrets and are skipped (see the note in the [README](README.md#workflow)), so review activity alone does not un-stale it. A regular comment or a push does.
+
 Add a cron schedule to your `.github/workflows/carson.yml` so the action runs periodically:
 
 ```yaml
@@ -1185,6 +1187,8 @@ A change request keeps the PR at `needs-rework` until the reviewer submits a new
 A reviewer "qualifies" when their repository role, looked up via `repos.getCollaboratorPermissionLevel`, is in the configured `qualifying_roles` set. The default and maximum set is `{admin, maintain, write}`. The set cannot be widened to include `triage` or `read`. Schema validation rejects any value outside the allowed list. This prevents drive-by approvals from external contributors flipping the label. The role lookup replaces `author_association`, which reports private organization members to an App as `CONTRIBUTOR` or `NONE` unless the App holds the organization `members: read` permission. A leftover `qualifying_associations` setting is ignored with a warning.
 
 Bot senders are not skipped, so pull requests opened by Dependabot and similar bots are triaged.
+
+On a pull request from a fork, `pull_request_review` runs without secrets and is skipped (see the note in the [README](README.md#workflow)), so the label does not change at the moment a review is submitted or dismissed. Every run re-reads all reviews, so the label catches up on the pull request's next `pull_request_target` event, such as a push.
 
 Labels are auto-created by GitHub on first use with a random color. To control the colors, create the labels manually in the repository's label settings before enabling the subscriber.
 

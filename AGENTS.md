@@ -46,6 +46,8 @@ The preflight ([src/preflight.ts](src/preflight.ts) `runPreflight(...)`) fetches
 
 Because the permission check already needs the resolved installation and `carson.yml`, `runPreflight` returns that config's `subscribers` list as `enabledIds` alongside the pass/fail `error`, and the entrypoint uses it to register only the configured subscribers. A subscriber left out of `subscribers:` never gets a webhook or scheduled handler attached at all, not merely a no-op when one later fires. When the check can't resolve the installation or the App lookup (App not installed, transient API failure), `enabledIds` is `undefined` and `carson.run` falls back to registering everything, same as before this filtering existed. Each subscriber still self-gates per event via `loadEnabledConfig` regardless of whether it was filtered at registration time, so a bug in the filtering path fails safe. When `carson.yml` is absent entirely, `enabledIds` is `[]` and no subscriber is registered.
 
+`pull_request`, `pull_request_review`, and `pull_request_review_comment` get no secrets on a pull request from a fork. When both credentials are empty and `runsWithoutSecrets(...)` in [src/github/repository.ts](src/github/repository.ts) confirms that case from the event name and the payload's head and base repositories, the entrypoint ends the run successfully with a `core.notice`. Empty credentials anywhere else still fail the run, so a consumer who forgot the secrets is not hidden.
+
 A `probot.onError` handler flips a `handlerFailed` flag so the action fails the run if any subscriber threw. **A thrown subscriber does not abort other subscribers.** They all run and the action fails at the end.
 
 ### The Carson class and Subscriber contract

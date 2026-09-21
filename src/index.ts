@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { dispatchScheduled, type SchedulePayload } from './scheduled.js';
-import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
+import { INVALID_REPOSITORY_MESSAGE, parseRepository, runsWithoutSecrets } from './github/repository.js';
 import { appIdentity } from './app-identity.js';
 import { carson } from './app.js';
 import { createProbot } from 'probot';
@@ -17,8 +17,8 @@ const isLogLevel = (value: string): value is LogLevel =>
 
 const main = async (): Promise<void> => {
   const startedAt = Date.now();
-  const appId = core.getInput('app_id', { required: true });
-  const privateKey = core.getInput('private_key', { required: true });
+  const appId = core.getInput('app_id');
+  const privateKey = core.getInput('private_key');
   const webhookSecret = core.getInput('webhook_secret');
   const logLevelInput = core.getInput('log_level');
   let logLevel: LogLevel | undefined;
@@ -47,6 +47,19 @@ const main = async (): Promise<void> => {
   }
 
   const payload: unknown = JSON.parse(await readFile(eventPath, 'utf8'));
+
+  if (appId.length === 0 && privateKey.length === 0 && runsWithoutSecrets(eventName, payload)) {
+    core.notice(`Skipped: GitHub does not pass secrets to ${eventName} on pull requests from forks, so Carson cannot authenticate. The pull request is picked up on its next pull_request_target event.`);
+    return;
+  }
+
+  for (const [name, value] of [['app_id', appId], ['private_key', privateKey]] as const) {
+    if (value.length === 0) {
+      core.setFailed(`Input required and not supplied: ${name}`);
+      return;
+    }
+  }
+
   const probot = createProbot({
     overrides: {
       appId,
