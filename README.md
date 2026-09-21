@@ -92,7 +92,7 @@ jobs:
   carson:
     runs-on: ubuntu-latest
     steps:
-      - uses: NexusPHP/carson@<commit-sha>  # v1.6.0
+      - uses: NexusPHP/carson@<commit-sha>  # v1.7.0
         with:
           app_id: ${{ secrets.CARSON_APP_ID }}
           private_key: ${{ secrets.CARSON_PRIVATE_KEY }}
@@ -109,7 +109,7 @@ The trigger list above covers every event Carson's bundled subscribers register.
 > [!WARNING]
 > Do not add a `concurrency` group keyed on the issue or pull request number. A group holds one running and one pending run, and `cancel-in-progress: false` protects only the running one: each newly queued run cancels the pending run before it. A pull request opened with labels already attached, as Dependabot does, fires `opened` and one `labeled` per label in the same second, so the `opened` run is often the one dropped, and every subscriber that acts on it misses the pull request. Labels added by Carson itself queue further runs into the same group. Carson's handlers are idempotent and a run takes seconds, so the workflow needs no concurrency control.
 
-Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.6.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
+Pin to a specific commit SHA and let [Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates) keep it updated via the trailing `# v1.7.0` comment. Carson does not maintain a moving `v1` tag: every release is a fixed `vX.Y.Z`.
 
 ### External triggers (`repository_dispatch`)
 
