@@ -62430,36 +62430,42 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       if (hasLabel) {
         await removeLabel(context.octokit, { owner, repo, issue_number: item.number, name: label });
         log.info(`Removed "${label}" from ${ref}`);
+        await this.#resolvePriorNotice(context, owner, repo, item.number, ref);
       }
       return;
     }
-    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+    if (hasLabel) {
+      return;
+    }
+    const body = interpolate(messageTemplate, {
+      user: item.user,
+      type: typeLabel(kind),
+      number: item.number,
+      title: item.title,
+      label,
+      violations: renderViolations(violations)
+    });
+    this.notice(context, item.number, body);
+    log.info(`Posted template-enforcer comment on ${ref}`);
+    await context.octokit.rest.issues.addLabels({
       owner,
       repo,
       issue_number: item.number,
+      labels: [label]
+    });
+    log.info(`Added "${label}" to ${ref}`);
+  }
+  async #resolvePriorNotice(context, owner, repo, number4, ref) {
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: number4,
       per_page: 100
     });
-    const priorComment = findNotice(comments, this.id, isBotComment);
-    if (priorComment === void 0) {
-      const body = interpolate(messageTemplate, {
-        user: item.user,
-        type: typeLabel(kind),
-        number: item.number,
-        title: item.title,
-        label,
-        violations: renderViolations(violations)
-      });
-      this.notice(context, item.number, body);
-      log.info(`Posted template-enforcer comment on ${ref}`);
-    }
-    if (!hasLabel) {
-      await context.octokit.rest.issues.addLabels({
-        owner,
-        repo,
-        issue_number: item.number,
-        labels: [label]
-      });
-      log.info(`Added "${label}" to ${ref}`);
+    const notice2 = findNotice(comments, this.id, isBotComment);
+    if (notice2 !== void 0) {
+      await this.resolveNotice(context, number4, fromRestComment(notice2), "RESOLVED");
+      this.log().info(`Resolved template-enforcer comment on ${ref}`);
     }
   }
   async #isExempt(context, owner, repo, user, exemptRoles) {

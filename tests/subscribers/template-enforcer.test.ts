@@ -48,9 +48,20 @@ const mockListComments = (comments: CommentInput[]): nock.Scope => {
     .query({ per_page: '100' })
     .reply(200, comments.map((c, i) => ({
       id: 9000 + i,
+      node_id: `IC_${9000 + i}`,
       body: c.body,
       user: { login: 'carson[bot]', type: c.userType ?? 'Bot' },
     })));
+};
+
+const mockMinimize = (nodeId: string): nock.Scope => {
+  return nock('https://api.github.com')
+    .post('/graphql', (body: { query: string; variables: { subjectId: string; classifier: string } }) => {
+      expect(body.query).toContain('minimizeComment');
+      expect(body.variables).toEqual({ subjectId: nodeId, classifier: 'RESOLVED' });
+      return true;
+    })
+    .reply(200, { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } });
 };
 
 const mockAddLabels = (label: string): nock.Scope => {
@@ -226,7 +237,6 @@ describe('template-enforcer subscriber (via app)', () => {
   it('labels and comments an issue that is missing a required section', async () => {
     mockInstallationToken();
     mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('Required section missing: `## Steps to reproduce`');
       expect(body.body).toContain('Required section missing: `## Expected behavior`');
@@ -266,6 +276,7 @@ describe('template-enforcer subscriber (via app)', () => {
     mockInstallationToken();
     mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
     const removeScope = mockRemoveLabel('needs-template');
+    mockListComments([]);
 
     await probot.receive({
       id: 'evt-issue-fixed',
@@ -287,6 +298,7 @@ describe('template-enforcer subscriber (via app)', () => {
     const removeScope = nock('https://api.github.com')
       .delete(`/repos/acme/widgets/issues/${ITEM_NUMBER}/labels/needs-template`)
       .reply(404, { message: 'Label does not exist' });
+    mockListComments([]);
 
     await expect(probot.receive({
       id: 'evt-issue-label-gone',
@@ -301,10 +313,39 @@ describe('template-enforcer subscriber (via app)', () => {
     expect(removeScope.isDone()).toBe(true);
   });
 
-  it('adds the label when a prior carson comment exists but the label was manually removed', async () => {
+  it('resolves the prior comment when a previously flagged issue is now compliant', async () => {
     mockInstallationToken();
     mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
-    mockListComments([{ body: `prior\n\n${COMMENT_MARKER}`, userType: 'Bot' }]);
+    const removeScope = mockRemoveLabel('needs-template');
+    mockListComments([
+      { body: `prior\n\n${COMMENT_MARKER}` },
+      { body: 'thanks, fixed', userType: 'User' },
+    ]);
+    const minimizeScope = mockMinimize('IC_9000');
+
+    await probot.receive({
+      id: 'evt-issue-resolved',
+      name: 'issues',
+      payload: issuePayload({
+        action: 'edited',
+        body: '## Steps to reproduce\n1. do x\n## Expected behavior\nshould work',
+        labels: ['needs-template'],
+      }) as never,
+    });
+
+    expect(removeScope.isDone()).toBe(true);
+    expect(minimizeScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('posts a fresh comment with the current violations when the item breaks again', async () => {
+    mockInstallationToken();
+    mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
+    const commentScope = mockCreateComment((body) => {
+      expect(body.body).not.toContain('`## Steps to reproduce`');
+      expect(body.body).toContain('Required section missing: `## Expected behavior`');
+      return true;
+    });
     const addScope = mockAddLabels('needs-template');
 
     await probot.receive({
@@ -312,18 +353,18 @@ describe('template-enforcer subscriber (via app)', () => {
       name: 'issues',
       payload: issuePayload({
         action: 'edited',
-        body: 'still broken',
+        body: '## Steps to reproduce\n1. do x',
       }) as never,
     });
 
+    expect(commentScope.isDone()).toBe(true);
     expect(addScope.isDone()).toBe(true);
     expect(nock.pendingMocks()).toEqual([]);
   });
 
-  it('does not re-post when a prior carson comment exists and the label is already present', async () => {
+  it('does nothing while a flagged issue stays non-compliant', async () => {
     mockInstallationToken();
     mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
-    mockListComments([{ body: `prior\n\n${COMMENT_MARKER}`, userType: 'Bot' }]);
 
     await probot.receive({
       id: 'evt-issue-stable',
@@ -343,7 +384,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '    issues:',
       '      min_length: 50',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('Description too short (minimum 50 characters).');
       return true;
@@ -368,7 +408,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '        - pattern: "fixes #[0-9]+"',
       '          description: "Reference an issue with fixes #N"',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('Reference an issue with fixes #N');
       return true;
@@ -394,7 +433,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '          description: "Do not paste placeholder text"',
       '          mode: forbid',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('Do not paste placeholder text');
       return true;
@@ -421,7 +459,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '        - pattern: "fixes"',
       '          description: "Must mention fixes"',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('Must mention fixes');
       expect(body.body).not.toContain('Broken rule');
@@ -468,7 +505,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '    issues:',
       '      required_sections: ["## Steps"]',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('@octocat please update this issue.');
       expect(body.body).toContain('Required section missing: `## Steps`');
@@ -492,7 +528,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '    pull_requests:',
       '      required_sections: ["## Summary", "## Test plan"]',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment((body) => {
       expect(body.body).toContain('this pull request');
       expect(body.body).toContain('Required section missing: `## Summary`');
@@ -546,7 +581,6 @@ describe('template-enforcer subscriber (via app)', () => {
       '    issues:',
       '      min_length: 1',
     ].join('\n')));
-    mockListComments([]);
     const commentScope = mockCreateComment(() => true);
     const addScope = mockAddLabels('needs-template');
 
@@ -599,6 +633,8 @@ describe('template-enforcer subscriber (via app)', () => {
       mockConfig(CONFIG_WITH_EXEMPT);
       mockPermission('octocat', 'admin');
       const removeScope = mockRemoveLabel('needs-template');
+      mockListComments([{ body: `prior\n\n${COMMENT_MARKER}` }]);
+      const minimizeScope = mockMinimize('IC_9000');
 
       await probot.receive({
         id: 'evt-exempt-relabel',
@@ -607,6 +643,7 @@ describe('template-enforcer subscriber (via app)', () => {
       });
 
       expect(removeScope.isDone()).toBe(true);
+      expect(minimizeScope.isDone()).toBe(true);
       expect(nock.pendingMocks()).toEqual([]);
     });
 
@@ -614,7 +651,6 @@ describe('template-enforcer subscriber (via app)', () => {
       mockInstallationToken();
       mockConfig(CONFIG_WITH_EXEMPT);
       mockPermission('octocat', 'read');
-      mockListComments([]);
       mockCreateComment(() => true);
       const addScope = mockAddLabels('needs-template');
 
@@ -632,7 +668,6 @@ describe('template-enforcer subscriber (via app)', () => {
       mockInstallationToken();
       mockConfig(CONFIG_WITH_EXEMPT);
       mockPermission('octocat', null);
-      mockListComments([]);
       mockCreateComment(() => true);
       const addScope = mockAddLabels('needs-template');
 
@@ -649,7 +684,6 @@ describe('template-enforcer subscriber (via app)', () => {
     it('does not look up the role when exempt_roles is empty', async () => {
       mockInstallationToken();
       mockConfig(buildConfig(['    exempt_roles: []', ISSUES_REQUIRED_SECTION].join('\n')));
-      mockListComments([]);
       mockCreateComment(() => true);
       const addScope = mockAddLabels('needs-template');
 

@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { findNotice, isBotComment } from '../github/notices.js';
+import { findNotice, fromRestComment, isBotComment } from '../github/notices.js';
 import { interpolate, itemRef } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { roleOf, ROLES } from '../github/roles.js';
@@ -189,41 +189,55 @@ export class TemplateEnforcerSubscriber extends Subscriber {
       if (hasLabel) {
         await removeLabel(context.octokit, { owner, repo, issue_number: item.number, name: label });
         log.info(`Removed "${label}" from ${ref}`);
+        await this.#resolvePriorNotice(context, owner, repo, item.number, ref);
       }
 
       return;
     }
 
-    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+    if (hasLabel) {
+      return;
+    }
+
+    const body = interpolate(messageTemplate, {
+      user: item.user,
+      type: typeLabel(kind),
+      number: item.number,
+      title: item.title,
+      label,
+      violations: renderViolations(violations),
+    });
+
+    this.notice(context, item.number, body);
+    log.info(`Posted template-enforcer comment on ${ref}`);
+
+    await context.octokit.rest.issues.addLabels({
       owner,
       repo,
       issue_number: item.number,
+      labels: [label],
+    });
+    log.info(`Added "${label}" to ${ref}`);
+  }
+
+  async #resolvePriorNotice(
+    context: Context<IssueEvent | PrEvent>,
+    owner: string,
+    repo: string,
+    number: number,
+    ref: string,
+  ): Promise<void> {
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: number,
       per_page: 100,
     });
-    const priorComment = findNotice(comments, this.id, isBotComment);
+    const notice = findNotice(comments, this.id, isBotComment);
 
-    if (priorComment === undefined) {
-      const body = interpolate(messageTemplate, {
-        user: item.user,
-        type: typeLabel(kind),
-        number: item.number,
-        title: item.title,
-        label,
-        violations: renderViolations(violations),
-      });
-
-      this.notice(context, item.number, body);
-      log.info(`Posted template-enforcer comment on ${ref}`);
-    }
-
-    if (!hasLabel) {
-      await context.octokit.rest.issues.addLabels({
-        owner,
-        repo,
-        issue_number: item.number,
-        labels: [label],
-      });
-      log.info(`Added "${label}" to ${ref}`);
+    if (notice !== undefined) {
+      await this.resolveNotice(context, number, fromRestComment(notice), 'RESOLVED');
+      this.log().info(`Resolved template-enforcer comment on ${ref}`);
     }
   }
 

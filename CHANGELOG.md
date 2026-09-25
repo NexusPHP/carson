@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- `template-enforcer` resolves its comment when the description is fixed, alongside removing the label. If the item breaks again, it posts a fresh comment listing the current violations instead of only re-adding the label.
+
 ## [v1.7.0](https://github.com/NexusPHP/carson/compare/v1.6.0...v1.7.0) - 2026-09-21
 
 ### Added

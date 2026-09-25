@@ -1041,13 +1041,14 @@ Three rule kinds are supported per type:
 - `min_length`: a positive integer. The body (trimmed) must be at least this many characters.
 - `rules`: a list of regex rules with `pattern`, `description`, and an optional `mode` (`require` or `forbid`, default `require`). Invalid patterns are logged as warnings and skipped, so one malformed rule does not silence the subscriber.
 
-On every event the subscriber computes the current violations and reconciles state:
+On every event the subscriber computes the current violations and reconciles state. The label marks an open comment, so the label alone decides what happens:
 
-- **New violation, no prior carson comment**: post a comment listing the violations, add the label.
-- **Violation with prior carson comment but label missing**: add the label only (no duplicate comment).
-- **Violation with prior carson comment and label present**: no action.
-- **No violations, label present**: remove the label. The historical comment is left in place.
+- **Violations, label absent**: post a comment listing the current violations, add the label.
+- **Violations, label present**: no action. The comment keeps the list from when it was posted.
+- **No violations, label present**: remove the label and resolve the prior comment, which collapses it as resolved.
 - **No violations, label absent**: no action.
+
+An item that breaks again after being fixed gets a fresh comment with its current violations, and the resolved one stays as history. Removing the label by hand from an item that still fails the check has the same effect on its next edit.
 
 The subscriber locates its prior comment via the `<!-- carson:template-enforcer -->` marker, filtered by bot author. The marker is appended last so attacker-controlled body content cannot forge a match.
 
