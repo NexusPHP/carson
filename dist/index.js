@@ -62460,7 +62460,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
       violations: renderViolations(violations)
     });
     this.notice(context, item.number, body);
-    log.info(`Posted template-enforcer comment on ${ref}`);
+    log.info(`Posted template notice on ${ref}`);
     await context.octokit.rest.issues.addLabels({
       owner,
       repo,
@@ -62479,7 +62479,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
     const notice2 = findNotice(comments, this.id, isBotComment);
     if (notice2 !== void 0) {
       await this.resolveNotice(context, number4, fromRestComment(notice2), "RESOLVED");
-      this.log().info(`Resolved template-enforcer comment on ${ref}`);
+      this.log().info(`Resolved template notice on ${ref}`);
     }
   }
   async #isExempt(context, owner, repo, user, exemptRoles) {

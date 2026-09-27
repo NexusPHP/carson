@@ -209,7 +209,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
     });
 
     this.notice(context, item.number, body);
-    log.info(`Posted template-enforcer comment on ${ref}`);
+    log.info(`Posted template notice on ${ref}`);
 
     await context.octokit.rest.issues.addLabels({
       owner,
@@ -237,7 +237,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
 
     if (notice !== undefined) {
       await this.resolveNotice(context, number, fromRestComment(notice), 'RESOLVED');
-      this.log().info(`Resolved template-enforcer comment on ${ref}`);
+      this.log().info(`Resolved template notice on ${ref}`);
     }
   }
 
