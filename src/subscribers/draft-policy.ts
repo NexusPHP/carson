@@ -60,17 +60,20 @@ export class DraftPolicySubscriber extends Subscriber {
     }
 
     const pr = context.payload.pull_request;
-    const { owner, repo } = context.repo();
+    const becameReady = context.payload.action === 'ready_for_review';
 
-    if (context.payload.action === 'ready_for_review') {
-      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: pr.number,
-        per_page: 100,
-      });
-      const notice = findNotice(comments, this.id, isBotComment);
+    if (!becameReady && pr.draft !== true) {
+      return;
+    }
 
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      ...context.repo(),
+      issue_number: pr.number,
+      per_page: 100,
+    });
+    const notice = findNotice(comments, this.id, isBotComment);
+
+    if (becameReady) {
       if (notice !== undefined) {
         await this.resolveNotice(context, pr.number, fromRestComment(notice), 'RESOLVED');
         log.info(`Resolved draft notice on PR #${pr.number}`);
@@ -79,7 +82,9 @@ export class DraftPolicySubscriber extends Subscriber {
       return;
     }
 
-    if (pr.draft !== true) {
+    if (notice !== undefined && new Date(notice.created_at).getTime() >= new Date(pr.updated_at).getTime()) {
+      log.debug(`PR #${pr.number}: draft notice for this event already posted, skipping`);
+
       return;
     }
 

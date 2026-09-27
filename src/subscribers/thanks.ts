@@ -1,4 +1,5 @@
 import type { Context, Probot } from 'probot';
+import { findNotice, isBotComment } from '../github/notices.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import { interpolate } from '../template.js';
 import { z } from 'zod';
@@ -38,6 +39,18 @@ export class ThanksSubscriber extends Subscriber {
       const enabled = await this.loadEnabledSettings(context, Settings);
 
       if (enabled === null) {
+        return;
+      }
+
+      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+        ...context.repo(),
+        issue_number: pr.number,
+        per_page: 100,
+      });
+
+      if (findNotice(comments, this.id, isBotComment) !== undefined) {
+        log.debug(`PR #${pr.number}: already thanked, skipping`);
+
         return;
       }
 

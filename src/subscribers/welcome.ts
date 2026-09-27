@@ -36,7 +36,6 @@ interface Opened {
   login: string;
   title: string;
   createdAt: string;
-  mayBeGreeted: boolean;
 }
 
 const DEFAULT_MESSAGES: Readonly<Record<BucketKey, Record<ItemKind, string>>> = {
@@ -99,7 +98,6 @@ export class WelcomeSubscriber extends Subscriber {
         login: pr.user.login,
         title: pr.title,
         createdAt: pr.created_at,
-        mayBeGreeted: becameReady,
       });
     });
 
@@ -122,7 +120,6 @@ export class WelcomeSubscriber extends Subscriber {
         login: issue.user.login,
         title: issue.title,
         createdAt: issue.created_at,
-        mayBeGreeted: false,
       });
     });
   }
@@ -155,19 +152,17 @@ export class WelcomeSubscriber extends Subscriber {
 
     const { owner, repo } = context.repo();
 
-    if (opened.mayBeGreeted) {
-      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: opened.number,
-        per_page: 100,
-      });
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: opened.number,
+      per_page: 100,
+    });
 
-      if (findNotice(comments, this.id, isBotComment) !== undefined) {
-        log.debug(`${item}: already greeted, skipping`);
+    if (findNotice(comments, this.id, isBotComment) !== undefined) {
+      log.debug(`${item}: already greeted, skipping`);
 
-        return;
-      }
+      return;
     }
 
     const exemptRoles: readonly string[] = settings.exempt_roles ?? [];

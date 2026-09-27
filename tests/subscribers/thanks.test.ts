@@ -35,6 +35,12 @@ const mockConfig = (yaml: string | null): void => {
     .reply(200, yaml);
 };
 
+const mockComments = (bodies: string[] = []): nock.Scope =>
+  nock('https://api.github.com')
+    .get('/repos/acme/widgets/issues/42/comments')
+    .query({ per_page: '100' })
+    .reply(200, bodies.map((body, i) => ({ id: 9000 + i, body, user: { login: 'carson[bot]', type: 'Bot' } })));
+
 interface PayloadOverrides {
   number?: number;
   merged?: boolean;
@@ -100,6 +106,7 @@ describe('thanks subscriber (via app)', () => {
   it('posts the default thanks comment when a maintainer merges a contributor PR', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(['An unrelated comment']);
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
@@ -128,6 +135,7 @@ describe('thanks subscriber (via app)', () => {
       '    message: "Cheers @{{user}}, merged!"',
       '',
     ].join('\n'));
+    mockComments();
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
@@ -156,6 +164,7 @@ describe('thanks subscriber (via app)', () => {
       '    message: "@{{user}} merged #{{number}} ({{title}}) into {{repo}}"',
       '',
     ].join('\n'));
+    mockComments();
 
     const commentScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
@@ -171,6 +180,21 @@ describe('thanks subscriber (via app)', () => {
     });
 
     expect(commentScope.isDone()).toBe(true);
+  });
+
+  it('does not thank again when the merge event is rerun', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+    const commentsScope = mockComments(['Thanks for the contribution, @octocat!\n\n<!-- carson:thanks -->']);
+
+    await probot.receive({
+      id: 'evt-thanks-rerun',
+      name: 'pull_request',
+      payload: prClosedPayload() as never,
+    });
+
+    expect(commentsScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing when the PR was closed without merging', async () => {

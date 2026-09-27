@@ -369,7 +369,7 @@ Comments on pull requests opened as drafts, asking the author to mark them ready
 **Triggers**: `pull_request.opened`, `pull_request.reopened`, `pull_request.converted_to_draft`, `pull_request.ready_for_review`, scheduled (cron via `on: schedule:` in the consumer workflow)
 **Permissions**: `pull_requests: write`
 
-On `pull_request.opened` or `reopened` with `draft: true` and on `converted_to_draft`, a notice is posted carrying the `<!-- carson:draft-policy -->` marker, so a draft closed by the sweep and reopened gets a fresh grace period. On `ready_for_review` the latest notice is resolved.
+On `pull_request.opened` or `reopened` with `draft: true` and on `converted_to_draft`, a notice is posted carrying the `<!-- carson:draft-policy -->` marker, so a draft closed by the sweep and reopened gets a fresh grace period. A notice newer than the event means that event was already handled, so a re-run workflow does not post again. On `ready_for_review` the latest notice is resolved.
 
 Each scheduled run searches open draft PRs and closes those whose latest notice is older than `hours_until_close`, posting `close_message` first. The notice is the clock: a draft without one (opened before the subscriber was enabled) is never closed, and a PR that leaves and re-enters draft is timed from the newest notice. Set `hours_until_close: 0` to keep the notice and never close.
 
@@ -869,6 +869,8 @@ Closes issues and pull requests the moment they are opened or reopened on a read
 
 Bot senders are not exempt: an automated PR against a mirror is exactly what should be closed. Issues are closed as `not_planned`. Locking is delegated to [lock-old-issues](#lock-old-issues) through Carson's action routing, so that subscriber must also be enabled for `lock` to take effect (its configured `reason` applies, no extra comment is posted). When it is not enabled, the item is still closed and a warning is logged.
 
+A reopened item gets the comment again. A re-run workflow still closes and locks the item, but it does not repeat the comment: a notice newer than the event means that event was already handled.
+
 ### Settings
 
 | Key | Type | Default |
@@ -1137,6 +1139,7 @@ Carson fires once per merged PR. The subscriber skips four cases:
 - The PR was closed without merging.
 - The PR author merged the PR themselves (maintainer self-merge). Detected by `pull_request.user.login === pull_request.merged_by.login`.
 - The PR author is a bot (e.g. Dependabot, Renovate).
+- The PR already carries a thank-you, as when the workflow run is re-run.
 
 There is no `author_association` filter. The self-merge guard already handles the most common "don't thank me for my own work" case, and the bot guard suppresses automation PRs. If you want finer scoping (e.g. exclude org members), open an issue.
 
@@ -1372,7 +1375,7 @@ Greets contributors on pull requests and issues. First-time and returning contri
 **Triggers**: `pull_request.opened`, `pull_request.ready_for_review`, `issues.opened`
 **Permissions**: `issues: write`, `pull_requests: write`
 
-A pull request opened as a draft is not greeted until it is marked ready for review, so a message about reviewers does not arrive while the author is still working. A pull request that goes back to draft and becomes ready again is not greeted twice: on `ready_for_review` Carson first looks for its earlier welcome notice.
+A pull request opened as a draft is not greeted until it is marked ready for review, so a message about reviewers does not arrive while the author is still working. Each item is greeted once: before greeting, Carson looks for an earlier welcome notice, standalone or inside a digest. So a pull request that goes back to draft and becomes ready again, or a re-run workflow, does not greet twice.
 
 Carson sorts the author into one of two buckets, `first_time` or `returning`, and posts the message for that bucket and event (PR or issue). Bots and ghost-user payloads are always skipped. With no `settings.welcome` configured, all four cells use the default messages below, so a bare `subscribers: [welcome]` greets both first-time and returning contributors.
 

@@ -78,6 +78,7 @@ describe('notice digest (via app)', () => {
       .reply(200, CONFIG)
       .get('/repos/acme/widgets/issues/42/comments')
       .query({ per_page: '100' })
+      .times(2)
       .reply(200, []);
     const createScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
@@ -112,10 +113,13 @@ describe('notice digest (via app)', () => {
       .reply(200, CONFIG)
       .get('/repos/acme/widgets/issues/42/comments')
       .query({ per_page: '100' })
-      .reply(500, {});
+      .reply(500, {})
+      .get('/repos/acme/widgets/issues/42/comments')
+      .query({ per_page: '100' })
+      .reply(200, []);
     const createScope = nock('https://api.github.com')
       .post('/repos/acme/widgets/issues/42/comments', (body: { body: string }) => {
-        expect(body.body).toBe('Welcome octocat\n\n<!-- carson:welcome -->');
+        expect(body.body).toMatch(/^(?:Welcome octocat\n\n<!-- carson:welcome -->|Allow edits, octocat\n\n<!-- carson:maintainer-edits -->)$/);
         return true;
       })
       .reply(201, { id: 500 });

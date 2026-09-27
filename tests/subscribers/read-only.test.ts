@@ -66,6 +66,7 @@ const openedPayload = (kind: 'issue' | 'pull_request', overrides: ItemOverrides 
   [kind]: {
     number: 42,
     title: 'Something',
+    updated_at: '2026-09-20T10:00:00Z',
     labels: [],
     user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
   },
@@ -84,8 +85,19 @@ const receive = async (probot: Probot, kind: 'issue' | 'pull_request', overrides
   });
 };
 
-const mockComment = (expected?: string): nock.Scope =>
+const mockComments = (comments: { created_at: string }[]): nock.Scope =>
   nock('https://api.github.com')
+    .get('/repos/acme/mirror/issues/42/comments')
+    .query({ per_page: '100' })
+    .reply(200, comments.map((c, i) => ({
+      id: 9000 + i,
+      body: 'This repository is read-only.\n\n<!-- carson:read-only -->',
+      created_at: c.created_at,
+      user: { login: 'carson[bot]', type: 'Bot' },
+    })));
+
+const mockComment = (expected?: string, prior: { created_at: string }[] = []): nock.Scope =>
+  mockComments(prior)
     .post('/repos/acme/mirror/issues/42/comments', (body: { body: string }) => {
       if (expected !== undefined) {
         expect(body.body).toBe(`${expected}\n\n<!-- carson:read-only -->`);
@@ -154,10 +166,10 @@ describe('read-only subscriber (via app)', () => {
     expect(lock.isDone()).toBe(true);
   });
 
-  it('closes a reopened issue again', async () => {
+  it('comments on and closes a reopened issue again, despite the notice from its first close', async () => {
     mockInstallationToken();
     mockConfig(configFor(null));
-    const comment = mockComment();
+    const comment = mockComment(undefined, [{ created_at: '2026-09-19T10:00:00Z' }]);
     const close = mockClose('not_planned');
     const lock = mockLock();
 
@@ -166,6 +178,21 @@ describe('read-only subscriber (via app)', () => {
     expect(comment.isDone()).toBe(true);
     expect(close.isDone()).toBe(true);
     expect(lock.isDone()).toBe(true);
+  });
+
+  it('closes and locks without commenting again when the event is rerun', async () => {
+    mockInstallationToken();
+    mockConfig(configFor(null));
+    const comments = mockComments([{ created_at: '2026-09-20T10:00:30Z' }]);
+    const close = mockClose('not_planned');
+    const lock = mockLock();
+
+    await receive(probot, 'issue');
+
+    expect(comments.isDone()).toBe(true);
+    expect(close.isDone()).toBe(true);
+    expect(lock.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('comments, closes without a state reason, and locks an opened pull request', async () => {

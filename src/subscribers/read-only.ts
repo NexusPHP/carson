@@ -1,4 +1,5 @@
 import type { Context, Probot } from 'probot';
+import { findNotice, isBotComment } from '../github/notices.js';
 import { interpolate, itemRef } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
@@ -72,7 +73,19 @@ export class ReadOnlySubscriber extends Subscriber {
       templateContext['upstream_url'] = url;
     }
 
-    this.notice(context, item.number, interpolate(settings.message, templateContext));
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: item.number,
+      per_page: 100,
+    });
+    const notice = findNotice(comments, this.id, isBotComment);
+
+    if (notice !== undefined && new Date(notice.created_at).getTime() >= new Date(item.updated_at).getTime()) {
+      log.debug(`${itemRef(!isIssue, item.number, true)}: notice for this event already posted, skipping the comment`);
+    } else {
+      this.notice(context, item.number, interpolate(settings.message, templateContext));
+    }
 
     await context.octokit.rest.issues.update({
       owner,

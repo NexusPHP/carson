@@ -30,7 +30,7 @@ const mockConfig = (yaml: string): void => {
     .reply(200, yaml);
 };
 
-const mockListComments = (comments: { body: string; userType?: string; nodeId?: string }[]): nock.Scope => {
+const mockListComments = (comments: { body: string; userType?: string; nodeId?: string; createdAt?: string }[]): nock.Scope => {
   return nock('https://api.github.com')
     .get(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`)
     .query({ per_page: '100' })
@@ -38,7 +38,7 @@ const mockListComments = (comments: { body: string; userType?: string; nodeId?: 
       id: 100 + i,
       node_id: c.nodeId ?? `IC_${i}`,
       body: c.body,
-      created_at: '2025-12-31T00:00:00Z',
+      created_at: c.createdAt ?? '2025-12-31T00:00:00Z',
       user: { login: c.userType === 'Bot' ? 'carson[bot]' : 'someone', type: c.userType ?? 'User' },
     })));
 };
@@ -69,6 +69,7 @@ const prPayload = (overrides: { action?: 'opened' | 'reopened' | 'converted_to_d
     base: { ref: 'main' },
     user: { login: 'octocat' },
     title: 'Fix the thing',
+    updated_at: '2026-01-01T00:00:00Z',
     labels: [],
   },
   repository: { owner: { login: 'acme' }, name: 'widgets', default_branch: 'main' },
@@ -109,6 +110,7 @@ describe('draft-policy subscriber (via app)', () => {
   it('comments on a PR opened as draft', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
+    mockListComments([]);
     const createScope = mockCreateComment((body) => {
       expect(body).toContain('Hey @octocat');
       expect(body).toContain('Ready for review');
@@ -136,6 +138,7 @@ describe('draft-policy subscriber (via app)', () => {
       '    message: "{{user}} opened {{repo}}#{{number}} as draft"',
       '',
     ].join('\n'));
+    mockListComments([]);
     const createScope = mockCreateComment((body) => {
       expect(body).toContain('octocat opened widgets#42 as draft');
       return true;
@@ -153,6 +156,7 @@ describe('draft-policy subscriber (via app)', () => {
   it('posts a fresh notice when a PR is converted to draft', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
+    mockListComments([{ body: `notice\n\n${MARKER}`, userType: 'Bot' }]);
     const createScope = mockCreateComment((body) => body.endsWith(MARKER));
 
     await probot.receive({
@@ -167,6 +171,7 @@ describe('draft-policy subscriber (via app)', () => {
   it('posts a fresh notice when a draft PR is reopened', async () => {
     mockInstallationToken();
     mockConfig(CONFIG_ENABLED);
+    mockListComments([{ body: `notice\n\n${MARKER}`, userType: 'Bot' }]);
     const createScope = mockCreateComment((body) => body.endsWith(MARKER));
 
     await probot.receive({
@@ -176,6 +181,21 @@ describe('draft-policy subscriber (via app)', () => {
     });
 
     expect(createScope.isDone()).toBe(true);
+  });
+
+  it('does not post again when the event is rerun', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+    const listScope = mockListComments([{ body: `notice\n\n${MARKER}`, userType: 'Bot', createdAt: '2026-01-01T00:00:30Z' }]);
+
+    await probot.receive({
+      id: 'evt-dp-rerun',
+      name: 'pull_request',
+      payload: prPayload() as never,
+    });
+
+    expect(listScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
   });
 
   it('does nothing for a PR opened ready for review', async () => {

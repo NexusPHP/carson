@@ -78,9 +78,9 @@ const opened = (overrides: PayloadOverrides, number: number, title: string): Rec
   labels: [],
 });
 
-const mockComments = (bodies: string[]): nock.Scope =>
+const mockComments = (number: number, bodies: string[] = []): nock.Scope =>
   nock(API)
-    .get(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`)
+    .get(`/repos/acme/widgets/issues/${number}/comments`)
     .query({ per_page: '100' })
     .reply(200, bodies.map((body, i) => ({ id: 9000 + i, body, user: { login: 'carson[bot]', type: 'Bot' } })));
 
@@ -152,6 +152,7 @@ describe('welcome subscriber (via app)', () => {
   it('greets an author with no earlier pull request as first time', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 0);
     const commentScope = mockComment(PR_NUMBER, 'Thanks for opening your first pull request, @octocat!');
 
@@ -164,6 +165,7 @@ describe('welcome subscriber (via app)', () => {
   it('greets an author with no earlier issue as first time', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(ISSUE_NUMBER);
     mockEarlierItems('issue', 0);
     const commentScope = mockComment(ISSUE_NUMBER, 'Thanks for opening your first issue, @octocat!');
 
@@ -176,6 +178,7 @@ describe('welcome subscriber (via app)', () => {
   it('greets an author with earlier pull requests as returning', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 3);
     const commentScope = mockComment(PR_NUMBER, 'Thanks for the pull request, @octocat!');
 
@@ -187,6 +190,7 @@ describe('welcome subscriber (via app)', () => {
   it('greets an author with earlier issues as returning', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(ISSUE_NUMBER);
     mockEarlierItems('issue', 1);
     const commentScope = mockComment(ISSUE_NUMBER, 'Thanks for filing this, @octocat!');
 
@@ -203,6 +207,7 @@ describe('welcome subscriber (via app)', () => {
       'returning:',
       '  pull_request: "Good to see you again, @{{user}}."',
     ]));
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 2);
     const commentScope = mockComment(PR_NUMBER, 'Good to see you again, @octocat.');
 
@@ -217,6 +222,7 @@ describe('welcome subscriber (via app)', () => {
       'first_time:',
       '  issue: "@{{user}} opened #{{number}} on {{repo}}: {{title}}"',
     ]));
+    mockComments(ISSUE_NUMBER);
     mockEarlierItems('issue', 0);
     const commentScope = mockComment(ISSUE_NUMBER, '@octocat opened #7 on widgets: Crash on save');
 
@@ -228,6 +234,7 @@ describe('welcome subscriber (via app)', () => {
   it('posts nothing for a first-timer when that greeting is false, after looking up the bucket', async () => {
     mockInstallationToken();
     mockConfig(withSettings(['first_time:', '  issue: false']));
+    mockComments(ISSUE_NUMBER);
     const searchScope = mockEarlierItems('issue', 0);
 
     await receiveIssue('evt-first-issue-off');
@@ -239,6 +246,7 @@ describe('welcome subscriber (via app)', () => {
   it('treats an empty message as switched off', async () => {
     mockInstallationToken();
     mockConfig(withSettings(['returning:', '  pull_request: ""']));
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 4);
 
     await receivePr('evt-returning-pr-empty');
@@ -249,6 +257,7 @@ describe('welcome subscriber (via app)', () => {
   it('switches a whole bucket off with false', async () => {
     mockInstallationToken();
     mockConfig(withSettings(['returning: false']));
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 4);
 
     await receivePr('evt-returning-bucket-off');
@@ -273,6 +282,7 @@ describe('welcome subscriber (via app)', () => {
       'returning:',
       '  pull_request: "Thanks, @{{user}}!"',
     ]));
+    mockComments(PR_NUMBER);
     const commentScope = mockComment(PR_NUMBER, 'Thanks, @octocat!');
 
     await receivePr('evt-shared-message');
@@ -284,6 +294,7 @@ describe('welcome subscriber (via app)', () => {
   it('skips the greeting without failing when the lookup fails', async () => {
     mockInstallationToken();
     mockConfig(enabledOnlyYaml);
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 0, 500);
 
     await expect(receivePr('evt-lookup-fails')).resolves.toBeUndefined();
@@ -304,7 +315,7 @@ describe('welcome subscriber (via app)', () => {
     it('greets when the pull request becomes ready for review', async () => {
       mockInstallationToken();
       mockConfig(enabledOnlyYaml);
-      mockComments(['An unrelated comment']);
+      mockComments(PR_NUMBER, ['An unrelated comment']);
       mockEarlierItems('pr', 0);
       const commentScope = mockComment(PR_NUMBER, 'Thanks for opening your first pull request, @octocat!');
 
@@ -317,7 +328,7 @@ describe('welcome subscriber (via app)', () => {
     it('does not greet again when a welcome notice is already on the pull request', async () => {
       mockInstallationToken();
       mockConfig(enabledOnlyYaml);
-      const commentsScope = mockComments([`Thanks for opening your first pull request, @octocat!\n\n${MARKER}`]);
+      const commentsScope = mockComments(PR_NUMBER, [`Thanks for opening your first pull request, @octocat!\n\n${MARKER}`]);
 
       await receivePr('evt-ready-again', { action: 'ready_for_review' });
 
@@ -326,10 +337,45 @@ describe('welcome subscriber (via app)', () => {
     });
   });
 
+  it('does not greet again when the opened event is rerun', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+    const commentsScope = mockComments(ISSUE_NUMBER, [`Thanks for opening your first issue, @octocat!\n\n${MARKER}`]);
+
+    await receiveIssue('evt-rerun');
+
+    expect(commentsScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('recognises a greeting posted inside a digest', async () => {
+    mockInstallationToken();
+    mockConfig(enabledOnlyYaml);
+    const commentsScope = mockComments(PR_NUMBER, [[
+      '<!-- carson:template-enforcer:start -->',
+      'Please fill in the template.',
+      '<!-- carson:template-enforcer -->',
+      '',
+      '---',
+      '',
+      '<!-- carson:welcome:start -->',
+      'Thanks for opening your first pull request, @octocat!',
+      MARKER,
+      '',
+      '<!-- carson:digest -->',
+    ].join('\n')]);
+
+    await receivePr('evt-rerun-digest');
+
+    expect(commentsScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
   describe('exempt_roles', () => {
     it('greets nobody whose role is exempt, before any lookup', async () => {
       mockInstallationToken();
       mockConfig(withSettings(['exempt_roles: [admin, maintain, write]']));
+      mockComments(PR_NUMBER);
       const permissionScope = mockPermission('maintain');
 
       await receivePr('evt-exempt');
@@ -341,6 +387,7 @@ describe('welcome subscriber (via app)', () => {
     it('still greets an author whose role is not exempt', async () => {
       mockInstallationToken();
       mockConfig(withSettings(['exempt_roles: [admin, maintain, write]']));
+      mockComments(PR_NUMBER);
       mockPermission('read');
       mockEarlierItems('pr', 0);
       const commentScope = mockComment(PR_NUMBER, 'Thanks for opening your first pull request, @octocat!');
@@ -356,6 +403,7 @@ describe('welcome subscriber (via app)', () => {
     it('ignores a non-empty list and greets by lookup', async () => {
       mockInstallationToken();
       mockConfig(withSettings(['returning:', '  author_association: [MEMBER]']));
+      mockComments(PR_NUMBER);
       mockEarlierItems('pr', 2);
       const commentScope = mockComment(PR_NUMBER, 'Thanks for the pull request, @octocat!');
 
@@ -367,6 +415,7 @@ describe('welcome subscriber (via app)', () => {
     it('still treats an empty list as the bucket switched off', async () => {
       mockInstallationToken();
       mockConfig(withSettings(['returning:', '  author_association: []']));
+      mockComments(PR_NUMBER);
       mockEarlierItems('pr', 2);
 
       await receivePr('evt-association-empty');
@@ -423,6 +472,7 @@ describe('welcome subscriber (via app)', () => {
   it('falls back to defaults and emits a warning when settings.welcome is malformed', async () => {
     mockInstallationToken();
     mockConfig(withSettings(['first_time:', '  pull_request: 42']));
+    mockComments(PR_NUMBER);
     mockEarlierItems('pr', 0);
     const commentScope = mockComment(PR_NUMBER, 'Thanks for opening your first pull request, @octocat!');
 

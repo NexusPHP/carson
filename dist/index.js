@@ -61045,22 +61045,25 @@ var DraftPolicySubscriber = class extends Subscriber {
       return;
     }
     const pr = context.payload.pull_request;
-    const { owner, repo } = context.repo();
-    if (context.payload.action === "ready_for_review") {
-      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: pr.number,
-        per_page: 100
-      });
-      const notice2 = findNotice(comments, this.id, isBotComment);
+    const becameReady = context.payload.action === "ready_for_review";
+    if (!becameReady && pr.draft !== true) {
+      return;
+    }
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      ...context.repo(),
+      issue_number: pr.number,
+      per_page: 100
+    });
+    const notice2 = findNotice(comments, this.id, isBotComment);
+    if (becameReady) {
       if (notice2 !== void 0) {
         await this.resolveNotice(context, pr.number, fromRestComment(notice2), "RESOLVED");
         log.info(`Resolved draft notice on PR #${pr.number}`);
       }
       return;
     }
-    if (pr.draft !== true) {
+    if (notice2 !== void 0 && new Date(notice2.created_at).getTime() >= new Date(pr.updated_at).getTime()) {
+      log.debug(`PR #${pr.number}: draft notice for this event already posted, skipping`);
       return;
     }
     const templateContext = {
@@ -62038,7 +62041,18 @@ var ReadOnlySubscriber = class extends Subscriber {
       templateContext["upstream"] = `[${settings.upstream}](${url2})`;
       templateContext["upstream_url"] = url2;
     }
-    this.notice(context, item.number, interpolate(settings.message, templateContext));
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: item.number,
+      per_page: 100
+    });
+    const notice2 = findNotice(comments, this.id, isBotComment);
+    if (notice2 !== void 0 && new Date(notice2.created_at).getTime() >= new Date(item.updated_at).getTime()) {
+      log.debug(`${itemRef(!isIssue, item.number, true)}: notice for this event already posted, skipping the comment`);
+    } else {
+      this.notice(context, item.number, interpolate(settings.message, templateContext));
+    }
     await context.octokit.rest.issues.update({
       owner,
       repo,
@@ -62509,6 +62523,15 @@ var ThanksSubscriber = class extends Subscriber {
       if (enabled === null) {
         return;
       }
+      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+        ...context.repo(),
+        issue_number: pr.number,
+        per_page: 100
+      });
+      if (findNotice(comments, this.id, isBotComment) !== void 0) {
+        log.debug(`PR #${pr.number}: already thanked, skipping`);
+        return;
+      }
       const body = interpolate(enabled.settings.message ?? DEFAULT_MESSAGE6, {
         user: pr.user.login,
         repo: context.payload.repository.name,
@@ -62966,8 +62989,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: pr.number,
         login: pr.user.login,
         title: pr.title,
-        createdAt: pr.created_at,
-        mayBeGreeted: becameReady
+        createdAt: pr.created_at
       });
     });
     probot.on(ISSUE_EVENTS3, async (context) => {
@@ -62984,8 +63006,7 @@ var WelcomeSubscriber = class extends Subscriber {
         number: issue3.number,
         login: issue3.user.login,
         title: issue3.title,
-        createdAt: issue3.created_at,
-        mayBeGreeted: false
+        createdAt: issue3.created_at
       });
     });
   }
@@ -63009,17 +63030,15 @@ var WelcomeSubscriber = class extends Subscriber {
       return;
     }
     const { owner, repo } = context.repo();
-    if (opened.mayBeGreeted) {
-      const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: opened.number,
-        per_page: 100
-      });
-      if (findNotice(comments, this.id, isBotComment) !== void 0) {
-        log.debug(`${item}: already greeted, skipping`);
-        return;
-      }
+    const comments = await context.octokit.paginate(context.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: opened.number,
+      per_page: 100
+    });
+    if (findNotice(comments, this.id, isBotComment) !== void 0) {
+      log.debug(`${item}: already greeted, skipping`);
+      return;
     }
     const exemptRoles = settings.exempt_roles ?? [];
     if (exemptRoles.length > 0) {

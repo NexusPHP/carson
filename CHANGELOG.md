@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `template-enforcer` resolves its comment when the description is fixed, alongside removing the label. If the item breaks again, it posts a fresh comment listing the current violations instead of only re-adding the label.
 
+### Fixed
+
+- Re-running a workflow no longer posts a second comment from `welcome`, `thanks`, `read-only`, or `draft-policy`. `welcome` now looks for an earlier greeting on every event, not only on `ready_for_review`, and `thanks` does the same. `read-only` and `draft-policy` skip a comment when their notice is newer than the event, so a reopened item still gets a fresh one.
+
 ## [v1.7.0](https://github.com/NexusPHP/carson/compare/v1.6.0...v1.7.0) - 2026-09-21
 
 ### Added
