@@ -53,7 +53,7 @@ export class MaintainerEditsSubscriber extends Subscriber {
     const notice = findNotice(comments, this.id, isBotComment);
 
     if (notice !== undefined) {
-      log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
+      log.debug(`PR #${pr.number} already carries an edit access notice, skipping`);
 
       return;
     }
@@ -65,6 +65,6 @@ export class MaintainerEditsSubscriber extends Subscriber {
     };
 
     this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE, templateContext));
-    log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
+    log.info(`Posted edit access notice on PR #${pr.number}`);
   }
 }

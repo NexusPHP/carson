@@ -61447,7 +61447,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
     });
     const notice2 = findNotice(comments, this.id, isBotComment);
     if (notice2 !== void 0) {
-      log.debug(`PR #${pr.number} already carries a maintainer-edits notice, skipping`);
+      log.debug(`PR #${pr.number} already carries an edit access notice, skipping`);
       return;
     }
     const templateContext = {
@@ -61456,7 +61456,7 @@ var MaintainerEditsSubscriber = class extends Subscriber {
       number: pr.number
     };
     this.notice(context, pr.number, interpolate(enabled.settings.message ?? DEFAULT_MESSAGE3, templateContext));
-    log.info(`Posted maintainer-edits notice on PR #${pr.number}`);
+    log.info(`Posted edit access notice on PR #${pr.number}`);
   }
 };
 
@@ -62778,12 +62778,12 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
     if (supported) {
       if (notice2 !== void 0) {
         await this.resolveNotice(context, pr.number, fromRestComment(notice2), "OUTDATED");
-        log.info(`Minimized unsupported-branch notice on PR #${pr.number}`);
+        log.info(`Minimized base branch notice on PR #${pr.number}`);
       }
       return;
     }
     if (notice2 !== void 0) {
-      log.debug(`PR #${pr.number} already carries an unsupported-branch notice, skipping`);
+      log.debug(`PR #${pr.number} already carries a base branch notice, skipping`);
       return;
     }
     const templateContext = {
@@ -62794,7 +62794,7 @@ var UnsupportedBranchSubscriber = class extends Subscriber {
       branches: branches.map((b) => `\`${b}\``).join(", ")
     };
     this.notice(context, pr.number, interpolate(settings.message ?? DEFAULT_MESSAGE7, templateContext));
-    log.info(`Posted unsupported-branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
+    log.info(`Posted base branch notice on PR #${pr.number} (base "${pr.base.ref}")`);
   }
 };
 
