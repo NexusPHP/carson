@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- The README and the installer page explain the Actions policy that public repositories need from November 2, 2026, when GitHub starts blocking `pull_request_target` by default. The installer offers the policy as a file to import.
+
 ### Changed
 
 - `template-enforcer` resolves its comment when the description is fixed, alongside removing the label. If the item breaks again, it posts a fresh comment listing the current violations instead of only re-adding the label.

@@ -100,6 +100,12 @@ jobs:
     </section>
 
     <section class="step">
+      <h2>Allow <code>pull_request_target</code> on public repositories</h2>
+      <p class="status">From November 2, 2026, GitHub blocks <code>pull_request_target</code> in public repositories by default. Download the policy below, then import it under <strong>Settings &rarr; Actions &rarr; Policies</strong> when creating a new policy, in the repository or in the organisation to cover all its repositories. It applies to <code>.github/workflows/carson.yml</code> only, so other workflows stay blocked, and allows the events in the workflow above plus <code>repository_dispatch</code>. Add any other trigger you put in the workflow to the policy too, or its runs are blocked. Private repositories can skip this step.</p>
+      <a href="../assets/carson-policy.json" download="carson-policy.json" class="button">Download policy</a>
+    </section>
+
+    <section class="step">
       <h2>Commit the configuration file</h2>
       <p class="status">Save as <code>.github/carson.yml</code> on the default branch and list the subscribers you want enabled. See <a href="https://github.com/NexusPHP/carson/blob/1.x/SUBSCRIBERS.md" target="_blank" rel="noopener">SUBSCRIBERS.md</a> for the full list. Carson reads its config from the default branch only, so pull requests cannot alter the bot's behaviour.</p>
       <pre id="carson-yaml">version: 1

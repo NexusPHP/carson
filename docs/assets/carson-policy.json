@@ -1,0 +1,32 @@
+{
+  "name": "Carson `pull_request_target` Policy",
+  "target": "actions",
+  "enforcement": "active",
+  "conditions": {
+    "workflow_path": {
+      "exclude": [],
+      "include": [
+        ".github/workflows/carson.yml"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "restrict_action_events",
+      "parameters": {
+        "allowed_events": [
+          "delete",
+          "issue_comment",
+          "issues",
+          "pull_request_review",
+          "pull_request_review_comment",
+          "pull_request_target",
+          "push",
+          "repository_dispatch",
+          "schedule"
+        ]
+      }
+    }
+  ],
+  "bypass_actors": []
+}
