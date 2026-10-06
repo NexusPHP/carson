@@ -26388,6 +26388,13 @@ var require_delete_log_property = __commonJS({
 var require_cjs2 = __commonJS({
   "node_modules/fast-copy/dist/cjs/index.cjs"(exports2) {
     "use strict";
+    var MaxDepthExceededError = class extends RangeError {
+      constructor(maxDepth) {
+        super(`Maximum copy depth of ${String(maxDepth)} exceeded; the value copied is nested too deeply.`);
+        this.maxDepth = maxDepth;
+        this.name = "MaxDepthExceededError";
+      }
+    };
     var toStringFunction = Function.prototype.toString;
     var toStringObject = Object.prototype.toString;
     function getCleanClone(prototype) {
@@ -26415,6 +26422,7 @@ var require_cjs2 = __commonJS({
       return type.substring(8, type.length - 1);
     }
     var { propertyIsEnumerable } = Object.prototype;
+    var sliceTypedArray = Object.getPrototypeOf(Int8Array.prototype).slice;
     function copyOwnDescriptor(original, clone2, property, state) {
       const ownDescriptor = Object.getOwnPropertyDescriptor(original, property) || {
         configurable: true,
@@ -26457,13 +26465,13 @@ var require_cjs2 = __commonJS({
       return copyOwnPropertiesStrict(array2, clone2, state);
     }
     function copyArrayBuffer(arrayBuffer, _state) {
-      return arrayBuffer.slice(0);
+      return ArrayBuffer.isView(arrayBuffer) ? sliceTypedArray.call(arrayBuffer, 0) : arrayBuffer.slice(0);
     }
     function copyBlob(blob, _state) {
       return blob.slice(0, blob.size, blob.type);
     }
     function copyDataView(dataView, state) {
-      return new state.Constructor(copyArrayBuffer(dataView.buffer));
+      return new state.Constructor(copyArrayBuffer(dataView.buffer), dataView.byteOffset, dataView.byteLength);
     }
     function copyDate(date5, state) {
       return new state.Constructor(date5.getTime());
@@ -26519,10 +26527,11 @@ var require_cjs2 = __commonJS({
     function copySetStrict(set3, state) {
       return copyOwnPropertiesStrict(set3, copySetLoose(set3, state), state);
     }
+    var DEFAULT_MAX_DEPTH = 1e3;
     function createDefaultCache() {
       return /* @__PURE__ */ new WeakMap();
     }
-    function getOptions({ createCache: createCacheOverride, methods: methodsOverride, strict }) {
+    function getOptions({ createCache: createCacheOverride, maxDepth, methods: methodsOverride, strict }) {
       const defaultMethods = {
         array: strict ? copyArrayStrict : copyArrayLoose,
         arrayBuffer: copyArrayBuffer,
@@ -26543,10 +26552,16 @@ var require_cjs2 = __commonJS({
       if (!copiers.Object || !copiers.Array) {
         throw new Error("An object and array copier must be provided.");
       }
-      return { createCache, copiers, methods, strict: Boolean(strict) };
+      return {
+        createCache,
+        copiers,
+        maxDepth: maxDepth == null ? DEFAULT_MAX_DEPTH : maxDepth,
+        methods,
+        strict: Boolean(strict)
+      };
     }
     function getTagSpecificCopiers(methods) {
-      return {
+      return Object.assign(/* @__PURE__ */ Object.create(null), {
         Arguments: methods.object,
         Array: methods.array,
         ArrayBuffer: methods.arrayBuffer,
@@ -26577,10 +26592,10 @@ var require_cjs2 = __commonJS({
         Uint8ClampedArray: methods.arrayBuffer,
         Uint16Array: methods.arrayBuffer,
         Uint32Array: methods.arrayBuffer
-      };
+      });
     }
     function createCopier(options2 = {}) {
-      const { createCache, copiers } = getOptions(options2);
+      const { createCache, copiers, maxDepth } = getOptions(options2);
       const { Array: copyArray, Object: copyObject } = copiers;
       function copier(value, state) {
         state.prototype = state.Constructor = void 0;
@@ -26590,31 +26605,40 @@ var require_cjs2 = __commonJS({
         if (state.cache.has(value)) {
           return state.cache.get(value);
         }
+        if (++state.depth > maxDepth) {
+          throw new MaxDepthExceededError(maxDepth);
+        }
         state.prototype = Object.getPrototypeOf(value);
         state.Constructor = state.prototype && state.prototype.constructor;
+        let clone2;
         if (!state.Constructor || state.Constructor === Object) {
-          return copyObject(value, state);
+          clone2 = copyObject(value, state);
+        } else if (Array.isArray(value)) {
+          clone2 = copyArray(value, state);
+        } else {
+          const tagSpecificCopier = copiers[getTag(value)];
+          if (tagSpecificCopier) {
+            clone2 = tagSpecificCopier(value, state);
+          } else {
+            clone2 = typeof value.then === "function" ? value : copyObject(value, state);
+          }
         }
-        if (Array.isArray(value)) {
-          return copyArray(value, state);
-        }
-        const tagSpecificCopier = copiers[getTag(value)];
-        if (tagSpecificCopier) {
-          return tagSpecificCopier(value, state);
-        }
-        return typeof value.then === "function" ? value : copyObject(value, state);
+        --state.depth;
+        return clone2;
       }
       return function copy2(value) {
         return copier(value, {
           Constructor: void 0,
           cache: createCache(),
           copier,
+          depth: 0,
           prototype: void 0
         });
       };
     }
     var copyStrict = createCopier({ strict: true });
     var copy = createCopier();
+    exports2.MaxDepthExceededError = MaxDepthExceededError;
     exports2.copy = copy;
     exports2.copyStrict = copyStrict;
     exports2.createCopier = createCopier;
