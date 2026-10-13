@@ -50,12 +50,20 @@ export class StaleSubscriber extends Subscriber {
       const ctx = context as Context<IssueActivityEvent>;
       const issue = ctx.payload.issue;
 
+      if (issue.state === 'closed') {
+        return;
+      }
+
       await this.#processActivity(ctx, itemRef(issue.pull_request !== undefined, issue.number), issue.number, issue.labels);
     });
 
     probot.on(PR_ACTIVITY, async (context): Promise<void> => {
       const ctx = context as Context<PrActivityEvent>;
       const pr = ctx.payload.pull_request;
+
+      if (pr.state === 'closed') {
+        return;
+      }
 
       await this.#processActivity(ctx, itemRef(true, pr.number), pr.number, pr.labels);
     });

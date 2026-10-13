@@ -378,9 +378,11 @@ const issueCommentPayload = (overrides: {
   labels?: { name: string }[] | null;
   senderType?: string;
   issueNumber?: number;
+  state?: 'open' | 'closed';
 } = {}): Record<string, unknown> => {
   const issue: Record<string, unknown> = {
     number: overrides.issueNumber ?? 42,
+    state: overrides.state ?? 'open',
     user: { login: 'octocat' },
     title: 'Some issue',
   };
@@ -404,12 +406,14 @@ const prSynchronizePayload = (overrides: {
   labels?: { name: string }[];
   senderType?: string;
   senderLogin?: string;
+  state?: 'open' | 'closed';
 } = {}): Record<string, unknown> => ({
   action: overrides.action ?? 'synchronize',
   installation: { id: INSTALLATION_ID },
   number: 42,
   pull_request: {
     number: 42,
+    state: overrides.state ?? 'open',
     labels: overrides.labels ?? [{ name: 'stale' }],
     user: { login: 'octocat' },
     title: 'Some PR',
@@ -608,6 +612,28 @@ describe('stale subscriber (webhook un-stale)', () => {
 
     expect(removeScope.isDone()).toBe(true);
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('keeps the stale label on a closed issue that gets a comment', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+
+    await expect(probot.receive({
+      id: 'evt-closed-issue-comment',
+      name: 'issue_comment',
+      payload: issueCommentPayload({ state: 'closed' }) as never,
+    })).resolves.toBeUndefined();
+  });
+
+  it('keeps the stale label on a closed pull request that gets a review comment', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_STALE_ENABLED);
+
+    await expect(probot.receive({
+      id: 'evt-closed-pr-review-comment',
+      name: 'pull_request_review_comment',
+      payload: prSynchronizePayload({ action: 'created', state: 'closed' }) as never,
+    })).resolves.toBeUndefined();
   });
 
   it('does nothing when the item has no stale label', async () => {

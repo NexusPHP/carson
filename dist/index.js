@@ -62422,11 +62422,17 @@ var StaleSubscriber = class extends Subscriber {
     probot.on(ISSUE_ACTIVITY, async (context) => {
       const ctx = context;
       const issue3 = ctx.payload.issue;
+      if (issue3.state === "closed") {
+        return;
+      }
       await this.#processActivity(ctx, itemRef(issue3.pull_request !== void 0, issue3.number), issue3.number, issue3.labels);
     });
     probot.on(PR_ACTIVITY, async (context) => {
       const ctx = context;
       const pr = ctx.payload.pull_request;
+      if (pr.state === "closed") {
+        return;
+      }
       await this.#processActivity(ctx, itemRef(true, pr.number), pr.number, pr.labels);
     });
   }

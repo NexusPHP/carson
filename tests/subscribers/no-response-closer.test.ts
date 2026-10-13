@@ -201,9 +201,6 @@ describe('no-response-closer subscriber (author responses, via app)', () => {
   });
 
   it('ignores closed items', async () => {
-    mockInstallationToken();
-    mockConfig(responseConfig(WAITING_RULE));
-
     await receive('evt-closed', 'issue_comment', commentPayload({ state: 'closed' }));
 
     expect(nock.pendingMocks()).toEqual([]);

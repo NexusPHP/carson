@@ -968,7 +968,7 @@ In addition, the subscriber listens to the following webhook events and **remove
 
 The stale notice is identified by the hidden marker `<!-- carson:stale -->` appended to its body. If the marker isn't found (e.g. on items that became stale before this version shipped), the label is still removed but no comment is minimized.
 
-Bot senders (including Carson's own stale comment and Dependabot's auto-rebase) do not un-stale. The signal is meant to capture maintainer attention specifically. To re-enable a closed-by-stale item, a maintainer can reopen it manually. The next scheduled run will not re-stale it for `days_until_stale` more days.
+Bot senders (including Carson's own stale comment and Dependabot's auto-rebase) do not un-stale. The signal is meant to capture maintainer attention specifically. Activity on a closed item does not un-stale it either, so an item closed as stale keeps its label and notice when someone comments on it later. To re-enable a closed-by-stale item, a maintainer can reopen it manually. The next scheduled run will not re-stale it for `days_until_stale` more days.
 
 On a pull request from a fork, review and review-comment events run without secrets and are skipped (see the note in the [README](README.md#workflow)), so review activity alone does not un-stale it. A regular comment or a push does.
 
