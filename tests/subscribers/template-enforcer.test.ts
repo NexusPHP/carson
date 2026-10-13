@@ -81,7 +81,7 @@ const mockRemoveLabel = (label: string): nock.Scope => {
 
 const mockCreateComment = (verify: (body: { body: string }) => boolean): nock.Scope => {
   return nock('https://api.github.com')
-    .post(`/repos/acme/widgets/issues/${ITEM_NUMBER}/comments`, verify)
+    .post(`/repos/acme/widgets/issues/${ITEM_NUMBER}/comments`, (body: { body?: string }) => body.body !== undefined && verify({ body: body.body }))
     .reply(201, { id: 1, body: '' });
 };
 
