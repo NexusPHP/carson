@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.8.0](https://github.com/NexusPHP/carson/compare/v1.7.0...v1.8.0) - 2026-10-13
+
 ### Added
 
 - The README and the installer page explain the Actions policy that public repositories need from November 2, 2026, when GitHub starts blocking `pull_request_target` by default. The installer offers the policy as a file to import.
