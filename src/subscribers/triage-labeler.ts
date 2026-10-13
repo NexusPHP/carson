@@ -174,6 +174,10 @@ export class TriageLabelerSubscriber extends Subscriber {
   }
 
   async #handle(context: TriageContext): Promise<void> {
+    if (context.payload.pull_request.state === 'closed') {
+      return;
+    }
+
     const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings);
 

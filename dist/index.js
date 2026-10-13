@@ -62901,6 +62901,9 @@ var TriageLabelerSubscriber = class extends Subscriber {
     });
   }
   async #handle(context) {
+    if (context.payload.pull_request.state === "closed") {
+      return;
+    }
     const log = this.log();
     const enabled = await this.loadEnabledSettings(context, Settings18);
     if (enabled === null) {

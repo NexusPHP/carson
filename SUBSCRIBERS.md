@@ -1184,7 +1184,7 @@ For each event the subscriber paginates `pulls.listReviews`, reduces to the late
 - Otherwise any qualifying reviewer's latest review is `APPROVED` → `approved`
 - Otherwise → `needs-review`
 
-Draft PRs are never labeled. A PR converted to draft has its triage label removed. A PR moved out of draft via `ready_for_review` is re-evaluated.
+Draft PRs are never labeled. A PR converted to draft has its triage label removed. A PR moved out of draft via `ready_for_review` is re-evaluated. A closed or merged PR keeps the label it had when it closed, even when a review arrives afterwards.
 
 A change request keeps the PR at `needs-rework` until the reviewer submits a new review, even after the author pushes. With `reset_on_push: true`, a change request whose `commit_id` is not the current head commit no longer counts, so a push after a change request returns the PR to `needs-review` (or `approved`, if an approval from another reviewer stands). Approvals are never treated as stale here: use branch protection's "dismiss stale approvals" for that, which Carson sees as a `DISMISSED` review.
 

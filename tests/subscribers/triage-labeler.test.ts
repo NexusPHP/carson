@@ -83,6 +83,7 @@ const mockRemoveLabel = (label: string): nock.Scope => {
 interface PayloadOverrides {
   action?: 'opened' | 'reopened' | 'synchronize' | 'ready_for_review' | 'converted_to_draft';
   reviewAction?: 'submitted' | 'dismissed';
+  state?: 'open' | 'closed';
   draft?: boolean;
   labels?: string[];
   senderType?: string;
@@ -113,6 +114,7 @@ const reviewPayload = (
   installation: { id: INSTALLATION_ID },
   pull_request: {
     number: PR_NUMBER,
+    state: overrides.state ?? 'open',
     draft: overrides.draft ?? false,
     head: { sha: 'abc1234', ref: 'feature/widget' },
     base: { ref: 'main' },
@@ -171,6 +173,17 @@ describe('triage-labeler subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('leaves a closed PR alone when a review arrives after it closed', async () => {
+    mockInstallationToken();
+    mockConfig(CONFIG_ENABLED);
+
+    await expect(probot.receive({
+      id: 'evt-closed-review',
+      name: 'pull_request_review',
+      payload: reviewPayload('CHANGES_REQUESTED', 'alice', { state: 'closed', labels: ['approved'] }) as never,
+    })).resolves.toBeUndefined();
   });
 
   it('adds needs-review on a non-draft opened PR with no reviews', async () => {
