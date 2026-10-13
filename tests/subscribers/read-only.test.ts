@@ -98,7 +98,11 @@ const mockComments = (comments: { created_at: string }[]): nock.Scope =>
 
 const mockComment = (expected?: string, prior: { created_at: string }[] = []): nock.Scope =>
   mockComments(prior)
-    .post('/repos/acme/mirror/issues/42/comments', (body: { body: string }) => {
+    .post('/repos/acme/mirror/issues/42/comments', (body: { body?: string }) => {
+      if (body.body === undefined) {
+        return false;
+      }
+
       if (expected !== undefined) {
         expect(body.body).toBe(`${expected}\n\n<!-- carson:read-only -->`);
       }

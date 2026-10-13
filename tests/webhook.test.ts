@@ -70,7 +70,7 @@ describe('deliver', () => {
       .post('/api/hook').times(2).replyWithError('ECONNREFUSED');
 
     await expect(deliver(URL, '{}', {}, { ...FAST, attempts: 2 }))
-      .rejects.toThrow(`Webhook delivery to ${URL} failed: Error: ECONNREFUSED`);
+      .rejects.toThrow(`Webhook delivery to ${URL} failed: TypeError: fetch failed`);
     expect(scope.isDone()).toBe(true);
   });
 

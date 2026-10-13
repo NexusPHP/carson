@@ -161,9 +161,9 @@ describe('webhook-notifier subscriber (via app)', () => {
       .matchHeader('content-type', 'application/json')
       .matchHeader('x-carson-event', 'issues.closed')
       .matchHeader('x-carson-delivery', 'run-777')
-      .reply(function (_uri, body) {
-        capturedBody = body as Record<string, unknown>;
-        signature = this.req.headers['x-carson-signature-256'] ?? '';
+      .reply(async (request: Request) => {
+        capturedBody = await request.json() as Record<string, unknown>;
+        signature = request.headers.get('x-carson-signature-256') ?? '';
         return [200];
       });
 
