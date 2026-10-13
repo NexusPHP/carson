@@ -95,6 +95,7 @@ const mockPermission = (login: string, roleName: string | null): nock.Scope => {
 
 interface IssueOverrides {
   action?: 'opened' | 'edited';
+  state?: 'open' | 'closed';
   body?: string;
   title?: string;
   user?: { login: string } | null;
@@ -107,6 +108,7 @@ const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> =
   installation: { id: INSTALLATION_ID },
   issue: {
     number: ITEM_NUMBER,
+    state: overrides.state ?? 'open',
     body: overrides.body ?? '',
     title: overrides.title ?? 'Something is broken',
     user: overrides.user === undefined ? { login: 'octocat' } : overrides.user,
@@ -121,6 +123,7 @@ const issuePayload = (overrides: IssueOverrides = {}): Record<string, unknown> =
 
 interface PrOverrides {
   action?: 'opened' | 'edited';
+  state?: 'open' | 'closed';
   body?: string;
   title?: string;
   user?: { login: string } | null;
@@ -133,6 +136,7 @@ const prPayload = (overrides: PrOverrides = {}): Record<string, unknown> => ({
   installation: { id: INSTALLATION_ID },
   pull_request: {
     number: ITEM_NUMBER,
+    state: overrides.state ?? 'open',
     draft: false,
     head: { sha: 'abc1234', ref: 'feature/x' },
     base: { ref: 'main' },
@@ -740,5 +744,27 @@ describe('template-enforcer subscriber (via app)', () => {
     });
 
     expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('leaves a closed issue alone when it is edited', async () => {
+    mockInstallationToken();
+    mockConfig(buildConfig(ISSUES_REQUIRED_SECTION));
+
+    await expect(probot.receive({
+      id: 'evt-closed-issue',
+      name: 'issues',
+      payload: issuePayload({ action: 'edited', state: 'closed', body: 'no sections' }) as never,
+    })).resolves.toBeUndefined();
+  });
+
+  it('leaves a closed pull request alone when it is edited', async () => {
+    mockInstallationToken();
+    mockConfig(buildConfig(['    pull_requests:', '      min_length: 30'].join('\n')));
+
+    await expect(probot.receive({
+      id: 'evt-closed-pr',
+      name: 'pull_request',
+      payload: prPayload({ action: 'edited', state: 'closed', body: 'short' }) as never,
+    })).resolves.toBeUndefined();
   });
 });

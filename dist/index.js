@@ -62652,7 +62652,7 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #handleIssue(context) {
     const issue3 = context.payload.issue;
-    if (issue3.user === null) {
+    if (issue3.user === null || issue3.state === "closed") {
       return;
     }
     await this.#apply(context, "issue", {
@@ -62665,6 +62665,9 @@ var TemplateEnforcerSubscriber = class extends Subscriber {
   }
   async #handlePr(context) {
     const pr = context.payload.pull_request;
+    if (pr.state === "closed") {
+      return;
+    }
     await this.#apply(context, "pull_request", {
       number: pr.number,
       body: pr.body ?? "",

@@ -131,7 +131,7 @@ export class TemplateEnforcerSubscriber extends Subscriber {
   async #handleIssue(context: Context<IssueEvent>): Promise<void> {
     const issue = context.payload.issue;
 
-    if (issue.user === null) {
+    if (issue.user === null || issue.state === 'closed') {
       return;
     }
 
@@ -146,6 +146,10 @@ export class TemplateEnforcerSubscriber extends Subscriber {
 
   async #handlePr(context: Context<PrEvent>): Promise<void> {
     const pr = context.payload.pull_request;
+
+    if (pr.state === 'closed') {
+      return;
+    }
 
     await this.#apply(context, 'pull_request', {
       number: pr.number,

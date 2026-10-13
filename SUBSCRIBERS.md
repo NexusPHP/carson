@@ -1043,7 +1043,7 @@ Three rule kinds are supported per type:
 - `min_length`: a positive integer. The body (trimmed) must be at least this many characters.
 - `rules`: a list of regex rules with `pattern`, `description`, and an optional `mode` (`require` or `forbid`, default `require`). Invalid patterns are logged as warnings and skipped, so one malformed rule does not silence the subscriber.
 
-On every event the subscriber computes the current violations and reconciles state. The label marks an open comment, so the label alone decides what happens:
+A closed issue or pull request is left alone, so editing it after it was closed changes nothing. On every other event the subscriber computes the current violations and reconciles state. The label marks an open comment, so the label alone decides what happens:
 
 - **Violations, label absent**: post a comment listing the current violations, add the label.
 - **Violations, label present**: no action. The comment keeps the list from when it was posted.
