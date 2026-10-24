@@ -21408,10 +21408,15 @@ var require_pino_std_serializers = __commonJS({
 var require_caller = __commonJS({
   "node_modules/pino/lib/caller.js"(exports2, module2) {
     "use strict";
+    var util = __require("node:util");
+    var getCallSites = util.getCallSites ?? util.getCallSite;
     function noOpPrepareStackTrace(_, stack) {
       return stack;
     }
     module2.exports = function getCallers() {
+      if (getCallSites) {
+        return getCallSites().slice(2).map((callSite) => callSite.scriptName);
+      }
       const originalPrepare = Error.prepareStackTrace;
       Error.prepareStackTrace = noOpPrepareStackTrace;
       const stack = new Error().stack;
@@ -21900,6 +21905,7 @@ var require_symbols6 = __commonJS({
     var formattersSym = /* @__PURE__ */ Symbol.for("pino.formatters");
     var hooksSym = /* @__PURE__ */ Symbol.for("pino.hooks");
     var needsMetadataGsym = /* @__PURE__ */ Symbol.for("pino.metadata");
+    var transportUsesMultistreamSym = /* @__PURE__ */ Symbol.for("pino.transport.usesMultistream");
     module2.exports = {
       setLevelSym,
       getLevelSym,
@@ -21931,7 +21937,8 @@ var require_symbols6 = __commonJS({
       hooksSym,
       nestedKeyStrSym,
       mixinMergeStrategySym,
-      msgPrefixSym
+      msgPrefixSym,
+      transportUsesMultistreamSym
     };
   }
 });
@@ -21977,10 +21984,10 @@ var require_redaction = __commonJS({
         }
         o[ns].push(nextPath);
         return o;
-      }, {});
-      const result = {
+      }, /* @__PURE__ */ Object.create(null));
+      const result = Object.assign(/* @__PURE__ */ Object.create(null), {
         [redactFmtSym]: Redact({ paths, censor, serialize, strict, remove })
-      };
+      });
       const topCensor = (...args) => {
         return typeof censor === "function" ? serialize(censor(...args)) : serialize(censor);
       };
@@ -23545,6 +23552,7 @@ var require_transport = __commonJS({
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
+    var { transportUsesMultistreamSym } = require_symbols6();
     function setupOnExit(stream) {
       onExit.register(stream, autoEnd);
       onExit.registerBeforeExit(stream, flush);
@@ -23686,6 +23694,7 @@ var require_transport = __commonJS({
       const options2 = {
         ...fullOptions.options
       };
+      let usesMultistream = false;
       const callers = typeof caller === "string" ? [caller] : caller;
       const bundlerOverrides = typeof globalThis === "object" && Object.prototype.hasOwnProperty.call(globalThis, "__bundlerPathsOverrides") && globalThis.__bundlerPathsOverrides && typeof globalThis.__bundlerPathsOverrides === "object" ? globalThis.__bundlerPathsOverrides : /* @__PURE__ */ Object.create(null);
       let target = fullOptions.target;
@@ -23710,6 +23719,9 @@ var require_transport = __commonJS({
             };
           });
         });
+        const targetsHaveLevel = options2.targets.some((t) => t.level != null);
+        const pipelinesHaveLevel = options2.pipelines.some((p) => p.some((t) => t.level != null));
+        usesMultistream = options2.targets.length + options2.pipelines.length > 1 || targetsHaveLevel || pipelinesHaveLevel;
       } else if (pipeline) {
         target = bundlerOverrides["pino-worker"] || join(__dirname, "worker.js");
         options2.pipelines = [pipeline.map((dest) => {
@@ -23727,7 +23739,11 @@ var require_transport = __commonJS({
       }
       options2.pinoWillSendConfig = true;
       const name = targets || pipeline ? "pino.transport" : target;
-      return buildStream(fixTarget(target), options2, worker, sync, name);
+      const stream = buildStream(fixTarget(target), options2, worker, sync, name);
+      if (usesMultistream) {
+        stream[transportUsesMultistreamSym] = true;
+      }
+      return stream;
       function fixTarget(origin) {
         origin = bundlerOverrides[origin] || origin;
         if (isAbsolute(origin) || origin.indexOf("file://") === 0) {
@@ -23954,7 +23970,7 @@ var require_tools = __commonJS({
           value = serializers[key] ? serializers[key](value) : value;
           value = (stringifiers[key] || wildcardStringifier || stringify2)(value, stringifySafe);
           if (value === void 0) continue;
-          data += ',"' + key + '":' + value;
+          data += "," + asString(key) + ":" + value;
         }
       }
       return data;
@@ -24024,7 +24040,7 @@ var require_tools = __commonJS({
           stream = transport({ caller, ...opts.transport, levels: customLevels });
         }
         opts = Object.assign({}, defaultOptions2, opts);
-        opts.serializers = Object.assign({}, defaultOptions2.serializers, opts.serializers);
+        opts.serializers = Object.assign(/* @__PURE__ */ Object.create(null), defaultOptions2.serializers, opts.serializers);
         opts.formatters = Object.assign({}, defaultOptions2.formatters, opts.formatters);
         if (opts.prettyPrint) {
           throw new Error("prettyPrint option is no longer supported, see the pino-pretty package (https://github.com/pinojs/pino-pretty)");
@@ -24304,7 +24320,7 @@ var require_levels = __commonJS({
 var require_meta = __commonJS({
   "node_modules/pino/lib/meta.js"(exports2, module2) {
     "use strict";
-    module2.exports = { version: "10.3.1" };
+    module2.exports = { version: "10.4.0" };
   }
 });
 
@@ -25174,7 +25190,7 @@ var require_multistream = __commonJS({
       return res;
       function write(data) {
         let dest;
-        const level = this.lastLevel;
+        const level = typeof this.lastLevel === "string" ? (this.streamLevels || streamLevels)[this.lastLevel] : this.lastLevel;
         const { streams } = this;
         let recordedLevel = 0;
         let stream;
@@ -25218,7 +25234,7 @@ var require_multistream = __commonJS({
       }
       function add(dest) {
         if (!dest) {
-          return res;
+          return this;
         }
         const isStream = typeof dest.write === "function" || dest.stream;
         const stream_ = dest.write ? dest : dest.stream;
@@ -25245,7 +25261,7 @@ var require_multistream = __commonJS({
         streams.unshift(dest_);
         streams.sort(compareByLevel);
         this.minLevel = streams[0].level;
-        return res;
+        return this;
       }
       function remove(id) {
         const { streams } = this;
@@ -25255,7 +25271,7 @@ var require_multistream = __commonJS({
           streams.sort(compareByLevel);
           this.minLevel = streams.length > 0 ? streams[0].level : -1;
         }
-        return res;
+        return this;
       }
       function end() {
         for (const { stream } of this.streams) {
@@ -25277,12 +25293,14 @@ var require_multistream = __commonJS({
           write,
           add,
           remove,
+          emit,
+          flushSync,
+          end,
           minLevel: level,
           streams,
           clone: clone2,
-          emit,
-          flushSync,
-          [metadata]: true
+          [metadata]: true,
+          streamLevels
         };
       }
     }
@@ -25349,7 +25367,8 @@ var require_pino = __commonJS({
       hooksSym,
       nestedKeyStrSym,
       mixinMergeStrategySym,
-      msgPrefixSym
+      msgPrefixSym,
+      transportUsesMultistreamSym
     } = symbols;
     var { epochTime, nullTime } = time3;
     var { pid } = process;
@@ -25428,7 +25447,7 @@ var require_pino = __commonJS({
       const stringifyFn = stringify.bind({
         [stringifySafeSym]: stringifySafe
       });
-      const stringifiers = redact ? redaction(redact, stringifyFn) : {};
+      const stringifiers = redact ? Object.assign(/* @__PURE__ */ Object.create(null), redaction(redact, stringifyFn)) : /* @__PURE__ */ Object.create(null);
       const formatOpts = redact ? { stringify: stringifiers[redactFmtSym] } : { stringify: stringifyFn };
       const end = "}" + (crlf ? "\r\n" : "\n");
       const coreChindings = asChindings.bind(null, {
@@ -25454,6 +25473,26 @@ var require_pino = __commonJS({
       if (msgPrefix && typeof msgPrefix !== "string") throw Error(`Unknown msgPrefix type "${typeof msgPrefix}" - expected "string"`);
       assertDefaultLevelFound(level, customLevels, useOnlyCustomLevels);
       const levels = mappings(customLevels, useOnlyCustomLevels);
+      if (stream && stream[transportUsesMultistreamSym] === true) {
+        let sampleLabel = typeof level === "string" ? level : void 0;
+        if (!sampleLabel || levels[sampleLabel] === void 0) {
+          sampleLabel = Object.keys(levels)[0];
+        }
+        const sampleNumber = levels[sampleLabel];
+        let ok = false;
+        try {
+          const formatted = formatters.level(sampleLabel, sampleNumber);
+          ok = formatted && typeof formatted === "object" && formatted.level === sampleNumber;
+        } catch {
+          ok = false;
+        }
+        if (!ok) {
+          process.emitWarning(
+            'custom formatters.level detected with multiple transport targets/pipelines; ensure logs include a numeric "level" field or they may be dropped',
+            { code: "PINO_TRANSPORT_MULTI_TARGETS_LEVEL_FORMATTER" }
+          );
+        }
+      }
       if (typeof stream.emit === "function") {
         stream.emit("message", { code: "PINO_CONFIG", config: { levels, messageKey, errorKey } });
       }
@@ -26309,6 +26348,768 @@ var require_colors = __commonJS({
   }
 });
 
+// node_modules/pino-pretty/node_modules/sonic-boom/index.js
+var require_sonic_boom2 = __commonJS({
+  "node_modules/pino-pretty/node_modules/sonic-boom/index.js"(exports2, module2) {
+    "use strict";
+    var fs2 = __require("node:fs");
+    var EventEmitter = __require("node:events");
+    var inherits = __require("node:util").inherits;
+    var path2 = __require("node:path");
+    var assert2 = __require("node:assert");
+    var sleep2 = require_atomic_sleep();
+    var BUSY_WRITE_TIMEOUT = 100;
+    var kEmptyBuffer = Buffer.allocUnsafe(0);
+    var MAX_WRITE = 16 * 1024;
+    var kContentModeBuffer = "buffer";
+    var kContentModeUtf8 = "utf8";
+    var kFlush = /* @__PURE__ */ Symbol("kFlush");
+    var kFlushSyncIdle = 0;
+    var kFlushSyncRetry = 1;
+    var kFlushSyncInWriteEvent = 2;
+    var kFlushSyncInFlight = 3;
+    function isIgnorableFsyncError(err) {
+      switch (err?.code) {
+        case "EBADF":
+        case "EINVAL":
+        case "ENOTSUP":
+        case "EOPNOTSUPP":
+        case "EROFS":
+          return true;
+        default:
+          return false;
+      }
+    }
+    var [major, minor] = (process.versions.node || "0.0").split(".").map(Number);
+    var kCopyBuffer = major >= 22 && minor >= 7;
+    function openFile(file2, sonic) {
+      sonic._opening = true;
+      sonic._writing = true;
+      sonic._asyncDrainScheduled = false;
+      function fileOpened(err, fd) {
+        if (err) {
+          sonic._reopening = false;
+          sonic._writing = false;
+          sonic._opening = false;
+          if (sonic.sync) {
+            process.nextTick(() => {
+              if (sonic.listenerCount("error") > 0) {
+                sonic.emit("error", err);
+              }
+            });
+          } else {
+            sonic.emit("error", err);
+          }
+          return;
+        }
+        const reopening = sonic._reopening;
+        sonic.fd = fd;
+        sonic.file = file2;
+        sonic._reopening = false;
+        sonic._opening = false;
+        sonic._writing = false;
+        if (sonic.sync) {
+          process.nextTick(() => sonic.emit("ready"));
+        } else {
+          sonic.emit("ready");
+        }
+        if (sonic.destroyed) {
+          return;
+        }
+        if (!sonic._writing && (sonic._len > sonic.minLength || sonic._flushPending)) {
+          sonic._actualWrite();
+        } else if (reopening && !sonic._writing) {
+          process.nextTick(emitDrain, sonic);
+        }
+      }
+      const flags = sonic.append ? "a" : "w";
+      const mode = sonic.mode;
+      if (sonic.sync) {
+        try {
+          if (sonic.mkdir) fs2.mkdirSync(path2.dirname(file2), { recursive: true });
+          const fd = fs2.openSync(file2, flags, mode);
+          fileOpened(null, fd);
+        } catch (err) {
+          fileOpened(err);
+          throw err;
+        }
+      } else if (sonic.mkdir) {
+        fs2.mkdir(path2.dirname(file2), { recursive: true }, (err) => {
+          if (err) return fileOpened(err);
+          fs2.open(file2, flags, mode, fileOpened);
+        });
+      } else {
+        fs2.open(file2, flags, mode, fileOpened);
+      }
+    }
+    function SonicBoom(opts) {
+      if (!(this instanceof SonicBoom)) {
+        return new SonicBoom(opts);
+      }
+      let { fd, dest, minLength, maxLength, maxWrite, periodicFlush, sync, append = true, mkdir: mkdir2, retryEAGAIN, maxWriteRetries, fsync, contentMode, mode } = opts || {};
+      fd = fd || dest;
+      this._len = 0;
+      this.fd = -1;
+      this._bufs = [];
+      this._lens = [];
+      this._writing = false;
+      this._ending = false;
+      this._reopening = false;
+      this._asyncDrainScheduled = false;
+      this._flushPending = 0;
+      this._flushInProgress = 0;
+      this._emittingFlush = false;
+      this._emittingWrite = false;
+      this._retryTimer = null;
+      this._hwm = Math.max(minLength || 0, 16387);
+      this.file = null;
+      this.destroyed = false;
+      this.minLength = minLength || 0;
+      this.maxLength = maxLength || 0;
+      this.maxWrite = maxWrite || MAX_WRITE;
+      this._periodicFlush = periodicFlush || 0;
+      this._periodicFlushTimer = void 0;
+      this.sync = sync || false;
+      this.writable = true;
+      this._fsync = fsync || false;
+      this.append = append || false;
+      this.mode = mode;
+      this.retryEAGAIN = retryEAGAIN || (() => true);
+      this.maxWriteRetries = maxWriteRetries || 0;
+      this._writeRetries = 0;
+      this.mkdir = mkdir2 || false;
+      let fsWriteSync;
+      let fsWrite;
+      if (contentMode === kContentModeBuffer) {
+        this._writingBuf = kEmptyBuffer;
+        this.write = writeBuffer;
+        this.flush = flushBuffer;
+        this.flushSync = flushBufferSync;
+        this._actualWrite = actualWriteBuffer;
+        fsWriteSync = () => fs2.writeSync(this.fd, this._writingBuf);
+        fsWrite = () => fs2.write(this.fd, this._writingBuf, this.release);
+      } else if (contentMode === void 0 || contentMode === kContentModeUtf8) {
+        this._writingBuf = "";
+        this.write = write;
+        this.flush = flush;
+        this.flushSync = flushSync;
+        this._actualWrite = actualWrite;
+        fsWriteSync = () => {
+          if (Buffer.isBuffer(this._writingBuf)) {
+            return fs2.writeSync(this.fd, this._writingBuf);
+          }
+          return fs2.writeSync(this.fd, this._writingBuf, "utf8");
+        };
+        fsWrite = () => {
+          if (Buffer.isBuffer(this._writingBuf)) {
+            return fs2.write(this.fd, this._writingBuf, this.release);
+          }
+          return fs2.write(this.fd, this._writingBuf, "utf8", this.release);
+        };
+      } else {
+        throw new Error(`SonicBoom supports "${kContentModeUtf8}" and "${kContentModeBuffer}", but passed ${contentMode}`);
+      }
+      if (typeof fd === "number") {
+        this.fd = fd;
+        process.nextTick(() => this.emit("ready"));
+      } else if (typeof fd === "string") {
+        openFile(fd, this);
+      } else {
+        throw new Error("SonicBoom supports only file descriptors and files");
+      }
+      if (this.minLength >= this.maxWrite) {
+        throw new Error(`minLength should be smaller than maxWrite (${this.maxWrite})`);
+      }
+      this.release = (err, n) => {
+        if (err) {
+          const isRetryableErr = err.code === "EAGAIN" || err.code === "EBUSY";
+          if (isRetryableErr) {
+            this._writeRetries++;
+          }
+          const retriesExhausted = this.maxWriteRetries > 0 && this._writeRetries > this.maxWriteRetries;
+          if (isRetryableErr && !retriesExhausted && this.retryEAGAIN(err, this._writingBuf.length, this._len - this._writingBuf.length)) {
+            if (this.sync) {
+              try {
+                sleep2(BUSY_WRITE_TIMEOUT);
+                this.release(void 0, 0);
+              } catch (err2) {
+                this.release(err2);
+              }
+            } else {
+              this._retryTimer = setTimeout(() => {
+                this._retryTimer = null;
+                fsWrite();
+              }, BUSY_WRITE_TIMEOUT);
+            }
+          } else {
+            this._writing = false;
+            this.emit("error", err);
+          }
+          return;
+        }
+        if (n > 0) {
+          this._writeRetries = 0;
+        }
+        const releasedBufObj = releaseWritingBuf(this._writingBuf, this._len, n);
+        this._len = releasedBufObj.len;
+        this._writingBuf = releasedBufObj.writingBuf;
+        this._emittingWrite = true;
+        try {
+          this.emit("write", n);
+        } finally {
+          this._emittingWrite = false;
+        }
+        if (this.destroyed) {
+          this._writing = false;
+          if (this._flushPending > 0) {
+            if (this._len === 0) {
+              scheduleDrain(this);
+            } else {
+              this.emit(kFlush, new Error("SonicBoom destroyed"));
+            }
+          }
+          return;
+        }
+        if (this._writingBuf.length) {
+          if (!this.sync) {
+            fsWrite();
+            return;
+          }
+          try {
+            do {
+              const n2 = fsWriteSync();
+              const releasedBufObj2 = releaseWritingBuf(this._writingBuf, this._len, n2);
+              this._len = releasedBufObj2.len;
+              this._writingBuf = releasedBufObj2.writingBuf;
+            } while (this._writingBuf.length);
+          } catch (err2) {
+            this.release(err2);
+            return;
+          }
+        }
+        if (this._fsync) {
+          fs2.fsyncSync(this.fd);
+        }
+        const len = this._len;
+        if (this._reopening) {
+          this._writing = false;
+          this._reopening = false;
+          this.reopen();
+        } else if (len > 0 && (len > this.minLength || this._flushPending)) {
+          this._actualWrite();
+        } else if (this._ending) {
+          if (len > 0) {
+            this._actualWrite();
+          } else {
+            this._writing = false;
+            finishEnding(this);
+          }
+        } else {
+          this._writing = false;
+          scheduleDrain(this);
+        }
+      };
+      this.on("newListener", function(name) {
+        if (name === "drain" || name === kFlush) {
+          this._asyncDrainScheduled = false;
+        }
+      });
+      if (this._periodicFlush !== 0) {
+        this._periodicFlushTimer = setInterval(() => {
+          if (this._flushPending === 0 && this._flushInProgress === 0) {
+            this.flush(null);
+          }
+        }, this._periodicFlush);
+        this._periodicFlushTimer.unref();
+      }
+    }
+    function releaseWritingBuf(writingBuf, len, n) {
+      if (typeof writingBuf === "string") {
+        writingBuf = Buffer.from(writingBuf);
+      }
+      len = Math.max(len - n, 0);
+      writingBuf = writingBuf.subarray(n);
+      return { writingBuf, len };
+    }
+    function scheduleDrain(sonic) {
+      if (sonic.sync) {
+        if (!sonic._asyncDrainScheduled) {
+          sonic._asyncDrainScheduled = true;
+          process.nextTick(emitDrain, sonic);
+        }
+      } else {
+        emitDrain(sonic);
+      }
+    }
+    function emitDrain(sonic) {
+      const hasListeners = sonic.listenerCount("drain") > 0 || sonic.listenerCount(kFlush) > 0;
+      if (!hasListeners) return;
+      sonic._asyncDrainScheduled = false;
+      if (sonic._writing) return;
+      emitFlush(sonic);
+      if (sonic._writing || sonic.destroyed) return;
+      if (sonic.listenerCount("drain") > 0) {
+        sonic.emit("drain");
+      }
+    }
+    function emitFlush(sonic) {
+      if (sonic._emittingFlush) return;
+      sonic._emittingFlush = true;
+      try {
+        sonic.emit(kFlush);
+      } finally {
+        sonic._emittingFlush = false;
+      }
+    }
+    function finishEnding(sonic) {
+      if (!sonic._ending || sonic._writing || sonic.destroyed) return;
+      if (sonic._len > 0) {
+        sonic._actualWrite();
+        return;
+      }
+      if (sonic._flushPending > 0) emitFlush(sonic);
+      if (sonic._flushPending === 0 && sonic._flushInProgress === 0 && !sonic._writing && sonic._len === 0) {
+        actualClose(sonic);
+      }
+    }
+    inherits(SonicBoom, EventEmitter);
+    function mergeBuf(bufs, len) {
+      if (bufs.length === 0) {
+        return kEmptyBuffer;
+      }
+      if (bufs.length === 1) {
+        return bufs[0];
+      }
+      return Buffer.concat(bufs, len);
+    }
+    function write(data) {
+      if (this.destroyed) {
+        throw new Error("SonicBoom destroyed");
+      }
+      data = "" + data;
+      const dataLen = Buffer.byteLength(data);
+      const len = this._len + dataLen;
+      const bufs = this._bufs;
+      if (this.maxLength && len > this.maxLength) {
+        this.emit("drop", data);
+        return this._len < this._hwm;
+      }
+      if (bufs.length === 0 || Buffer.byteLength(bufs[bufs.length - 1]) + dataLen > this.maxWrite) {
+        bufs.push(data);
+      } else {
+        bufs[bufs.length - 1] += data;
+      }
+      this._len = len;
+      if (!this._writing && this._len >= this.minLength) {
+        this._actualWrite();
+      }
+      return this._len < this._hwm;
+    }
+    function writeBuffer(data) {
+      if (this.destroyed) {
+        throw new Error("SonicBoom destroyed");
+      }
+      const len = this._len + data.length;
+      const bufs = this._bufs;
+      const lens = this._lens;
+      if (this.maxLength && len > this.maxLength) {
+        this.emit("drop", data);
+        return this._len < this._hwm;
+      }
+      if (bufs.length === 0 || lens[lens.length - 1] + data.length > this.maxWrite) {
+        bufs.push([data]);
+        lens.push(data.length);
+      } else {
+        bufs[bufs.length - 1].push(data);
+        lens[lens.length - 1] += data.length;
+      }
+      this._len = len;
+      if (!this._writing && this._len >= this.minLength) {
+        this._actualWrite();
+      }
+      return this._len < this._hwm;
+    }
+    function callFlushCallbackOnDrain(cb) {
+      this._flushPending++;
+      let waiting = true;
+      let completed = false;
+      let flushing = false;
+      const stopWaiting = () => {
+        if (!waiting) return false;
+        waiting = false;
+        this.off(kFlush, onDrain);
+        this.off("error", onError);
+        return true;
+      };
+      const complete = (err, finish = true) => {
+        if (completed) return;
+        completed = true;
+        if (flushing) this._flushInProgress--;
+        try {
+          cb(err);
+        } finally {
+          if (finish) finishEnding(this);
+        }
+      };
+      const onDrain = (err) => {
+        if (!stopWaiting()) return;
+        this._flushPending--;
+        if (err) {
+          complete(err, false);
+          return;
+        }
+        this._flushInProgress++;
+        flushing = true;
+        if (!this._fsync && !this.destroyed) {
+          try {
+            fs2.fsync(this.fd, (err2) => {
+              if (isIgnorableFsyncError(err2)) {
+                complete();
+                return;
+              }
+              complete(err2);
+            });
+          } catch (err2) {
+            complete(err2);
+          }
+        } else {
+          complete();
+        }
+      };
+      const onError = (err) => {
+        if (!stopWaiting()) return;
+        this._flushPending--;
+        complete(err, false);
+      };
+      this.once(kFlush, onDrain);
+      this.once("error", onError);
+    }
+    function flush(cb) {
+      if (cb != null && typeof cb !== "function") {
+        throw new Error("flush cb must be a function");
+      }
+      if (this.destroyed) {
+        const error63 = new Error("SonicBoom destroyed");
+        if (cb) {
+          cb(error63);
+          return;
+        }
+        throw error63;
+      }
+      if (this.minLength <= 0 && !this._writing && this._len === 0) {
+        cb?.();
+        return;
+      }
+      if (cb) {
+        callFlushCallbackOnDrain.call(this, cb);
+      }
+      if (this._writing) {
+        return;
+      }
+      if (this._bufs.length === 0) {
+        this._bufs.push("");
+      }
+      this._actualWrite();
+    }
+    function flushBuffer(cb) {
+      if (cb != null && typeof cb !== "function") {
+        throw new Error("flush cb must be a function");
+      }
+      if (this.destroyed) {
+        const error63 = new Error("SonicBoom destroyed");
+        if (cb) {
+          cb(error63);
+          return;
+        }
+        throw error63;
+      }
+      if (this.minLength <= 0 && !this._writing && this._len === 0) {
+        cb?.();
+        return;
+      }
+      if (cb) {
+        callFlushCallbackOnDrain.call(this, cb);
+      }
+      if (this._writing) {
+        return;
+      }
+      if (this._bufs.length === 0) {
+        this._bufs.push([]);
+        this._lens.push(0);
+      }
+      this._actualWrite();
+    }
+    SonicBoom.prototype.reopen = function(file2) {
+      if (this.destroyed) {
+        throw new Error("SonicBoom destroyed");
+      }
+      if (this._opening) {
+        this.once("ready", () => {
+          if (!this.destroyed) this.reopen(file2);
+        });
+        return;
+      }
+      if (this._ending) {
+        return;
+      }
+      if (!this.file) {
+        throw new Error("Unable to reopen a file descriptor, you must pass a file to SonicBoom");
+      }
+      if (file2) {
+        this.file = file2;
+      }
+      this._reopening = true;
+      if (this._writing) {
+        return;
+      }
+      const fd = this.fd;
+      this.once("ready", () => {
+        if (fd !== this.fd) {
+          fs2.close(fd, (err) => {
+            if (err) {
+              return this.emit("error", err);
+            }
+          });
+        }
+      });
+      openFile(this.file, this);
+    };
+    SonicBoom.prototype.end = function() {
+      if (this.destroyed) {
+        throw new Error("SonicBoom destroyed");
+      }
+      if (this._opening) {
+        this.once("ready", () => {
+          if (!this.destroyed) this.end();
+        });
+        return;
+      }
+      if (this._ending) {
+        return;
+      }
+      this._ending = true;
+      if (this._writing) {
+        return;
+      }
+      if (this._len > 0 && this.fd >= 0) {
+        this._actualWrite();
+      } else {
+        finishEnding(this);
+      }
+    };
+    function beginFlushSync(sonic) {
+      if (sonic.destroyed) {
+        throw new Error("SonicBoom destroyed");
+      }
+      if (sonic.fd < 0) {
+        throw new Error("sonic boom is not ready yet");
+      }
+      if (!sonic._writing || sonic._opening) {
+        return kFlushSyncIdle;
+      }
+      if (sonic._retryTimer !== null) {
+        clearTimeout(sonic._retryTimer);
+        sonic._retryTimer = null;
+        return kFlushSyncRetry;
+      }
+      if (sonic._emittingWrite) {
+        return kFlushSyncInWriteEvent;
+      }
+      return kFlushSyncInFlight;
+    }
+    function endFlushSyncRetry(sonic) {
+      sonic._writing = false;
+      process.nextTick(() => {
+        if (sonic.destroyed || sonic._writing) return;
+        if (sonic._reopening) {
+          sonic._reopening = false;
+          sonic.reopen();
+        } else if (sonic._ending) {
+          finishEnding(sonic);
+        } else if (sonic._len > 0 && (sonic._len > sonic.minLength || sonic._flushPending)) {
+          sonic._actualWrite();
+        } else {
+          emitDrain(sonic);
+        }
+      });
+    }
+    function flushSync() {
+      const state = beginFlushSync(this);
+      try {
+        if (state !== kFlushSyncInFlight && this._writingBuf.length > 0) {
+          this._bufs.unshift(this._writingBuf);
+          this._writingBuf = "";
+        }
+        let buf = "";
+        while (this._bufs.length || buf.length) {
+          if (buf.length <= 0) {
+            buf = this._bufs[0];
+          }
+          try {
+            const n = Buffer.isBuffer(buf) ? fs2.writeSync(this.fd, buf) : fs2.writeSync(this.fd, buf, "utf8");
+            this._writeRetries = 0;
+            const releasedBufObj = releaseWritingBuf(buf, this._len, n);
+            buf = releasedBufObj.writingBuf;
+            this._len = releasedBufObj.len;
+            if (buf.length <= 0) {
+              this._bufs.shift();
+            }
+          } catch (err) {
+            const shouldRetry = err.code === "EAGAIN" || err.code === "EBUSY";
+            if (shouldRetry) {
+              this._writeRetries++;
+            }
+            const retriesExhausted = this.maxWriteRetries > 0 && this._writeRetries > this.maxWriteRetries;
+            if (!shouldRetry || retriesExhausted || !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
+              throw err;
+            }
+            sleep2(BUSY_WRITE_TIMEOUT);
+          }
+        }
+      } finally {
+        if (state === kFlushSyncRetry) endFlushSyncRetry(this);
+      }
+      try {
+        fs2.fsyncSync(this.fd);
+      } catch {
+      }
+    }
+    function flushBufferSync() {
+      const state = beginFlushSync(this);
+      try {
+        if (state !== kFlushSyncInFlight && this._writingBuf.length > 0) {
+          this._bufs.unshift([this._writingBuf]);
+          this._lens.unshift(this._writingBuf.length);
+          this._writingBuf = kEmptyBuffer;
+        }
+        let buf = kEmptyBuffer;
+        while (this._bufs.length || buf.length) {
+          if (buf.length <= 0) {
+            buf = mergeBuf(this._bufs[0], this._lens[0]);
+          }
+          try {
+            const n = fs2.writeSync(this.fd, buf);
+            this._writeRetries = 0;
+            buf = buf.subarray(n);
+            this._len = Math.max(this._len - n, 0);
+            if (buf.length <= 0) {
+              this._bufs.shift();
+              this._lens.shift();
+            }
+          } catch (err) {
+            const shouldRetry = err.code === "EAGAIN" || err.code === "EBUSY";
+            if (shouldRetry) {
+              this._writeRetries++;
+            }
+            const retriesExhausted = this.maxWriteRetries > 0 && this._writeRetries > this.maxWriteRetries;
+            if (!shouldRetry || retriesExhausted || !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
+              throw err;
+            }
+            sleep2(BUSY_WRITE_TIMEOUT);
+          }
+        }
+      } finally {
+        if (state === kFlushSyncRetry) endFlushSyncRetry(this);
+      }
+    }
+    SonicBoom.prototype.destroy = function() {
+      if (this.destroyed) {
+        return;
+      }
+      const opening = this._opening;
+      actualClose(this);
+      if (opening && this._flushPending > 0) {
+        this.emit("error", new Error("SonicBoom destroyed"));
+      }
+    };
+    function actualWrite() {
+      const release = this.release;
+      this._writing = true;
+      this._writingBuf = this._writingBuf.length ? this._writingBuf : this._bufs.shift() || "";
+      if (this.sync) {
+        try {
+          const written = Buffer.isBuffer(this._writingBuf) ? fs2.writeSync(this.fd, this._writingBuf) : fs2.writeSync(this.fd, this._writingBuf, "utf8");
+          release(null, written);
+        } catch (err) {
+          release(err);
+        }
+      } else {
+        fs2.write(this.fd, this._writingBuf, release);
+      }
+    }
+    function actualWriteBuffer() {
+      const release = this.release;
+      this._writing = true;
+      this._writingBuf = this._writingBuf.length ? this._writingBuf : mergeBuf(this._bufs.shift(), this._lens.shift());
+      if (this.sync) {
+        try {
+          const written = fs2.writeSync(this.fd, this._writingBuf);
+          release(null, written);
+        } catch (err) {
+          release(err);
+        }
+      } else {
+        if (kCopyBuffer) {
+          this._writingBuf = Buffer.from(this._writingBuf);
+        }
+        fs2.write(this.fd, this._writingBuf, release);
+      }
+    }
+    function actualClose(sonic) {
+      if (sonic.destroyed) {
+        return;
+      }
+      if (sonic.fd === -1) {
+        sonic.destroyed = true;
+        sonic.once("ready", () => {
+          sonic.destroyed = false;
+          actualClose(sonic);
+        });
+        return;
+      }
+      if (sonic._periodicFlushTimer !== void 0) {
+        clearInterval(sonic._periodicFlushTimer);
+      }
+      sonic.destroyed = true;
+      sonic._bufs = [];
+      sonic._lens = [];
+      if (sonic._retryTimer !== null) {
+        clearTimeout(sonic._retryTimer);
+        sonic._retryTimer = null;
+        sonic._writing = false;
+      }
+      if (sonic._flushPending > 0 && !sonic._writing) {
+        sonic.emit(kFlush, new Error("SonicBoom destroyed"));
+      }
+      assert2(typeof sonic.fd === "number", `sonic.fd must be a number, got ${typeof sonic.fd}`);
+      try {
+        fs2.fsync(sonic.fd, closeWrapped);
+      } catch {
+      }
+      function closeWrapped() {
+        if (sonic.fd !== 1 && sonic.fd !== 2) {
+          fs2.close(sonic.fd, done);
+        } else {
+          done();
+        }
+      }
+      function done(err) {
+        if (err) {
+          sonic.emit("error", err);
+          return;
+        }
+        if (sonic._ending && !sonic._writing) {
+          sonic.emit("finish");
+        }
+        sonic.emit("close");
+      }
+    }
+    SonicBoom.SonicBoom = SonicBoom;
+    SonicBoom.default = SonicBoom;
+    module2.exports = SonicBoom;
+  }
+});
+
 // node_modules/pino-pretty/lib/utils/noop.js
 var require_noop = __commonJS({
   "node_modules/pino-pretty/lib/utils/noop.js"(exports2, module2) {
@@ -26324,7 +27125,7 @@ var require_build_safe_sonic_boom = __commonJS({
     "use strict";
     module2.exports = buildSafeSonicBoom;
     var { isMainThread } = __require("node:worker_threads");
-    var SonicBoom = require_sonic_boom();
+    var SonicBoom = require_sonic_boom2();
     var noop4 = require_noop();
     function buildSafeSonicBoom(opts) {
       const stream = new SonicBoom(opts);
@@ -26490,7 +27291,7 @@ var require_cjs2 = __commonJS({
       if (Constructor === Object) {
         return prototype === Object.prototype ? {} : Object.create(prototype);
       }
-      if (Constructor && ~toStringFunction.call(Constructor).indexOf("[native code]")) {
+      if (typeof Constructor === "function" && ~toStringFunction.call(Constructor).indexOf("[native code]")) {
         try {
           return new Constructor();
         } catch (_a3) {
@@ -26561,6 +27362,11 @@ var require_cjs2 = __commonJS({
     function copyDate(date5, state) {
       return new state.Constructor(date5.getTime());
     }
+    function copyDateStrict(date5, state) {
+      const clone2 = copyDate(date5, state);
+      state.cache.set(date5, clone2);
+      return copyOwnPropertiesStrict(date5, clone2, state);
+    }
     function copyMapLoose(map2, state) {
       const clone2 = new state.Constructor();
       state.cache.set(map2, clone2);
@@ -26576,7 +27382,16 @@ var require_cjs2 = __commonJS({
       const clone2 = getCleanClone(state.prototype);
       state.cache.set(object2, clone2);
       for (const key of Object.keys(object2)) {
-        clone2[key] = state.copier(object2[key], state);
+        if (key === "__proto__") {
+          Object.defineProperty(clone2, key, {
+            configurable: true,
+            enumerable: true,
+            value: state.copier(object2[key], state),
+            writable: true
+          });
+        } else {
+          clone2[key] = state.copier(object2[key], state);
+        }
       }
       for (const symbol2 of Object.getOwnPropertySymbols(object2)) {
         if (propertyIsEnumerable.call(object2, symbol2)) {
@@ -26623,7 +27438,7 @@ var require_cjs2 = __commonJS({
         asyncGenerator: copySelf,
         blob: copyBlob,
         dataView: copyDataView,
-        date: copyDate,
+        date: strict ? copyDateStrict : copyDate,
         error: copySelf,
         generator: copySelf,
         map: strict ? copyMapStrict : copyMapLoose,
@@ -26738,13 +27553,43 @@ var require_filter_log = __commonJS({
     var { createCopier } = require_cjs2();
     var fastCopy = createCopier({});
     var deleteLogProperty = require_delete_log_property();
+    var getPropertyValue = require_get_property_value();
+    var splitPropertyKey = require_split_property_key();
+    function hasLogProperty(log, property) {
+      const props = splitPropertyKey(property);
+      if (props.length === 0) {
+        return false;
+      }
+      let current = log;
+      for (const prop of props) {
+        if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, prop)) {
+          return false;
+        }
+        current = current[prop];
+      }
+      return true;
+    }
+    function setLogProperty(log, property, value) {
+      const props = splitPropertyKey(property);
+      const last = props.pop();
+      let current = log;
+      for (const prop of props) {
+        if (current[prop] === null || typeof current[prop] !== "object") {
+          current[prop] = {};
+        }
+        current = current[prop];
+      }
+      current[last] = value;
+    }
     function filterLog({ log, context }) {
       const { ignoreKeys, includeKeys } = context;
       const logCopy = fastCopy(log);
       if (includeKeys) {
         const logIncluded = {};
         includeKeys.forEach((key) => {
-          logIncluded[key] = logCopy[key];
+          if (hasLogProperty(logCopy, key)) {
+            setLogProperty(logIncluded, key, getPropertyValue(logCopy, key));
+          }
         });
         return logIncluded;
       }
@@ -27108,10 +27953,12 @@ var require_interpret_conditionals = __commonJS({
     module2.exports = interpretConditionals;
     var getPropertyValue = require_get_property_value();
     function interpretConditionals(messageFormat, log) {
-      messageFormat = messageFormat.replace(/{if (.*?)}(.*?){end}/g, replacer);
+      messageFormat = messageFormat.replace(/{if (.*?)}([\s\S]*?){end}/g, replacer);
       messageFormat = messageFormat.replace(/{if (.*?)}/g, "");
       messageFormat = messageFormat.replace(/{end}/g, "");
-      return messageFormat.replace(/\s+/g, " ").trim();
+      messageFormat = messageFormat.replace(/[^\S\r\n]+/g, " ");
+      messageFormat = messageFormat.replace(/\n[^\S\r\n]*\n/g, "\n");
+      return messageFormat.trim();
       function replacer(_, key, value) {
         const propertyValue = getPropertyValue(log, key);
         if (propertyValue && value.includes(key)) {
@@ -27180,7 +28027,7 @@ var require_parse_factory_options = __commonJS({
         translateTime
       } = options2;
       const errorProps = options2.errorProps.split(",");
-      const useOnlyCustomProps = typeof options2.useOnlyCustomProps === "boolean" ? options2.useOnlyCustomProps : options2.useOnlyCustomProps === "true";
+      const useOnlyCustomProps = options2.useOnlyCustomProps;
       const customLevels = handleCustomLevelsOpts(options2.customLevels);
       const customLevelNames = handleCustomLevelsNamesOpts(options2.customLevels);
       const getLevelLabelData = handleLevelLabelData(useOnlyCustomProps, customLevels, customLevelNames);
@@ -27442,16 +28289,30 @@ var require_fast_safe_stringify = __commonJS({
   }
 });
 
+// node_modules/pino-pretty/lib/utils/strip-unsafe-control-chars.js
+var require_strip_unsafe_control_chars = __commonJS({
+  "node_modules/pino-pretty/lib/utils/strip-unsafe-control-chars.js"(exports2, module2) {
+    "use strict";
+    module2.exports = stripUnsafeControlChars;
+    var unsafeControlChars = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+    function stripUnsafeControlChars(input2) {
+      return String(input2).replace(unsafeControlChars, "");
+    }
+  }
+});
+
 // node_modules/pino-pretty/lib/utils/prettify-error.js
 var require_prettify_error = __commonJS({
   "node_modules/pino-pretty/lib/utils/prettify-error.js"(exports2, module2) {
     "use strict";
     module2.exports = prettifyError2;
     var joinLinesWithIndentation = require_join_lines_with_indentation();
-    function prettifyError2({ keyName, lines, eol, ident }) {
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
+    function prettifyError2({ keyName, lines, eol, ident, sanitizeStack = true }) {
       let result = "";
       const joinedLines = joinLinesWithIndentation({ input: lines, ident, eol });
-      const splitLines = `${ident}${keyName}: ${joinedLines}${eol}`.split(eol);
+      const safeKeyName = stripUnsafeControlChars(keyName);
+      const splitLines = `${ident}${safeKeyName}: ${joinedLines}${eol}`.split(eol);
       for (let j = 0; j < splitLines.length; j += 1) {
         if (j !== 0) result += eol;
         const line = splitLines[j];
@@ -27461,7 +28322,9 @@ var require_prettify_error = __commonJS({
             const indentSize = /^\s*/.exec(line)[0].length + 4;
             const indentation = " ".repeat(indentSize);
             const stackMessage = matches2[2];
-            result += matches2[1] + eol + indentation + JSON.parse(stackMessage).replace(/\n/g, eol + indentation);
+            const parsedStack = JSON.parse(stackMessage);
+            const stack = sanitizeStack ? stripUnsafeControlChars(parsedStack) : parsedStack;
+            result += matches2[1] + eol + indentation + stack.replace(/\n/g, eol + indentation);
           } else {
             result += line;
           }
@@ -27485,6 +28348,7 @@ var require_prettify_object = __commonJS({
     var stringifySafe = require_fast_safe_stringify();
     var joinLinesWithIndentation = require_join_lines_with_indentation();
     var prettifyError2 = require_prettify_error();
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
     function prettifyObject({
       log,
       excludeLoggerKeys = true,
@@ -27526,13 +28390,15 @@ var require_prettify_object = __commonJS({
           if (lines === void 0) return;
           lines = lines.replace(/\\\\/gi, "\\");
           const joinedLines = joinLinesWithIndentation({ input: lines, ident, eol });
-          result += `${ident}${objectColorizer.property(keyName)}:${joinedLines.startsWith(eol) ? "" : " "}${joinedLines}${eol}`;
+          const safeKeyName = stripUnsafeControlChars(keyName);
+          result += `${ident}${objectColorizer.property(safeKeyName)}:${joinedLines.startsWith(eol) ? "" : " "}${joinedLines}${eol}`;
         });
       }
       Object.entries(errors).forEach(([keyName, keyValue]) => {
-        const lines = typeof customPrettifiers[keyName] === "function" ? keyValue : stringifySafe(keyValue, null, 2);
+        const hasCustomPrettifier = typeof customPrettifiers[keyName] === "function";
+        const lines = hasCustomPrettifier ? keyValue : stringifySafe(keyValue, null, 2);
         if (lines === void 0) return;
-        result += prettifyError2({ keyName, lines, eol, ident });
+        result += prettifyError2({ keyName, lines, eol, ident, sanitizeStack: !hasCustomPrettifier });
       });
       return result;
     }
@@ -27550,6 +28416,7 @@ var require_prettify_error_log = __commonJS({
     var isObject2 = require_is_object();
     var joinLinesWithIndentation = require_join_lines_with_indentation();
     var prettifyObject = require_prettify_object();
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
     function prettifyErrorLog({ log, context }) {
       const {
         EOL: eol,
@@ -27557,7 +28424,7 @@ var require_prettify_error_log = __commonJS({
         errorProps: errorProperties,
         messageKey
       } = context;
-      const stack = log.stack;
+      const stack = stripUnsafeControlChars(log.stack);
       const joinedLines = joinLinesWithIndentation({ input: stack, ident, eol });
       let result = `${ident}${joinedLines}${eol}`;
       if (errorProperties.length > 0) {
@@ -27571,6 +28438,7 @@ var require_prettify_error_log = __commonJS({
         for (let i = 0; i < propertiesToPrint.length; i += 1) {
           const key = propertiesToPrint[i];
           if (key in log === false) continue;
+          const safeKey = stripUnsafeControlChars(key);
           if (isObject2(log[key])) {
             const prettifiedObject = prettifyObject({
               log: log[key],
@@ -27580,10 +28448,11 @@ var require_prettify_error_log = __commonJS({
                 IDENT: ident + ident
               }
             });
-            result = `${result}${ident}${key}: {${eol}${prettifiedObject}${ident}}${eol}`;
+            result = `${result}${ident}${safeKey}: {${eol}${prettifiedObject}${ident}}${eol}`;
             continue;
           }
-          result = `${result}${ident}${key}: ${log[key]}${eol}`;
+          const value = stripUnsafeControlChars(log[key]);
+          result = `${result}${ident}${safeKey}: ${value}${eol}`;
         }
       }
       return result;
@@ -27628,6 +28497,7 @@ var require_prettify_message = __commonJS({
     } = require_constants8();
     var getPropertyValue = require_get_property_value();
     var interpretConditionals = require_interpret_conditionals();
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
     function prettifyMessage({ log, context }) {
       const {
         colorizer,
@@ -27652,7 +28522,7 @@ var require_prettify_message = __commonJS({
             return value !== void 0 ? value : "";
           }
         );
-        return colorizer.message(message);
+        return colorizer.message(stripUnsafeControlChars(message));
       }
       if (messageFormat && typeof messageFormat === "function") {
         const msg = messageFormat(log, messageKey, levelLabel, { colors: colorizer.colors });
@@ -27660,7 +28530,7 @@ var require_prettify_message = __commonJS({
       }
       if (messageKey in log === false) return void 0;
       if (typeof log[messageKey] !== "string" && typeof log[messageKey] !== "number" && typeof log[messageKey] !== "boolean") return void 0;
-      return colorizer.message(log[messageKey]);
+      return colorizer.message(stripUnsafeControlChars(log[messageKey]));
     }
   }
 });
@@ -27670,16 +28540,17 @@ var require_prettify_metadata = __commonJS({
   "node_modules/pino-pretty/lib/utils/prettify-metadata.js"(exports2, module2) {
     "use strict";
     module2.exports = prettifyMetadata;
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
     function prettifyMetadata({ log, context }) {
       const { customPrettifiers: prettifiers, colorizer } = context;
       let line = "";
       if (log.name || log.pid || log.hostname) {
         line += "(";
         if (log.name) {
-          line += prettifiers.name ? prettifiers.name(log.name, "name", log, { colors: colorizer.colors }) : log.name;
+          line += prettifiers.name ? prettifiers.name(log.name, "name", log, { colors: colorizer.colors }) : stripUnsafeControlChars(log.name);
         }
         if (log.pid) {
-          const prettyPid = prettifiers.pid ? prettifiers.pid(log.pid, "pid", log, { colors: colorizer.colors }) : log.pid;
+          const prettyPid = prettifiers.pid ? prettifiers.pid(log.pid, "pid", log, { colors: colorizer.colors }) : stripUnsafeControlChars(log.pid);
           if (log.name && log.pid) {
             line += "/" + prettyPid;
           } else {
@@ -27687,13 +28558,13 @@ var require_prettify_metadata = __commonJS({
           }
         }
         if (log.hostname) {
-          const prettyHostname = prettifiers.hostname ? prettifiers.hostname(log.hostname, "hostname", log, { colors: colorizer.colors }) : log.hostname;
+          const prettyHostname = prettifiers.hostname ? prettifiers.hostname(log.hostname, "hostname", log, { colors: colorizer.colors }) : stripUnsafeControlChars(log.hostname);
           line += `${line === "(" ? "on" : " on"} ${prettyHostname}`;
         }
         line += ")";
       }
       if (log.caller) {
-        const prettyCaller = prettifiers.caller ? prettifiers.caller(log.caller, "caller", log, { colors: colorizer.colors }) : log.caller;
+        const prettyCaller = prettifiers.caller ? prettifiers.caller(log.caller, "caller", log, { colors: colorizer.colors }) : stripUnsafeControlChars(log.caller);
         line += `${line === "" ? "" : " "}<${prettyCaller}>`;
       }
       if (line === "") {
@@ -27711,6 +28582,7 @@ var require_prettify_time = __commonJS({
     "use strict";
     module2.exports = prettifyTime;
     var formatTime = require_format_time();
+    var stripUnsafeControlChars = require_strip_unsafe_control_chars();
     function prettifyTime({ log, context }) {
       const {
         timestampKey,
@@ -27725,7 +28597,7 @@ var require_prettify_time = __commonJS({
       }
       if (time3 === null) return void 0;
       const output2 = translateFormat ? formatTime(time3, translateFormat) : time3;
-      return prettifier ? prettifier(output2) : `[${output2}]`;
+      return prettifier ? prettifier(output2) : `[${stripUnsafeControlChars(output2)}]`;
     }
   }
 });
@@ -27757,6 +28629,7 @@ var require_utils3 = __commonJS({
       prettifyObject: require_prettify_object(),
       prettifyTime: require_prettify_time(),
       splitPropertyKey: require_split_property_key(),
+      stripUnsafeControlChars: require_strip_unsafe_control_chars(),
       getLevelLabelData: require_get_level_label_data()
     };
   }
@@ -27850,13 +28723,15 @@ var require_secure_json_parse = __commonJS({
     function safeParse3(text, reviver) {
       const { stackTraceLimit } = Error;
       Error.stackTraceLimit = 0;
+      let result;
       try {
-        return _parse3(text, reviver, { safe: true });
+        result = _parse3(text, reviver, { safe: true });
       } catch {
-        return void 0;
+        result = void 0;
       } finally {
         Error.stackTraceLimit = stackTraceLimit;
       }
+      return result;
     }
     module2.exports = parse5;
     module2.exports.default = parse5;
@@ -28040,14 +28915,41 @@ var require_pino_pretty = __commonJS({
       messageFormat: null,
       messageKey: MESSAGE_KEY,
       minimumLevel: void 0,
-      outputStream: process.stdout,
       singleLine: false,
       timestampKey: TIMESTAMP_KEY,
       translateTime: true,
       useOnlyCustomProps: true
     };
+    function normalizeBoolean(value) {
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return value;
+    }
+    function normalizeBooleanOptions(options2) {
+      const normalized = { ...options2 };
+      const booleanOptions = [
+        "colorize",
+        "colorizeObjects",
+        "crlf",
+        "hideObject",
+        "levelFirst",
+        "singleLine",
+        "useOnlyCustomProps"
+      ];
+      for (const key of booleanOptions) {
+        if (key in normalized) {
+          normalized[key] = normalizeBoolean(normalized[key]);
+        }
+      }
+      if ("translateTime" in normalized && (normalized.translateTime === "true" || normalized.translateTime === "false")) {
+        normalized.translateTime = normalizeBoolean(normalized.translateTime);
+      }
+      return normalized;
+    }
     function prettyFactory2(options2) {
-      const context = parseFactoryOptions(Object.assign({}, defaultOptions2, options2));
+      const mergedOptions = Object.assign({}, defaultOptions2, options2);
+      const normalizedOptions = normalizeBooleanOptions(mergedOptions);
+      const context = parseFactoryOptions(normalizedOptions);
       return pretty.bind({ ...context, context });
     }
     function build(opts = {}) {
@@ -30050,36 +30952,38 @@ var require_Alias = __commonJS({
           if (node2.anchor === this.source)
             found = node2;
         }
+        if (found && ctx) {
+          const { anchors: anchors2, doc: doc2, maxAliasCount } = ctx;
+          let data = anchors2.get(found);
+          if (!data) {
+            toJS.toJS(found, null, ctx);
+            data = anchors2.get(found);
+          }
+          if (data?.res === void 0) {
+            const msg = "This should not happen: Alias anchor was not resolved?";
+            throw new ReferenceError(msg);
+          }
+          if (maxAliasCount >= 0) {
+            data.count += 1;
+            if (data.aliasCount === 0)
+              data.aliasCount = getAliasCount(doc2, found, anchors2);
+            if (data.count * data.aliasCount > maxAliasCount) {
+              const msg = "Excessive alias count indicates a resource exhaustion attack";
+              throw new ReferenceError(msg);
+            }
+          }
+        }
         return found;
       }
       toJSON(_arg, ctx) {
         if (!ctx)
           return { source: this.source };
-        const { anchors: anchors2, doc, maxAliasCount } = ctx;
-        const source = this.resolve(doc, ctx);
+        const source = this.resolve(ctx.doc, ctx);
         if (!source) {
           const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
           throw new ReferenceError(msg);
         }
-        let data = anchors2.get(source);
-        if (!data) {
-          toJS.toJS(source, null, ctx);
-          data = anchors2.get(source);
-        }
-        if (data?.res === void 0) {
-          const msg = "This should not happen: Alias anchor was not resolved?";
-          throw new ReferenceError(msg);
-        }
-        if (maxAliasCount >= 0) {
-          data.count += 1;
-          if (data.aliasCount === 0)
-            data.aliasCount = getAliasCount(doc, source, anchors2);
-          if (data.count * data.aliasCount > maxAliasCount) {
-            const msg = "Excessive alias count indicates a resource exhaustion attack";
-            throw new ReferenceError(msg);
-          }
-        }
-        return data.res;
+        return ctx.anchors.get(source).res;
       }
       toString(ctx, _onComment, _onChompKeep) {
         const src = `*${this.source}`;
@@ -34081,37 +34985,38 @@ var require_resolve_flow_scalar = __commonJS({
       }
       if (badChar)
         onError(0, "BAD_SCALAR_START", `Plain value cannot start with ${badChar}`);
-      return foldLines(source);
+      return unfoldLines(source);
     }
     function singleQuotedValue(source, onError) {
       if (source[source.length - 1] !== "'" || source.length === 1)
         onError(source.length, "MISSING_CHAR", "Missing closing 'quote");
-      return foldLines(source.slice(1, -1)).replace(/''/g, "'");
+      return unfoldLines(source.slice(1, -1)).replace(/''/g, "'");
     }
-    function foldLines(source) {
-      let first, line;
-      try {
-        first = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
-        line = new RegExp("[ 	]*(.*?)(?:(?<![ 	])[ 	]*)?\r?\n", "sy");
-      } catch {
-        first = /(.*?)[ \t]*\r?\n/sy;
-        line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
-      }
-      let match = first.exec(source);
+    function unfoldLines(source) {
+      const line = /(.*?)\r?\n/sy;
+      let match = line.exec(source);
       if (!match)
         return source;
-      let res = match[1];
+      let trimEnd, trimBoth;
+      try {
+        trimEnd = new RegExp("(?<![ 	])[ 	]+$");
+        trimBoth = new RegExp("^[ 	]+|(?<![ 	])[ 	]+$", "g");
+      } catch {
+        trimEnd = /[ \t]+$/;
+        trimBoth = /^[ \t]+|[ \t]+$/g;
+      }
+      let res = match[1].replace(trimEnd, "");
       let sep2 = " ";
-      let pos = first.lastIndex;
-      line.lastIndex = pos;
+      let pos = line.lastIndex;
       while (match = line.exec(source)) {
-        if (match[1] === "") {
+        const lm = match[1].replace(trimBoth, "");
+        if (lm === "") {
           if (sep2 === "\n")
             res += sep2;
           else
             sep2 = "\n";
         } else {
-          res += sep2 + match[1];
+          res += sep2 + lm;
           sep2 = " ";
         }
         pos = line.lastIndex;
@@ -65391,25 +66296,6 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 // node_modules/content-type/dist/index.js
-var NullObject = /* @__PURE__ */ (() => {
-  const C = function() {
-  };
-  C.prototype = /* @__PURE__ */ Object.create(null);
-  return C;
-})();
-function parse4(header, options2) {
-  const stopChar = options2?.comma === true ? COMMA : 65536;
-  const len = header.length;
-  let index = skipOWS(header, options2?.start ?? 0, len);
-  const valueStart = index;
-  index = skipValue(header, index, len, stopChar);
-  const valueEnd = trailingOWS(header, valueStart, index);
-  const type = header.slice(valueStart, valueEnd).toLowerCase();
-  if (options2?.parameters === false) {
-    return { type, index, parameters: new NullObject() };
-  }
-  return parseParameters(header, type, index, len, stopChar);
-}
 var SP = 32;
 var HTAB = 9;
 var SEMI = 59;
@@ -65417,81 +66303,180 @@ var EQ = 61;
 var DQUOTE = 34;
 var BSLASH = 92;
 var COMMA = 44;
-function parseParameters(header, type, index, len, stopChar) {
+var LOWER_CASE = 1;
+var OWS = 2;
+var SEMI_FLAG = 4;
+var COMMA_FLAG = 8;
+var TOKEN_FLAG = 16;
+var NON_ASCII = 65280;
+var CASE_FLAGS = LOWER_CASE | NON_ASCII;
+var CHAR_MAP = new Uint8Array(256);
+CHAR_MAP[HTAB] |= OWS;
+CHAR_MAP[SP] |= OWS;
+CHAR_MAP[SEMI] |= SEMI_FLAG;
+CHAR_MAP[COMMA] |= COMMA_FLAG;
+for (let code = 128; code <= 255; code++) {
+  CHAR_MAP[code] |= LOWER_CASE;
+}
+for (const char of "!#$%&'*+-.^_`|~") {
+  CHAR_MAP[char.charCodeAt(0)] |= TOKEN_FLAG;
+}
+for (let code = 48; code <= 57; code++) {
+  CHAR_MAP[code] |= TOKEN_FLAG;
+}
+for (let code = 65; code <= 90; code++) {
+  CHAR_MAP[code] |= LOWER_CASE | TOKEN_FLAG;
+}
+for (let code = 97; code <= 122; code++) {
+  CHAR_MAP[code] |= TOKEN_FLAG;
+}
+var NullObject = /* @__PURE__ */ (() => {
+  const C = function() {
+  };
+  C.prototype = /* @__PURE__ */ Object.create(null);
+  return C;
+})();
+function parse4(header, options2) {
+  const stopFlags = SEMI_FLAG | (options2?.comma === true ? COMMA_FLAG : 0);
+  const len = header.length;
+  let valueStart = options2?.start ?? 0;
+  while ((CHAR_MAP[header.charCodeAt(valueStart)] & OWS) !== 0) {
+    valueStart++;
+  }
+  let index = valueStart;
+  let typeFlags = 0;
+  let whitespace = -1;
+  let stop = options2?.parameters === false ? COMMA_FLAG : 0;
+  while (index < len) {
+    const code = header.charCodeAt(index);
+    const flags = CHAR_MAP[code];
+    if ((flags & stopFlags) !== 0) {
+      stop |= flags & COMMA_FLAG;
+      break;
+    }
+    if ((flags & OWS) !== 0) {
+      if (whitespace === -1)
+        whitespace = index;
+    } else {
+      whitespace = -1;
+    }
+    typeFlags |= code & NON_ASCII | flags;
+    index++;
+  }
+  const valueEnd = whitespace === -1 ? index : whitespace;
+  const value = header.slice(valueStart, valueEnd);
+  const type = (typeFlags & CASE_FLAGS) === 0 ? value : value.toLowerCase();
+  if (index === len || stop !== 0) {
+    return { type, index, parameters: new NullObject() };
+  }
+  return parseParameters(header, type, index, len, stopFlags);
+}
+function parseParameters(header, type, index, len, stopFlags) {
   const parameters = new NullObject();
   parameter: while (index < len) {
-    if (header.charCodeAt(index) === stopChar)
-      break;
-    index = skipOWS(header, index + 1, len);
+    index++;
+    while ((CHAR_MAP[header.charCodeAt(index)] & OWS) !== 0) {
+      index++;
+    }
     const keyStart = index;
+    let keyFlags = 0;
+    let keyWhitespace = -1;
     while (index < len) {
       const code = header.charCodeAt(index);
-      if (code === stopChar)
-        break parameter;
-      if (code === SEMI)
+      const flags = CHAR_MAP[code];
+      if ((flags & stopFlags) !== 0) {
+        if ((flags & COMMA_FLAG) !== 0)
+          break parameter;
         continue parameter;
+      }
       if (code === EQ) {
-        const keyEnd = trailingOWS(header, keyStart, index);
-        const key = header.slice(keyStart, keyEnd).toLowerCase();
-        index = skipOWS(header, index + 1, len);
-        if (index < len && header.charCodeAt(index) === DQUOTE) {
+        const keyEnd = keyWhitespace === -1 ? index : keyWhitespace;
+        const value = header.slice(keyStart, keyEnd);
+        const key = (keyFlags & CASE_FLAGS) === 0 ? value : value.toLowerCase();
+        index++;
+        while ((CHAR_MAP[header.charCodeAt(index)] & OWS) !== 0) {
           index++;
-          let value = "";
+        }
+        if (index < len && header.charCodeAt(index) === DQUOTE) {
+          const quotedStart = ++index;
+          let escaped = false;
           while (index < len) {
-            const code2 = header.charCodeAt(index++);
+            const code2 = header.charCodeAt(index);
             if (code2 === DQUOTE) {
-              index = skipValue(header, index, len, stopChar);
-              if (parameters[key] === void 0)
-                parameters[key] = value;
-              break;
+              if (parameters[key] === void 0) {
+                parameters[key] = escaped ? unescapeQuotedPairs(header, quotedStart, index) : header.slice(quotedStart, index);
+              }
+              index++;
+              let stop2 = 0;
+              while (index < len) {
+                const code3 = header.charCodeAt(index);
+                const flags2 = CHAR_MAP[code3];
+                if ((flags2 & stopFlags) !== 0) {
+                  stop2 = flags2 & COMMA_FLAG;
+                  break;
+                }
+                index++;
+              }
+              if (stop2 !== 0)
+                break parameter;
+              continue parameter;
             }
-            if (code2 === BSLASH && index < len) {
-              value += header[index++];
+            if (code2 === BSLASH && index + 1 < len) {
+              escaped = true;
+              index += 2;
               continue;
             }
-            value += String.fromCharCode(code2);
+            index++;
           }
           continue parameter;
         }
         const valueStart = index;
-        index = skipValue(header, index, len, stopChar);
+        let stop = 0;
+        let valueWhitespace = -1;
+        while (index < len) {
+          const code2 = header.charCodeAt(index);
+          const flags2 = CHAR_MAP[code2];
+          if ((flags2 & stopFlags) !== 0) {
+            stop = flags2 & COMMA_FLAG;
+            break;
+          }
+          if ((flags2 & OWS) !== 0) {
+            if (valueWhitespace === -1)
+              valueWhitespace = index;
+          } else {
+            valueWhitespace = -1;
+          }
+          index++;
+        }
         if (parameters[key] === void 0) {
-          const valueEnd = trailingOWS(header, valueStart, index);
+          const valueEnd = valueWhitespace === -1 ? index : valueWhitespace;
           parameters[key] = header.slice(valueStart, valueEnd);
         }
+        if (stop !== 0)
+          break parameter;
         continue parameter;
       }
+      if ((flags & OWS) !== 0) {
+        if (keyWhitespace === -1)
+          keyWhitespace = index;
+      } else {
+        keyWhitespace = -1;
+      }
+      keyFlags |= code & NON_ASCII | flags;
       index++;
     }
   }
   return { type, index, parameters };
 }
-function skipValue(str, index, len, stopChar) {
-  while (index < len) {
-    const code = str.charCodeAt(index);
-    if (code === SEMI || code === stopChar)
-      break;
-    index++;
+function unescapeQuotedPairs(str, start, end) {
+  let result = "";
+  for (let index = start; index < end; index++) {
+    if (str.charCodeAt(index) === BSLASH) {
+      result += str.slice(start, index);
+      start = ++index;
+    }
   }
-  return index;
-}
-function skipOWS(header, index, len) {
-  while (index < len) {
-    const char = header.charCodeAt(index);
-    if (char !== SP && char !== HTAB)
-      break;
-    index++;
-  }
-  return index;
-}
-function trailingOWS(header, start, end) {
-  while (end > start) {
-    const char = header.charCodeAt(end - 1);
-    if (char !== SP && char !== HTAB)
-      break;
-    end--;
-  }
-  return end;
+  return result + str.slice(start, end);
 }
 
 // node_modules/json-with-bigint/json-with-bigint.js
@@ -65869,7 +66854,7 @@ var RequestError = class extends Error {
 };
 
 // node_modules/@octokit/request/dist-bundle/index.js
-var VERSION3 = "10.0.15";
+var VERSION3 = "10.0.16";
 var defaults_default = {
   headers: {
     "user-agent": `octokit-request.js/${VERSION3} ${getUserAgent()}`
@@ -66312,7 +67297,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 };
 
 // node_modules/@octokit/core/dist-src/version.js
-var VERSION5 = "7.0.7";
+var VERSION5 = "7.0.8";
 
 // node_modules/@octokit/core/dist-src/index.js
 var noop2 = () => {
@@ -70734,7 +71719,7 @@ async function sendRequestWithRetries(state, request2, options2, createdAt, retr
     return sendRequestWithRetries(state, request2, options2, createdAt, retries);
   }
 }
-var VERSION15 = "8.3.0";
+var VERSION15 = "8.3.1";
 function createAppAuth(options2) {
   if (!options2.appId) {
     throw new Error("[@octokit/auth-app] appId option is required");
