@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `conflicts-notifier` gains `sweep`: when enabled, every open pull request is checked on the scheduled run, so a PR skipped while GitHub was still computing its mergeable state gets its notice and label within a day. Off by default.
+
 ## [v1.8.0](https://github.com/NexusPHP/carson/compare/v1.7.0...v1.8.0) - 2026-10-13
 
 ### Added

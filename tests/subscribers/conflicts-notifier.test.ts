@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { dispatchScheduled, type ScheduledDispatchResult, ScheduledRegistrar } from '../../src/scheduled.js';
 import { Probot, ProbotOctokit } from 'probot';
 import app from '../../src/app.js';
+import { ConflictsNotifierSubscriber } from '../../src/subscribers/conflicts-notifier.js';
 import { generateKeyPairSync } from 'node:crypto';
 import nock from 'nock';
 import { resetConfigCache } from '../../src/configuration/cache.js';
@@ -61,7 +63,7 @@ const CONFIG_WITH_LABEL = [
 ].join('\n');
 
 interface GraphqlBody {
-  query: string;
+  query?: string;
   variables?: Record<string, unknown>;
 }
 
@@ -108,7 +110,7 @@ const mockUpdateComment = (expected: string): nock.Scope => {
 
 const mockCommentsQuery = (nodes: CommentNode[]): nock.Scope => {
   return nock('https://api.github.com')
-    .post('/graphql', (body: GraphqlBody) => body.query.includes('pullRequest(number'))
+    .post('/graphql', (body: GraphqlBody) => body.query?.includes('pullRequest(number') === true)
     .reply(200, {
       data: {
         repository: {
@@ -129,7 +131,7 @@ const mockCommentsQuery = (nodes: CommentNode[]): nock.Scope => {
 const mockMinimize = (subjectId: string): nock.Scope => {
   return nock('https://api.github.com')
     .post('/graphql', (body: GraphqlBody) =>
-      body.query.includes('minimizeComment') && body.variables?.['subjectId'] === subjectId,
+      body.query?.includes('minimizeComment') === true && body.variables?.['subjectId'] === subjectId,
     )
     .reply(200, {
       data: { minimizeComment: { minimizedComment: { isMinimized: true } } },
@@ -139,7 +141,7 @@ const mockMinimize = (subjectId: string): nock.Scope => {
 const mockUnminimize = (subjectId: string): nock.Scope => {
   return nock('https://api.github.com')
     .post('/graphql', (body: GraphqlBody) =>
-      body.query.includes('unminimizeComment') && body.variables?.['subjectId'] === subjectId,
+      body.query?.includes('unminimizeComment') === true && body.variables?.['subjectId'] === subjectId,
     )
     .reply(200, {
       data: { unminimizeComment: { unminimizedComment: { id: subjectId } } },
@@ -759,6 +761,104 @@ describe('conflicts-notifier subscriber (via app)', () => {
       payload: pushPayload() as never,
     });
 
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+});
+
+const CONFIG_SWEEP = 'version: 1\nsubscribers:\n  - conflicts-notifier\nsettings:\n  conflicts-notifier:\n    sweep: true\n';
+
+const mockListOpenPRs = (numbers: number[]): nock.Scope =>
+  nock('https://api.github.com')
+    .get('/repos/acme/widgets/pulls')
+    .query({ state: 'open', per_page: '100' })
+    .reply(200, numbers.map((number) => ({ number })));
+
+describe('conflicts-notifier subscriber (scheduled sweep)', () => {
+  let probot: Probot;
+
+  const runSweep = async (yaml: string): Promise<ScheduledDispatchResult> => {
+    nock('https://api.github.com')
+      .get('/repos/acme/widgets/installation')
+      .reply(200, { id: INSTALLATION_ID });
+    mockInstallationToken();
+    mockConfig(yaml);
+
+    const registrar = new ScheduledRegistrar();
+
+    new ConflictsNotifierSubscriber().registerScheduled(registrar);
+
+    return await dispatchScheduled(probot, registrar, 'acme/widgets', { schedule: '0 0 * * *', workflow: '.github/workflows/carson.yml' });
+  };
+
+  beforeAll(() => {
+    nock.disableNetConnect();
+  });
+
+  afterAll(() => {
+    nock.enableNetConnect();
+  });
+
+  beforeEach(async () => {
+    resetConfigCache();
+    probot = new Probot({
+      appId: 123,
+      privateKey,
+      logLevel: 'fatal',
+      Octokit: ProbotOctokit.defaults({
+        retry: { enabled: false },
+        throttle: { enabled: false },
+      }),
+    });
+    await probot.load(app);
+  });
+
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
+  it('posts a conflict notice on an open pull request that no event caught', async () => {
+    mockListOpenPRs([PR_NUMBER]);
+    mockGetPR(false);
+    mockCommentsQuery([]);
+    const createScope = nock('https://api.github.com')
+      .post(`/repos/acme/widgets/issues/${PR_NUMBER}/comments`, (body: { body?: string }) =>
+        body.body?.endsWith('<!-- carson:conflicts-notifier -->') === true,
+      )
+      .reply(201, {});
+
+    const result = await runSweep(CONFIG_SWEEP);
+
+    expect(result).toEqual({ failed: false });
+    expect(createScope.isDone()).toBe(true);
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('resolves a notice once the conflict is gone', async () => {
+    mockListOpenPRs([PR_NUMBER]);
+    mockGetPR(true);
+    mockCommentsQuery([{ id: NODE_ID, body: 'conflict\n\n<!-- carson:conflicts-notifier -->', isMinimized: false }]);
+    const minimizeScope = mockMinimize(NODE_ID);
+
+    const result = await runSweep(CONFIG_SWEEP);
+
+    expect(result).toEqual({ failed: false });
+    expect(minimizeScope.isDone()).toBe(true);
+  });
+
+  it('leaves a pull request whose mergeability is still being computed for the next run', async () => {
+    mockListOpenPRs([PR_NUMBER]);
+    mockGetPR(null);
+
+    const result = await runSweep(CONFIG_SWEEP);
+
+    expect(result).toEqual({ failed: false });
+    expect(nock.pendingMocks()).toEqual([]);
+  });
+
+  it('does nothing by default', async () => {
+    const result = await runSweep(CONFIG_ENABLED);
+
+    expect(result).toEqual({ failed: false });
     expect(nock.pendingMocks()).toEqual([]);
   });
 });

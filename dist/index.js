@@ -61068,128 +61068,6 @@ var loadConfig = async (context, knownIds) => {
   return await pending2;
 };
 
-// src/scheduled.ts
-var ScheduledRegistrar = class {
-  #handlers = [];
-  on(handler2) {
-    this.#handlers.push(handler2);
-  }
-  get handlers() {
-    return this.#handlers;
-  }
-};
-var buildContext = (octokit, log, owner, repo, payload) => ({
-  ...createConfigLoadable(octokit, owner, repo, log),
-  octokit,
-  payload
-});
-var dispatchScheduled = async (probot, registrar, repository, payload) => {
-  const parsed = parseRepository(repository);
-  if (parsed === null) {
-    throw new Error(INVALID_REPOSITORY_MESSAGE);
-  }
-  const { owner, repo } = parsed;
-  const appOctokit = await probot.auth();
-  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
-  const octokit = await probot.auth(installation.id);
-  const context = buildContext(octokit, probot.log, owner, repo, payload);
-  let failed = false;
-  for (const handler2 of registrar.handlers) {
-    try {
-      await handler2(context);
-    } catch (error63) {
-      logger.for("carson").error(error63);
-      failed = true;
-    }
-  }
-  return { failed };
-};
-
-// src/app-identity.ts
-var AppIdentity = class {
-  #cached = null;
-  set(data) {
-    this.#cached = data;
-  }
-  reset() {
-    this.#cached = null;
-  }
-  get current() {
-    return this.#cached;
-  }
-  get name() {
-    return this.#cached?.name ?? "Carson";
-  }
-  get slug() {
-    return this.#cached?.slug ?? "carson";
-  }
-  get login() {
-    return `${this.slug}[bot]`;
-  }
-};
-var appIdentity = new AppIdentity();
-
-// src/template.ts
-var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
-var universalContext = () => ({
-  app_name: appIdentity.name,
-  app_slug: appIdentity.slug,
-  app_login: appIdentity.login
-});
-var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
-var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-var itemRef = (isPr, number4, startsLine = false) => {
-  const noun = isPr ? "PR" : startsLine ? "Issue" : "issue";
-  return `${noun} #${number4}`;
-};
-var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
-var interpolate = (template, context) => {
-  const merged = { ...universalContext(), ...context };
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-    const value = merged[key];
-    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
-  });
-};
-
-// src/github/labels.ts
-var removeLabel = async (octokit, removal) => {
-  try {
-    await octokit.rest.issues.removeLabel(removal);
-  } catch (error63) {
-    if (error63.status !== 404) {
-      throw error63;
-    }
-  }
-};
-var labelNames = (labels) => {
-  return (labels ?? []).map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string");
-};
-
-// src/actions.ts
-var ActionRegistrar = class {
-  #handlers = /* @__PURE__ */ new Map();
-  // The same owner may re-register (run() is invoked per Probot instance).
-  on(name, subscriberId, handler2) {
-    const existing = this.#handlers.get(name);
-    if (existing !== void 0 && existing.subscriberId !== subscriberId) {
-      throw new Error(`Action "${name}" is already handled by "${existing.subscriberId}"`);
-    }
-    this.#handlers.set(name, { subscriberId, handler: handler2 });
-  }
-  has(name) {
-    return this.#handlers.has(name);
-  }
-  /** Resolves to false when no subscriber handles the action (after a warning) or the owner declined it. */
-  async dispatch(name, context, request2) {
-    const registration = this.#handlers.get(name);
-    if (registration === void 0) {
-      logger.for("carson").warn(`No enabled subscriber handles the "${name}" action, skipping`);
-      return false;
-    }
-    return await registration.handler(context, request2);
-  }
-};
-
 // src/github/comments.ts
 var MINIMIZE_MUTATION = `mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
   minimizeComment(input: { subjectId: $subjectId, classifier: $classifier }) {
@@ -61316,6 +61194,134 @@ var reopenNotice = async (client, target, id, found) => {
 ${match[1]}
 ${section.after}`;
   await client.rest.issues.updateComment({ owner: target.owner, repo: target.repo, comment_id: found.commentId, body });
+};
+
+// src/scheduled.ts
+var ScheduledRegistrar = class {
+  #handlers = [];
+  on(handler2) {
+    this.#handlers.push(handler2);
+  }
+  get handlers() {
+    return this.#handlers;
+  }
+};
+var buildContext = (octokit, log, owner, repo, payload) => ({
+  ...createConfigLoadable(octokit, owner, repo, log),
+  octokit,
+  payload
+});
+var dispatchScheduled = async (probot, registrar, repository, payload) => {
+  const parsed = parseRepository(repository);
+  if (parsed === null) {
+    throw new Error(INVALID_REPOSITORY_MESSAGE);
+  }
+  const { owner, repo } = parsed;
+  const appOctokit = await probot.auth();
+  const { data: installation } = await appOctokit.rest.apps.getRepoInstallation({ owner, repo });
+  const octokit = await probot.auth(installation.id);
+  const context = buildContext(octokit, probot.log, owner, repo, payload);
+  let failed = false;
+  for (const handler2 of registrar.handlers) {
+    try {
+      await handler2(context);
+    } catch (error63) {
+      logger.for("carson").error(error63);
+      failed = true;
+    }
+  }
+  try {
+    await flushNotices();
+  } catch (error63) {
+    logger.for("carson").error(error63);
+    failed = true;
+  }
+  return { failed };
+};
+
+// src/app-identity.ts
+var AppIdentity = class {
+  #cached = null;
+  set(data) {
+    this.#cached = data;
+  }
+  reset() {
+    this.#cached = null;
+  }
+  get current() {
+    return this.#cached;
+  }
+  get name() {
+    return this.#cached?.name ?? "Carson";
+  }
+  get slug() {
+    return this.#cached?.slug ?? "carson";
+  }
+  get login() {
+    return `${this.slug}[bot]`;
+  }
+};
+var appIdentity = new AppIdentity();
+
+// src/template.ts
+var CARSON_MARKER_REGEX = /<!--\s*carson:[^>]*-->/g;
+var universalContext = () => ({
+  app_name: appIdentity.name,
+  app_slug: appIdentity.slug,
+  app_login: appIdentity.login
+});
+var escapeMarkdown = (s) => s.replace(/[\\`[\]()<>!]/g, "\\$&");
+var pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+var itemRef = (isPr, number4, startsLine = false) => {
+  const noun = isPr ? "PR" : startsLine ? "Issue" : "issue";
+  return `${noun} #${number4}`;
+};
+var firstLine = (text) => text.replace(/\n[\s\S]*/, "");
+var interpolate = (template, context) => {
+  const merged = { ...universalContext(), ...context };
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+    const value = merged[key];
+    return value === void 0 ? match : String(value).replace(CARSON_MARKER_REGEX, "");
+  });
+};
+
+// src/github/labels.ts
+var removeLabel = async (octokit, removal) => {
+  try {
+    await octokit.rest.issues.removeLabel(removal);
+  } catch (error63) {
+    if (error63.status !== 404) {
+      throw error63;
+    }
+  }
+};
+var labelNames = (labels) => {
+  return (labels ?? []).map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string");
+};
+
+// src/actions.ts
+var ActionRegistrar = class {
+  #handlers = /* @__PURE__ */ new Map();
+  // The same owner may re-register (run() is invoked per Probot instance).
+  on(name, subscriberId, handler2) {
+    const existing = this.#handlers.get(name);
+    if (existing !== void 0 && existing.subscriberId !== subscriberId) {
+      throw new Error(`Action "${name}" is already handled by "${existing.subscriberId}"`);
+    }
+    this.#handlers.set(name, { subscriberId, handler: handler2 });
+  }
+  has(name) {
+    return this.#handlers.has(name);
+  }
+  /** Resolves to false when no subscriber handles the action (after a warning) or the owner declined it. */
+  async dispatch(name, context, request2) {
+    const registration = this.#handlers.get(name);
+    if (registration === void 0) {
+      logger.for("carson").warn(`No enabled subscriber handles the "${name}" action, skipping`);
+      return false;
+    }
+    return await registration.handler(context, request2);
+  }
 };
 
 // src/subscriber.ts
@@ -62145,7 +62151,8 @@ var CommandsSubscriber = class extends Subscriber {
 // src/subscribers/conflicts-notifier.ts
 var Settings4 = external_exports.object({
   message: external_exports.string().optional(),
-  label: external_exports.string().min(1).optional()
+  label: external_exports.string().min(1).optional(),
+  sweep: external_exports.boolean().optional()
 });
 var DEFAULT_MESSAGE = "@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.";
 var CONCURRENCY2 = 5;
@@ -62186,6 +62193,26 @@ var ConflictsNotifierSubscriber = class extends Subscriber {
     probot.on("push", async (context) => {
       await this.#handlePushEvent(context);
     });
+  }
+  registerScheduled(registrar) {
+    registrar.on(async (context) => {
+      await this.#sweep(context);
+    });
+  }
+  async #sweep(scheduled) {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings4);
+    if (enabled?.settings.sweep !== true) {
+      return;
+    }
+    const prs = await scheduled.octokit.paginate(scheduled.octokit.rest.pulls.list, {
+      ...scheduled.repo(),
+      state: "open",
+      per_page: 100
+    });
+    await forEachConcurrent(prs, CONCURRENCY2, async (pr) => {
+      await this.#checkPr(scheduled, pr.number, enabled.config);
+    });
+    this.log().info(`Checked ${pluralize(prs.length, "open PR")} for conflicts`);
   }
   async #handlePrEvent(context) {
     if (context.payload.action === "edited" && context.payload.changes.base === void 0) {

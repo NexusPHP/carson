@@ -1,16 +1,19 @@
 import type { Context, Probot } from 'probot';
 import { findNotice, type FoundNotice, isBotNode } from '../github/notices.js';
+import { interpolate, pluralize } from '../template.js';
 import { type RequiredPermissions, Subscriber } from '../subscriber.js';
+import type { ScheduledContext, ScheduledRegistrar } from '../scheduled.js';
+import type { ActionContext } from '../actions.js';
 import type { CarsonConfig } from '../configuration/schema.js';
 import type { EmitterWebhookEventName } from '@octokit/webhooks';
 import { forEachConcurrent } from '../concurrency.js';
-import { interpolate } from '../template.js';
 import { subscriberSettings } from '../configuration/schema.js';
 import { z } from 'zod';
 
 const Settings = z.object({
   message: z.string().optional(),
   label: z.string().min(1).optional(),
+  sweep: z.boolean().optional(),
 });
 
 type ParsedSettings = z.infer<typeof Settings>;
@@ -26,7 +29,6 @@ const PR_EVENTS = [
 ] satisfies EmitterWebhookEventName[];
 
 type PrEvent = (typeof PR_EVENTS)[number];
-type SubscriberContext = Context<PrEvent | 'push'>;
 
 interface CommentsQueryResponse {
   repository: {
@@ -83,6 +85,32 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
   }
 
+  public override registerScheduled(registrar: ScheduledRegistrar): void {
+    registrar.on(async (context) => {
+      await this.#sweep(context);
+    });
+  }
+
+  async #sweep(scheduled: ScheduledContext): Promise<void> {
+    const enabled = await this.loadEnabledSettings(scheduled, Settings);
+
+    if (enabled?.settings.sweep !== true) {
+      return;
+    }
+
+    const prs = await scheduled.octokit.paginate(scheduled.octokit.rest.pulls.list, {
+      ...scheduled.repo(),
+      state: 'open',
+      per_page: 100,
+    });
+
+    await forEachConcurrent(prs, CONCURRENCY, async (pr) => {
+      await this.#checkPr(scheduled, pr.number, enabled.config);
+    });
+
+    this.log().info(`Checked ${pluralize(prs.length, 'open PR')} for conflicts`);
+  }
+
   async #handlePrEvent(context: Context<PrEvent>): Promise<void> {
     if (context.payload.action === 'edited' && context.payload.changes.base === undefined) {
       return;
@@ -125,7 +153,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     });
   }
 
-  async #checkPr(context: SubscriberContext, prNumber: number, config: CarsonConfig): Promise<void> {
+  async #checkPr(context: ActionContext, prNumber: number, config: CarsonConfig): Promise<void> {
     const { owner, repo } = context.repo();
     const { data: pr } = await context.octokit.rest.pulls.get({
       owner,
@@ -155,7 +183,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
 
   // Labeling is delegated to auto-labeler through the action router.
   async #syncLabel(
-    context: SubscriberContext,
+    context: ActionContext,
     prNumber: number,
     hasLabel: boolean,
     hasConflict: boolean,
@@ -169,7 +197,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   }
 
   async #handleConflict(
-    context: SubscriberContext,
+    context: ActionContext,
     pr: {
       number: number;
       title: string;
@@ -202,7 +230,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
   }
 
   async #handleNoConflict(
-    context: SubscriberContext,
+    context: ActionContext,
     prNumber: number,
     existing: FoundNotice | null,
   ): Promise<void> {
@@ -222,7 +250,7 @@ export class ConflictsNotifierSubscriber extends Subscriber {
     log.info(`Resolved conflict notice on PR #${prNumber}`);
   }
 
-  async #findExistingComment(context: SubscriberContext, prNumber: number): Promise<FoundNotice | null> {
+  async #findExistingComment(context: ActionContext, prNumber: number): Promise<FoundNotice | null> {
     const { owner, repo } = context.repo();
     const response = await context.octokit.graphql<CommentsQueryResponse>(COMMENTS_QUERY, {
       owner,

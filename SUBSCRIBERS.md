@@ -312,7 +312,7 @@ settings:
 
 Posts a comment on a pull request that has merge conflicts with its base branch, and marks the comment as resolved when the conflict is fixed.
 
-**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.edited`, `push`
+**Triggers**: `pull_request.opened`, `pull_request.synchronize`, `pull_request.reopened`, `pull_request.edited`, `push`, scheduled (cron via `on: schedule:` in the consumer workflow, only with `sweep: true`)
 **Permissions**: `issues: write`, `pull_requests: write`
 
 `pull_request.edited` counts only when the base branch changed, since a retarget changes the PR's mergeability.
@@ -330,12 +330,15 @@ There is at most one Carson conflict comment per PR for the PR's lifetime. State
 
 If GitHub has not yet computed the PR's mergeable state (transient `mergeable: null` immediately after a push), Carson logs and skips. The next event on the PR catches up.
 
+With `sweep: true`, each scheduled run also runs the per-PR check on every open pull request, so a PR skipped while GitHub was still computing its mergeable state is caught within a day instead of waiting for its next event. Requesting the PR is what makes GitHub compute that state, so a PR still pending on one run is ready by the next. It costs one listing of open pull requests plus one PR request and one comment lookup per open pull request, with writes only where the notice or label is out of date. The first run after enabling it posts a notice on every open pull request that already conflicts.
+
 ### Settings
 
 | Key | Type | Default |
 | --- | --- | --- |
 | `message` | string | ``@{{user}} this PR has merge conflicts with `{{base}}`. Please rebase or resolve them.`` |
 | `label` | string, applied while the PR conflicts and removed once it is clean | (no label) |
+| `sweep` | boolean, check every open pull request on each scheduled run | `false` |
 
 Labeling is delegated to [auto-labeler](#auto-labeler) through Carson's action routing, so that subscriber must also be enabled for `label` to take effect (no rules are needed). When it is not enabled, the notice is still posted and a warning is logged.
 

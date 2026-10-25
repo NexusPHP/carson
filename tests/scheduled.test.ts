@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchScheduled, type ScheduledHandler, ScheduledRegistrar } from '../src/scheduled.js';
 import { logger } from '../src/logger.js';
 import type { Probot } from 'probot';
+import { queueNotice } from '../src/github/notices.js';
 
 interface ProbotHarness {
   probot: Probot;
@@ -110,6 +111,35 @@ describe('dispatchScheduled', () => {
 
     expect(result).toEqual({ failed: true });
     expect(callOrder).toEqual(['failing', 'second']);
+  });
+
+  it('posts the notices queued by handlers once they have all run', async () => {
+    const { probot } = makeProbot();
+    const registrar = new ScheduledRegistrar();
+    const createComment = vi.fn().mockResolvedValue({});
+    registrar.on(async () => {
+      await Promise.resolve();
+      queueNotice({ rest: { issues: { createComment } } } as never, { owner: 'acme', repo: 'widgets', number: 7 }, { id: 'stub', body: 'hello' });
+    });
+
+    const result = await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
+
+    expect(result).toEqual({ failed: false });
+    expect(createComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'widgets', issue_number: 7, body: 'hello\n\n<!-- carson:stub -->' });
+  });
+
+  it('returns failed: true when a queued notice cannot be posted', async () => {
+    const { probot } = makeProbot();
+    const registrar = new ScheduledRegistrar();
+    const createComment = vi.fn().mockRejectedValue(new Error('boom'));
+    registrar.on(async () => {
+      await Promise.resolve();
+      queueNotice({ rest: { issues: { createComment } } } as never, { owner: 'acme', repo: 'widgets', number: 7 }, { id: 'stub', body: 'hello' });
+    });
+
+    const result = await dispatchScheduled(probot, registrar, 'acme/widgets', payload);
+
+    expect(result).toEqual({ failed: true });
   });
 
   it('returns failed: false when there are no handlers', async () => {

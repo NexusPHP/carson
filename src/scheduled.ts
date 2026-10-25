@@ -1,6 +1,7 @@
 import { INVALID_REPOSITORY_MESSAGE, parseRepository } from './github/repository.js';
 import type { Probot, ProbotOctokit } from 'probot';
 import { createConfigLoadable } from './configuration/cache.js';
+import { flushNotices } from './github/notices.js';
 import { logger } from './logger.js';
 import type { Logger } from 'pino';
 
@@ -75,6 +76,13 @@ export const dispatchScheduled = async (
       logger.for('carson').error(error);
       failed = true;
     }
+  }
+
+  try {
+    await flushNotices();
+  } catch (error) {
+    logger.for('carson').error(error);
+    failed = true;
   }
 
   return { failed };
