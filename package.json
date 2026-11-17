@@ -42,13 +42,13 @@
     "@types/picomatch": "^4.0.3",
     "@vitest/coverage-v8": "^5.1.0",
     "esbuild": "^0.28.1",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "jiti": "^2.4.2",
     "nock": "^15.0.6",
     "smee-client": "^5.0.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.2",
+    "typescript-eslint": "^8.73.0",
     "vitest": "^5.0.0"
   },
   "engines": {
