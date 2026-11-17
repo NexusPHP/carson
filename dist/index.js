@@ -22934,7 +22934,7 @@ var require_package = __commonJS({
   "node_modules/thread-stream/package.json"(exports2, module2) {
     module2.exports = {
       name: "thread-stream",
-      version: "4.2.0",
+      version: "4.2.1",
       description: "A streaming way to send data to a Node.js Worker Thread",
       main: "index.js",
       types: "index.d.ts",
@@ -22945,7 +22945,7 @@ var require_package = __commonJS({
         "real-require": "^1.0.0"
       },
       devDependencies: {
-        "@types/node": "^25.0.2",
+        "@types/node": "^26.1.1",
         "@yao-pkg/pkg": "^6.0.0",
         borp: "^1.0.0",
         desm: "^1.3.0",
@@ -22955,15 +22955,20 @@ var require_package = __commonJS({
         "pino-elasticsearch": "^9.0.0",
         "sonic-boom": "^5.0.0",
         "ts-node": "^10.8.0",
+        tsd: "^0.33.0",
         typescript: "~5.7.3"
       },
       scripts: {
         build: "tsc --noEmit",
         lint: "eslint",
-        test: 'npm run lint && npm run build && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
-        "test:ci": 'npm run lint && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
-        "test:yarn": 'npm run transpile && borp --pattern "test/*.test.js"',
+        test: 'npm run lint && npm run build && npm run test:types && npm run transpile && borp --expose-gc --pattern "test/*.test.{js,mjs}"',
+        "test:ci": 'npm run lint && npm run test:types && npm run transpile && borp --expose-gc --pattern "test/*.test.{js,mjs}"',
+        "test:types": "tsd",
+        "test:yarn": 'npm run transpile && borp --expose-gc --pattern "test/*.test.js"',
         transpile: "sh ./test/ts/transpile.sh"
+      },
+      tsd: {
+        directory: "test/types"
       },
       repository: {
         type: "git",
@@ -22992,10 +22997,14 @@ var require_wait = __commonJS({
     var WAIT_MS = 1e4;
     function wait2(state, index, expected, timeout, done) {
       const max = timeout === Infinity ? Infinity : Date.now() + timeout;
-      const check2 = () => {
+      const check2 = (previous) => {
         const current = Atomics.load(state, index);
-        if (current === expected) {
+        if (current >= expected) {
           done(null, "ok");
+          return;
+        }
+        if (previous !== void 0 && current !== previous) {
+          done(null, "not-equal");
           return;
         }
         if (max !== Infinity && Date.now() > max) {
@@ -23005,9 +23014,16 @@ var require_wait = __commonJS({
         const remaining = max === Infinity ? WAIT_MS : Math.min(WAIT_MS, Math.max(1, max - Date.now()));
         const result = Atomics.waitAsync(state, index, current, remaining);
         if (result.async) {
-          result.value.then(check2);
+          result.value.then((res) => {
+            if (res === "ok") {
+              const latest = Atomics.load(state, index);
+              done(null, latest >= expected ? "ok" : "not-equal");
+              return;
+            }
+            check2(current);
+          });
         } else {
-          setImmediate(check2);
+          setImmediate(done, null, "not-equal");
         }
       };
       check2();
@@ -23091,6 +23107,7 @@ var require_thread_stream = __commonJS({
         Atomics.store(stream[kImpl].state, READ_INDEX, 0);
         Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
       });
+      Atomics.notify(stream[kImpl].state, READ_INDEX);
     }
     var FakeWeakRef = class {
       constructor(value) {
@@ -23150,6 +23167,9 @@ var require_thread_stream = __commonJS({
     function nextFlush(stream) {
       while (true) {
         const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+        if (stream.destroyed || writeIndex < 0) {
+          return;
+        }
         const leftover = stream[kImpl].data.length - writeIndex;
         if (leftover > 0) {
           if (stream[kImpl].bufLen === 0) {
@@ -23193,7 +23213,9 @@ var require_thread_stream = __commonJS({
       }
       switch (msg.code) {
         case "READY":
-          this.stream = new WeakRef2(stream);
+          if (!stream[kImpl].ending) {
+            this.stream = new WeakRef2(stream);
+          }
           waitForRead(stream, () => {
             stream[kImpl].ready = true;
             stream.emit("ready");
@@ -23264,6 +23286,8 @@ var require_thread_stream = __commonJS({
         this[kImpl].bufLen = 0;
         this[kImpl].flushCallbacks = /* @__PURE__ */ new Map();
         this[kImpl].nextFlushId = 0;
+        this[kImpl].flushRetainCount = 0;
+        this[kImpl].userRef = true;
         this.worker = createWorker(this, opts);
         this.on("message", (message, transferList) => {
           this.worker.postMessage(message, transferList);
@@ -23311,16 +23335,32 @@ var require_thread_stream = __commonJS({
           return;
         }
         this[kImpl].ending = true;
+        this.worker.stream = new FakeWeakRef(this);
         end(this);
       }
       flush(cb) {
-        cb = typeof cb === "function" ? cb : noop4;
-        flushBuffer(this, (err) => {
-          if (err) {
-            process.nextTick(cb, err);
+        const userCb = typeof cb === "function" ? cb : null;
+        cb = userCb || noop4;
+        if (userCb) {
+          retainWorkerForPendingFlush(this);
+        }
+        let finished = false;
+        const done = (err) => {
+          if (finished) {
             return;
           }
-          requestWorkerFlush(this, cb);
+          finished = true;
+          if (userCb) {
+            releaseWorkerForPendingFlush(this);
+          }
+          cb(err);
+        };
+        flushBuffer(this, (err) => {
+          if (err) {
+            process.nextTick(done, err);
+            return;
+          }
+          requestWorkerFlush(this, done);
         });
       }
       flushSync() {
@@ -23331,9 +23371,13 @@ var require_thread_stream = __commonJS({
         flushSync(this);
       }
       unref() {
-        this.worker.unref();
+        this[kImpl].userRef = false;
+        if (this[kImpl].flushRetainCount === 0) {
+          this.worker.unref();
+        }
       }
       ref() {
+        this[kImpl].userRef = true;
         this.worker.ref();
       }
       get ready() {
@@ -23389,6 +23433,21 @@ var require_thread_stream = __commonJS({
         }
         cb();
       });
+    }
+    function retainWorkerForPendingFlush(stream) {
+      if (stream[kImpl].flushRetainCount === 0) {
+        stream.worker.ref();
+      }
+      stream[kImpl].flushRetainCount++;
+    }
+    function releaseWorkerForPendingFlush(stream) {
+      if (stream[kImpl].flushRetainCount === 0) {
+        return;
+      }
+      stream[kImpl].flushRetainCount--;
+      if (stream[kImpl].flushRetainCount === 0 && !stream[kImpl].userRef) {
+        stream.worker.unref();
+      }
     }
     function requestWorkerFlush(stream, cb) {
       if (stream[kImpl].destroyed) {
@@ -23542,6 +23601,9 @@ var require_thread_stream = __commonJS({
       stream[kImpl].flushing = false;
       while (stream[kImpl].bufLen !== 0) {
         const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+        if (writeIndex < 0) {
+          throw new Error("_writeSync failed");
+        }
         const leftover = stream[kImpl].data.length - writeIndex;
         if (leftover === 0) {
           flushSync(stream);
@@ -27345,7 +27407,6 @@ var require_cjs = __commonJS({
       const type = toStringObject.call(value);
       return type.substring(8, type.length - 1);
     }
-    var { propertyIsEnumerable } = Object.prototype;
     var sliceTypedArray = Object.getPrototypeOf(Int8Array.prototype).slice;
     function copyOwnDescriptor(original, clone2, property, state) {
       const ownDescriptor = Object.getOwnPropertyDescriptor(original, property) || {
@@ -27366,16 +27427,16 @@ var require_cjs = __commonJS({
         clone2[property] = descriptor.get ? descriptor.get() : descriptor.value;
       }
     }
-    function copyOwnPropertiesStrict(value, clone2, state) {
-      for (const name of Object.getOwnPropertyNames(value)) {
-        copyOwnDescriptor(value, clone2, name, state);
+    function copyOwnPropertiesStrict(value, clone2, state, names, start) {
+      for (let index = start; index < names.length; ++index) {
+        copyOwnDescriptor(value, clone2, names[index], state);
       }
       for (const symbol2 of Object.getOwnPropertySymbols(value)) {
         copyOwnDescriptor(value, clone2, symbol2, state);
       }
       return clone2;
     }
-    function copyArrayLoose(array2, state) {
+    function copyArray(array2, state) {
       const clone2 = new state.Constructor();
       state.cache.set(array2, clone2);
       for (let index = 0; index < array2.length; ++index) {
@@ -27386,26 +27447,53 @@ var require_cjs = __commonJS({
     function copyArrayStrict(array2, state) {
       const clone2 = new state.Constructor();
       state.cache.set(array2, clone2);
-      return copyOwnPropertiesStrict(array2, clone2, state);
+      return copyOwnPropertiesStrict(array2, clone2, state, Object.getOwnPropertyNames(array2), 0);
     }
-    function copyArrayBuffer(arrayBuffer, _state) {
-      return ArrayBuffer.isView(arrayBuffer) ? sliceTypedArray.call(arrayBuffer, 0) : arrayBuffer.slice(0);
+    function copyArrayBuffer(arrayBuffer, state) {
+      if (ArrayBuffer.isView(arrayBuffer)) {
+        return sliceTypedArray.call(arrayBuffer, 0);
+      }
+      if (arrayBuffer.resizable || arrayBuffer.growable) {
+        const maxByteLength = arrayBuffer.maxByteLength;
+        const clone2 = new state.Constructor(arrayBuffer.byteLength, { maxByteLength });
+        new Uint8Array(clone2).set(new Uint8Array(arrayBuffer));
+        return clone2;
+      }
+      if (!arrayBuffer.byteLength && getTag(arrayBuffer) === "SharedArrayBuffer") {
+        return new state.Constructor(0);
+      }
+      return arrayBuffer.slice(0);
+    }
+    function copyArrayBufferStrict(arrayBuffer, state) {
+      const clone2 = copyArrayBuffer(arrayBuffer, state);
+      state.cache.set(arrayBuffer, clone2);
+      const start = ArrayBuffer.isView(clone2) ? clone2.length || 0 : 0;
+      return copyOwnPropertiesStrict(arrayBuffer, clone2, state, Object.getOwnPropertyNames(arrayBuffer), start);
     }
     function copyBlob(blob, _state) {
       return blob.slice(0, blob.size, blob.type);
     }
+    var copyBlobStrict = createStrictHandler(copyBlob);
     function copyDataView(dataView, state) {
-      return new state.Constructor(copyArrayBuffer(dataView.buffer), dataView.byteOffset, dataView.byteLength);
+      return new state.Constructor(state.copier(dataView.buffer, state), dataView.byteOffset, dataView.byteLength);
+    }
+    function copyDataViewStrict(dataView, state) {
+      const { buffer } = dataView;
+      const { cache: cache2, Constructor } = state;
+      const bufferCopied = cache2.has(buffer);
+      const bufferClone = bufferCopied ? cache2.get(buffer) : state.copier(buffer, state);
+      if (!bufferCopied && cache2.has(dataView)) {
+        return cache2.get(dataView);
+      }
+      const clone2 = new Constructor(bufferClone, dataView.byteOffset, dataView.byteLength);
+      state.cache.set(dataView, clone2);
+      return copyOwnPropertiesStrict(dataView, clone2, state, Object.getOwnPropertyNames(dataView), 0);
     }
     function copyDate(date5, state) {
       return new state.Constructor(date5.getTime());
     }
-    function copyDateStrict(date5, state) {
-      const clone2 = copyDate(date5, state);
-      state.cache.set(date5, clone2);
-      return copyOwnPropertiesStrict(date5, clone2, state);
-    }
-    function copyMapLoose(map2, state) {
+    var copyDateStrict = createStrictHandler(copyDate);
+    function copyMap(map2, state) {
       const clone2 = new state.Constructor();
       state.cache.set(map2, clone2);
       for (const [key, value] of map2) {
@@ -27414,9 +27502,9 @@ var require_cjs = __commonJS({
       return clone2;
     }
     function copyMapStrict(map2, state) {
-      return copyOwnPropertiesStrict(map2, copyMapLoose(map2, state), state);
+      return copyOwnPropertiesStrict(map2, copyMap(map2, state), state, Object.getOwnPropertyNames(map2), 0);
     }
-    function copyObjectLoose(object2, state) {
+    function copyObject(object2, state) {
       const clone2 = getCleanClone(state.prototype);
       state.cache.set(object2, clone2);
       for (const key of Object.keys(object2)) {
@@ -27432,7 +27520,7 @@ var require_cjs = __commonJS({
         }
       }
       for (const symbol2 of Object.getOwnPropertySymbols(object2)) {
-        if (propertyIsEnumerable.call(object2, symbol2)) {
+        if (Object.prototype.propertyIsEnumerable.call(object2, symbol2)) {
           clone2[symbol2] = state.copier(object2[symbol2], state);
         }
       }
@@ -27441,20 +27529,22 @@ var require_cjs = __commonJS({
     function copyObjectStrict(object2, state) {
       const clone2 = getCleanClone(state.prototype);
       state.cache.set(object2, clone2);
-      return copyOwnPropertiesStrict(object2, clone2, state);
+      return copyOwnPropertiesStrict(object2, clone2, state, Object.getOwnPropertyNames(object2), 0);
     }
     function copyPrimitiveWrapper(primitiveObject, state) {
       return new state.Constructor(primitiveObject.valueOf());
     }
+    var copyPrimitiveWrapperStrict = createStrictHandler(copyPrimitiveWrapper);
     function copyRegExp(regExp, state) {
       const clone2 = new state.Constructor(regExp.source, regExp.flags);
       clone2.lastIndex = regExp.lastIndex;
       return clone2;
     }
+    var copyRegExpStrict = createStrictHandler(copyRegExp);
     function copySelf(value, _state) {
       return value;
     }
-    function copySetLoose(set3, state) {
+    function copySet(set3, state) {
       const clone2 = new state.Constructor();
       state.cache.set(set3, clone2);
       for (const value of set3) {
@@ -27463,7 +27553,22 @@ var require_cjs = __commonJS({
       return clone2;
     }
     function copySetStrict(set3, state) {
-      return copyOwnPropertiesStrict(set3, copySetLoose(set3, state), state);
+      return copyOwnPropertiesStrict(set3, copySet(set3, state), state, Object.getOwnPropertyNames(set3), 0);
+    }
+    function createStrictHandler(handler2) {
+      return (value, state) => {
+        const clone2 = handler2(value, state);
+        state.cache.set(value, clone2);
+        return copyOwnPropertiesStrict(value, clone2, state, Object.getOwnPropertyNames(value), 0);
+      };
+    }
+    function copyStringStrict(string4, state) {
+      const clone2 = copyPrimitiveWrapper(string4, state);
+      state.cache.set(string4, clone2);
+      const { length } = string4;
+      const names = Object.getOwnPropertyNames(string4);
+      const start = names[length] === "length" ? length + 1 : length;
+      return copyOwnPropertiesStrict(string4, clone2, state, names, start);
     }
     var DEFAULT_MAX_DEPTH = 1e3;
     function createDefaultCache() {
@@ -27471,21 +27576,21 @@ var require_cjs = __commonJS({
     }
     function getOptions({ createCache: createCacheOverride, maxDepth, methods: methodsOverride, strict }) {
       const defaultMethods = {
-        array: strict ? copyArrayStrict : copyArrayLoose,
-        arrayBuffer: copyArrayBuffer,
+        array: strict ? copyArrayStrict : copyArray,
+        arrayBuffer: strict ? copyArrayBufferStrict : copyArrayBuffer,
         asyncGenerator: copySelf,
-        blob: copyBlob,
-        dataView: copyDataView,
+        blob: strict ? copyBlobStrict : copyBlob,
+        dataView: strict ? copyDataViewStrict : copyDataView,
         date: strict ? copyDateStrict : copyDate,
         error: copySelf,
         generator: copySelf,
-        map: strict ? copyMapStrict : copyMapLoose,
-        object: strict ? copyObjectStrict : copyObjectLoose,
-        regExp: copyRegExp,
-        set: strict ? copySetStrict : copySetLoose
+        map: strict ? copyMapStrict : copyMap,
+        object: strict ? copyObjectStrict : copyObject,
+        regExp: strict ? copyRegExpStrict : copyRegExp,
+        set: strict ? copySetStrict : copySet
       };
       const methods = methodsOverride ? Object.assign(defaultMethods, methodsOverride) : defaultMethods;
-      const copiers = getTagSpecificCopiers(methods);
+      const copiers = getTagSpecificCopiers(methods, strict);
       const createCache = createCacheOverride || createDefaultCache;
       if (!copiers.Object || !copiers.Array) {
         throw new Error("An object and array copier must be provided.");
@@ -27498,7 +27603,8 @@ var require_cjs = __commonJS({
         strict: Boolean(strict)
       };
     }
-    function getTagSpecificCopiers(methods) {
+    function getTagSpecificCopiers(methods, strict) {
+      const copyPrimitive = strict ? copyPrimitiveWrapperStrict : copyPrimitiveWrapper;
       return Object.assign(/* @__PURE__ */ Object.create(null), {
         Arguments: methods.object,
         Array: methods.array,
@@ -27507,7 +27613,7 @@ var require_cjs = __commonJS({
         BigInt64Array: methods.arrayBuffer,
         BigUint64Array: methods.arrayBuffer,
         Blob: methods.blob,
-        Boolean: copyPrimitiveWrapper,
+        Boolean: copyPrimitive,
         DataView: methods.dataView,
         Date: methods.date,
         Error: methods.error,
@@ -27518,12 +27624,13 @@ var require_cjs = __commonJS({
         Int16Array: methods.arrayBuffer,
         Int32Array: methods.arrayBuffer,
         Map: methods.map,
-        Number: copyPrimitiveWrapper,
+        Number: copyPrimitive,
         Object: methods.object,
         Promise: copySelf,
         RegExp: methods.regExp,
         Set: methods.set,
-        String: copyPrimitiveWrapper,
+        SharedArrayBuffer: methods.arrayBuffer,
+        String: strict ? copyStringStrict : copyPrimitiveWrapper,
         WeakMap: copySelf,
         WeakSet: copySelf,
         Uint8Array: methods.arrayBuffer,
@@ -27534,7 +27641,7 @@ var require_cjs = __commonJS({
     }
     function createCopier(options2 = {}) {
       const { createCache, copiers, maxDepth } = getOptions(options2);
-      const { Array: copyArray, Object: copyObject } = copiers;
+      const { Array: copyArray2, Object: copyObject2 } = copiers;
       function copier(value, state) {
         state.prototype = state.Constructor = void 0;
         if (!value || typeof value !== "object") {
@@ -27550,15 +27657,15 @@ var require_cjs = __commonJS({
         state.Constructor = state.prototype && state.prototype.constructor;
         let clone2;
         if (!state.Constructor || state.Constructor === Object) {
-          clone2 = copyObject(value, state);
+          clone2 = copyObject2(value, state);
         } else if (Array.isArray(value)) {
-          clone2 = copyArray(value, state);
+          clone2 = copyArray2(value, state);
         } else {
           const tagSpecificCopier = copiers[getTag(value)];
           if (tagSpecificCopier) {
             clone2 = tagSpecificCopier(value, state);
           } else {
-            clone2 = typeof value.then === "function" ? value : copyObject(value, state);
+            clone2 = typeof value.then === "function" ? value : copyObject2(value, state);
           }
         }
         --state.depth;
