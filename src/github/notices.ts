@@ -48,8 +48,8 @@ export const isBotComment = (comment: { user?: { type?: string } | null }): bool
 
 export const isBotNode = (node: { author?: { __typename: string } | null }): boolean => node.author?.__typename === 'Bot';
 
-export const fromRestComment = (comment: { id: number; node_id: string; body: string }): FoundNotice =>
-  ({ commentId: comment.id, nodeId: comment.node_id, body: comment.body });
+export const fromRestComment = (comment: { id: number | bigint; node_id: string; body: string }): FoundNotice =>
+  ({ commentId: Number(comment.id), nodeId: comment.node_id, body: comment.body });
 
 const normalize = (body: string): string => body.replace(/\r\n/g, '\n').trimEnd();
 

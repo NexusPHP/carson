@@ -20929,106 +20929,144 @@ var require_picomatch2 = __commonJS({
   }
 });
 
-// node_modules/deepmerge/dist/cjs.js
-var require_cjs = __commonJS({
-  "node_modules/deepmerge/dist/cjs.js"(exports2, module2) {
+// node_modules/@fastify/deepmerge/index.js
+var require_deepmerge = __commonJS({
+  "node_modules/@fastify/deepmerge/index.js"(exports2, module2) {
     "use strict";
-    var isMergeableObject = function isMergeableObject2(value) {
-      return isNonNullObject(value) && !isSpecial(value);
-    };
-    function isNonNullObject(value) {
-      return !!value && typeof value === "object";
+    var JSON_PROTO = Object.getPrototypeOf({});
+    function defaultIsMergeableObjectFactory() {
+      return function defaultIsMergeableObject(value) {
+        return typeof value === "object" && value !== null && !(value instanceof RegExp) && !(value instanceof Date);
+      };
     }
-    function isSpecial(value) {
-      var stringValue = Object.prototype.toString.call(value);
-      return stringValue === "[object RegExp]" || stringValue === "[object Date]" || isReactElement(value);
-    }
-    var canUseSymbol = typeof Symbol === "function" && Symbol.for;
-    var REACT_ELEMENT_TYPE = canUseSymbol ? /* @__PURE__ */ Symbol.for("react.element") : 60103;
-    function isReactElement(value) {
-      return value.$$typeof === REACT_ELEMENT_TYPE;
-    }
-    function emptyTarget(val) {
-      return Array.isArray(val) ? [] : {};
-    }
-    function cloneUnlessOtherwiseSpecified(value, options2) {
-      return options2.clone !== false && options2.isMergeableObject(value) ? deepmerge(emptyTarget(value), value, options2) : value;
-    }
-    function defaultArrayMerge(target, source, options2) {
-      return target.concat(source).map(function(element) {
-        return cloneUnlessOtherwiseSpecified(element, options2);
-      });
-    }
-    function getMergeFunction(key, options2) {
-      if (!options2.customMerge) {
-        return deepmerge;
+    function deepmergeConstructor(options2) {
+      function isNotPrototypeKey(value) {
+        return value !== "constructor" && value !== "prototype" && value !== "__proto__";
       }
-      var customMerge = options2.customMerge(key);
-      return typeof customMerge === "function" ? customMerge : deepmerge;
-    }
-    function getEnumerableOwnPropertySymbols(target) {
-      return Object.getOwnPropertySymbols ? Object.getOwnPropertySymbols(target).filter(function(symbol2) {
-        return Object.propertyIsEnumerable.call(target, symbol2);
-      }) : [];
-    }
-    function getKeys(target) {
-      return Object.keys(target).concat(getEnumerableOwnPropertySymbols(target));
-    }
-    function propertyIsOnObject(object2, property) {
-      try {
-        return property in object2;
-      } catch (_) {
-        return false;
-      }
-    }
-    function propertyIsUnsafe(target, key) {
-      return propertyIsOnObject(target, key) && !(Object.hasOwnProperty.call(target, key) && Object.propertyIsEnumerable.call(target, key));
-    }
-    function mergeObject(target, source, options2) {
-      var destination = {};
-      if (options2.isMergeableObject(target)) {
-        getKeys(target).forEach(function(key) {
-          destination[key] = cloneUnlessOtherwiseSpecified(target[key], options2);
-        });
-      }
-      getKeys(source).forEach(function(key) {
-        if (propertyIsUnsafe(target, key)) {
-          return;
+      function cloneArray(value) {
+        let i = 0;
+        const il = value.length;
+        const result = new Array(il);
+        for (i; i < il; ++i) {
+          result[i] = clone2(value[i]);
         }
-        if (propertyIsOnObject(target, key) && options2.isMergeableObject(source[key])) {
-          destination[key] = getMergeFunction(key, options2)(target[key], source[key], options2);
+        return result;
+      }
+      function cloneObject(target) {
+        const result = {};
+        if (cloneProtoObject && Object.getPrototypeOf(target) !== JSON_PROTO) {
+          return cloneProtoObject(target);
+        }
+        const targetKeys = getKeys(target);
+        let i, il, key;
+        for (i = 0, il = targetKeys.length; i < il; ++i) {
+          isNotPrototypeKey(key = targetKeys[i]) && (result[key] = clone2(target[key]));
+        }
+        return result;
+      }
+      function concatArrays(target, source) {
+        const tl = target.length;
+        const sl = source.length;
+        let i = 0;
+        const result = new Array(tl + sl);
+        for (i; i < tl; ++i) {
+          result[i] = clone2(target[i]);
+        }
+        for (i = 0; i < sl; ++i) {
+          result[i + tl] = clone2(source[i]);
+        }
+        return result;
+      }
+      const propertyIsEnumerable = Object.prototype.propertyIsEnumerable;
+      function getSymbolsAndKeys(value) {
+        const result = Object.keys(value);
+        const keys = Object.getOwnPropertySymbols(value);
+        for (let i = 0, il = keys.length; i < il; ++i) {
+          propertyIsEnumerable.call(value, keys[i]) && result.push(keys[i]);
+        }
+        return result;
+      }
+      const getKeys = options2?.symbols ? getSymbolsAndKeys : Object.keys;
+      const cloneProtoObject = typeof options2?.cloneProtoObject === "function" ? options2.cloneProtoObject : void 0;
+      const isMergeableObject = typeof options2?.isMergeableObject === "function" ? options2.isMergeableObject : defaultIsMergeableObjectFactory();
+      const onlyDefinedProperties = options2?.onlyDefinedProperties === true;
+      function isPrimitive(value) {
+        return typeof value !== "object" || value === null;
+      }
+      const mergeArray = options2 && typeof options2.mergeArray === "function" ? options2.mergeArray({ clone: clone2, deepmerge: _deepmerge, getKeys, isMergeableObject }) : concatArrays;
+      function clone2(entry) {
+        return isMergeableObject(entry) ? Array.isArray(entry) ? cloneArray(entry) : cloneObject(entry) : entry;
+      }
+      function mergeObject(target, source) {
+        const result = {};
+        const targetKeys = getKeys(target);
+        const sourceKeys = getKeys(source);
+        let i, il, key;
+        for (i = 0, il = targetKeys.length; i < il; ++i) {
+          isNotPrototypeKey(key = targetKeys[i]) && sourceKeys.indexOf(key) === -1 && (result[key] = clone2(target[key]));
+        }
+        for (i = 0, il = sourceKeys.length; i < il; ++i) {
+          if (!isNotPrototypeKey(key = sourceKeys[i])) {
+            continue;
+          }
+          if (key in target) {
+            if (targetKeys.indexOf(key) !== -1) {
+              if (cloneProtoObject && isMergeableObject(source[key]) && Object.getPrototypeOf(source[key]) !== JSON_PROTO) {
+                result[key] = cloneProtoObject(source[key]);
+              } else {
+                result[key] = _deepmerge(target[key], source[key]);
+              }
+            }
+          } else {
+            if (onlyDefinedProperties && typeof source[key] === "undefined") {
+              continue;
+            }
+            result[key] = clone2(source[key]);
+          }
+        }
+        return result;
+      }
+      function _deepmerge(target, source) {
+        if (onlyDefinedProperties && typeof source === "undefined") {
+          return clone2(target);
+        }
+        const sourceIsArray = Array.isArray(source);
+        const targetIsArray = Array.isArray(target);
+        if (isPrimitive(source)) {
+          return source;
+        } else if (!isMergeableObject(target)) {
+          return clone2(source);
+        } else if (sourceIsArray && targetIsArray) {
+          return mergeArray(target, source);
+        } else if (sourceIsArray !== targetIsArray) {
+          return clone2(source);
         } else {
-          destination[key] = cloneUnlessOtherwiseSpecified(source[key], options2);
+          return mergeObject(target, source);
         }
-      });
-      return destination;
-    }
-    function deepmerge(target, source, options2) {
-      options2 = options2 || {};
-      options2.arrayMerge = options2.arrayMerge || defaultArrayMerge;
-      options2.isMergeableObject = options2.isMergeableObject || isMergeableObject;
-      options2.cloneUnlessOtherwiseSpecified = cloneUnlessOtherwiseSpecified;
-      var sourceIsArray = Array.isArray(source);
-      var targetIsArray = Array.isArray(target);
-      var sourceAndTargetTypesMatch = sourceIsArray === targetIsArray;
-      if (!sourceAndTargetTypesMatch) {
-        return cloneUnlessOtherwiseSpecified(source, options2);
-      } else if (sourceIsArray) {
-        return options2.arrayMerge(target, source, options2);
-      } else {
-        return mergeObject(target, source, options2);
       }
-    }
-    deepmerge.all = function deepmergeAll(array2, options2) {
-      if (!Array.isArray(array2)) {
-        throw new Error("first argument should be an array");
+      function _deepmergeAll() {
+        switch (arguments.length) {
+          case 0:
+            return {};
+          case 1:
+            return clone2(arguments[0]);
+          case 2:
+            return _deepmerge(arguments[0], arguments[1]);
+        }
+        let result;
+        for (let i = 0, il = arguments.length; i < il; ++i) {
+          result = _deepmerge(result, arguments[i]);
+        }
+        return result;
       }
-      return array2.reduce(function(prev, next) {
-        return deepmerge(prev, next, options2);
-      }, {});
-    };
-    var deepmerge_1 = deepmerge;
-    module2.exports = deepmerge_1;
+      return options2?.all ? _deepmergeAll : _deepmerge;
+    }
+    module2.exports = deepmergeConstructor;
+    module2.exports.default = deepmergeConstructor;
+    module2.exports.deepmerge = deepmergeConstructor;
+    Object.defineProperty(module2.exports, "isMergeableObject", {
+      get: defaultIsMergeableObjectFactory
+    });
   }
 });
 
@@ -27271,7 +27309,7 @@ var require_delete_log_property = __commonJS({
 });
 
 // node_modules/fast-copy/dist/cjs/index.cjs
-var require_cjs2 = __commonJS({
+var require_cjs = __commonJS({
   "node_modules/fast-copy/dist/cjs/index.cjs"(exports2) {
     "use strict";
     var MaxDepthExceededError = class extends RangeError {
@@ -27550,7 +27588,7 @@ var require_filter_log = __commonJS({
   "node_modules/pino-pretty/lib/utils/filter-log.js"(exports2, module2) {
     "use strict";
     module2.exports = filterLog;
-    var { createCopier } = require_cjs2();
+    var { createCopier } = require_cjs();
     var fastCopy = createCopier({});
     var deleteLogProperty = require_delete_log_property();
     var getPropertyValue = require_get_property_value();
@@ -31993,7 +32031,7 @@ var require_merge = __commonJS({
     var identity = require_identity();
     var Scalar = require_Scalar();
     var MERGE_KEY = "<<";
-    var merge4 = {
+    var merge3 = {
       identify: (value) => value === MERGE_KEY || typeof value === "symbol" && value.description === MERGE_KEY,
       default: "key",
       tag: "tag:yaml.org,2002:merge",
@@ -32003,7 +32041,7 @@ var require_merge = __commonJS({
       }),
       stringify: () => MERGE_KEY
     };
-    var isMergeKey = (ctx, key) => (merge4.identify(key) || identity.isScalar(key) && (!key.type || key.type === Scalar.Scalar.PLAIN) && merge4.identify(key.value)) && ctx?.doc.schema.tags.some((tag) => tag.tag === merge4.tag && tag.default);
+    var isMergeKey = (ctx, key) => (merge3.identify(key) || identity.isScalar(key) && (!key.type || key.type === Scalar.Scalar.PLAIN) && merge3.identify(key.value)) && ctx?.doc.schema.tags.some((tag) => tag.tag === merge3.tag && tag.default);
     function addMergeToJSMap(ctx, map2, value) {
       const source = resolveAliasValue(ctx, value);
       if (identity.isSeq(source))
@@ -32042,7 +32080,7 @@ var require_merge = __commonJS({
     }
     exports2.addMergeToJSMap = addMergeToJSMap;
     exports2.isMergeKey = isMergeKey;
-    exports2.merge = merge4;
+    exports2.merge = merge3;
   }
 });
 
@@ -32051,15 +32089,15 @@ var require_addPairToJSMap = __commonJS({
   "node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports2) {
     "use strict";
     var log = require_log();
-    var merge4 = require_merge();
+    var merge3 = require_merge();
     var stringify = require_stringify();
     var identity = require_identity();
     var toJS = require_toJS();
     function addPairToJSMap(ctx, map2, { key, value }) {
       if (identity.isNode(key) && key.addToJSMap)
         key.addToJSMap(ctx, map2, value);
-      else if (merge4.isMergeKey(ctx, key))
-        merge4.addMergeToJSMap(ctx, map2, value);
+      else if (merge3.isMergeKey(ctx, key))
+        merge3.addMergeToJSMap(ctx, map2, value);
       else {
         const jsKey = toJS.toJS(key, "", ctx);
         if (map2 instanceof Map) {
@@ -33450,7 +33488,7 @@ var require_schema3 = __commonJS({
     var bool = require_bool2();
     var float = require_float2();
     var int2 = require_int2();
-    var merge4 = require_merge();
+    var merge3 = require_merge();
     var omap = require_omap();
     var pairs = require_pairs();
     var set3 = require_set();
@@ -33470,7 +33508,7 @@ var require_schema3 = __commonJS({
       float.floatExp,
       float.float,
       binary.binary,
-      merge4.merge,
+      merge3.merge,
       omap.omap,
       pairs.pairs,
       set3.set,
@@ -33496,7 +33534,7 @@ var require_tags = __commonJS({
     var schema = require_schema();
     var schema$1 = require_schema2();
     var binary = require_binary();
-    var merge4 = require_merge();
+    var merge3 = require_merge();
     var omap = require_omap();
     var pairs = require_pairs();
     var schema$2 = require_schema3();
@@ -33521,7 +33559,7 @@ var require_tags = __commonJS({
       intOct: int2.intOct,
       intTime: timestamp.intTime,
       map: map2.map,
-      merge: merge4.merge,
+      merge: merge3.merge,
       null: _null4.nullTag,
       omap: omap.omap,
       pairs: pairs.pairs,
@@ -33531,7 +33569,7 @@ var require_tags = __commonJS({
     };
     var coreKnownTags = {
       "tag:yaml.org,2002:binary": binary.binary,
-      "tag:yaml.org,2002:merge": merge4.merge,
+      "tag:yaml.org,2002:merge": merge3.merge,
       "tag:yaml.org,2002:omap": omap.omap,
       "tag:yaml.org,2002:pairs": pairs.pairs,
       "tag:yaml.org,2002:set": set3.set,
@@ -33540,7 +33578,7 @@ var require_tags = __commonJS({
     function getTags(customTags, schemaName, addMergeTag) {
       const schemaTags = schemas.get(schemaName);
       if (schemaTags && !customTags) {
-        return addMergeTag && !schemaTags.includes(merge4.merge) ? schemaTags.concat(merge4.merge) : schemaTags.slice();
+        return addMergeTag && !schemaTags.includes(merge3.merge) ? schemaTags.concat(merge3.merge) : schemaTags.slice();
       }
       let tags = schemaTags;
       if (!tags) {
@@ -33558,7 +33596,7 @@ var require_tags = __commonJS({
         tags = customTags(tags.slice());
       }
       if (addMergeTag)
-        tags = tags.concat(merge4.merge);
+        tags = tags.concat(merge3.merge);
       return tags.reduce((tags2, tag) => {
         const tagObj = typeof tag === "string" ? tagsByName[tag] : tag;
         if (!tagObj) {
@@ -33587,11 +33625,11 @@ var require_Schema = __commonJS({
     var tags = require_tags();
     var sortMapEntriesByKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
     var Schema = class _Schema {
-      constructor({ compat, customTags, merge: merge4, resolveKnownTags, schema, sortMapEntries, toStringDefaults }) {
+      constructor({ compat, customTags, merge: merge3, resolveKnownTags, schema, sortMapEntries, toStringDefaults }) {
         this.compat = Array.isArray(compat) ? tags.getTags(compat, "compat") : compat ? tags.getTags(null, compat) : null;
         this.name = typeof schema === "string" && schema || "core";
         this.knownTags = resolveKnownTags ? tags.coreKnownTags : {};
-        this.tags = tags.getTags(customTags, this.name, merge4);
+        this.tags = tags.getTags(customTags, this.name, merge3);
         this.toStringOptions = toStringDefaults ?? null;
         Object.defineProperty(this, identity.MAP, { value: map2.map });
         Object.defineProperty(this, identity.SCALAR, { value: string4.string });
@@ -46354,7 +46392,7 @@ function isRecursive(inst, stack, resolve3) {
     }
     return answer;
   };
-  const merge4 = (answer) => {
+  const merge3 = (answer) => {
     if (answer > result)
       result = answer;
   };
@@ -46363,7 +46401,7 @@ function isRecursive(inst, stack, resolve3) {
   switch (kind) {
     case "object": {
       const raw = rawShape(def);
-      merge4(raw ? shape(raw, true) : ASSUMED);
+      merge3(raw ? shape(raw, true) : ASSUMED);
       check2(def.catchall);
       break;
     }
@@ -46413,7 +46451,7 @@ function isRecursive(inst, stack, resolve3) {
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
       const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
-      merge4(inner ? isRecursive(inner, stack, false) : ASSUMED);
+      merge3(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
     // a leaf by choice: `parts` are regex fragments, not data positions
@@ -61095,7 +61133,7 @@ var WRAPPED = /^<details>\s*<summary>(?:Resolved|Outdated)<\/summary>\s*([\s\S]*
 var pending = /* @__PURE__ */ new Map();
 var isBotComment = (comment) => comment.user?.type === "Bot";
 var isBotNode = (node2) => node2.author?.__typename === "Bot";
-var fromRestComment = (comment) => ({ commentId: comment.id, nodeId: comment.node_id, body: comment.body });
+var fromRestComment = (comment) => ({ commentId: Number(comment.id), nodeId: comment.node_id, body: comment.body });
 var normalize = (body) => body.replace(/\r\n/g, "\n").trimEnd();
 var renderDigest = (sections) => `${[...sections].sort((a, b) => a.id.localeCompare(b.id)).map(({ id, body }) => `${startMarker(id)}
 ${body}
@@ -64449,9 +64487,9 @@ var carson = new Carson([
 var app_default = carson.app;
 
 // node_modules/probot/lib/context.js
-var import_deepmerge = __toESM(require_cjs(), 1);
+var import_deepmerge = __toESM(require_deepmerge(), 1);
 import path from "node:path";
-var kOctokitRequestHookAdded = /* @__PURE__ */ Symbol("octokit request hook added");
+var octokitsWithRequestHook = /* @__PURE__ */ new WeakSet();
 var Context = class {
   name;
   id;
@@ -64471,11 +64509,11 @@ var Context = class {
     this.payload = event.payload;
     this.octokit = octokit;
     this.log = log;
-    if (octokit[kOctokitRequestHookAdded] !== true) {
+    if (!octokitsWithRequestHook.has(octokit)) {
       octokit.hook.before("request", (options2) => {
         options2.headers["x-github-delivery"] = event.id;
       });
-      octokit[kOctokitRequestHookAdded] = true;
+      octokitsWithRequestHook.add(octokit);
     }
   }
   /**
@@ -64592,14 +64630,14 @@ var Context = class {
    *
    * @param fileName - Name of the YAML file in the `.github` directory
    * @param defaultConfig - An object of default config options
-   * @param deepMergeOptions - Controls merging configs (from the [deepmerge](https://github.com/TehShrike/deepmerge) module)
+   * @param deepMergeOptions - Controls how configuration files are merged
    * @return Configuration object read from the file
    */
   async config(fileName, defaultConfig, deepMergeOptions) {
     const params = this.repo({
       path: path.posix.join(".github", fileName),
       defaults(configs) {
-        const result = import_deepmerge.default.all([defaultConfig || {}, ...configs], deepMergeOptions);
+        const result = (0, import_deepmerge.default)({ ...deepMergeOptions, all: true })(defaultConfig || {}, ...configs);
         return result;
       }
     });
@@ -65600,7 +65638,11 @@ function createDeferredPromise() {
     resolve3 = res;
     reject = rej;
   });
-  return { promise: promise2, resolve: resolve3, reject };
+  return {
+    promise: promise2,
+    resolve: resolve3,
+    reject
+  };
 }
 
 // node_modules/probot/lib/octokit/get-authenticated-octokit.js
@@ -66060,7 +66102,7 @@ function removeUndefinedProperties(obj) {
   }
   return obj;
 }
-function merge3(defaults, route, options2) {
+function merge2(defaults, route, options2) {
   if (typeof route === "string") {
     let [method, url2] = route.split(" ");
     options2 = Object.assign(url2 ? { method, url: url2 } : { url: method }, options2);
@@ -66308,15 +66350,15 @@ function parse3(options2) {
   );
 }
 function endpointWithDefaults(defaults, route, options2) {
-  return parse3(merge3(defaults, route, options2));
+  return parse3(merge2(defaults, route, options2));
 }
 function withDefaults(oldDefaults, newDefaults) {
-  const DEFAULTS22 = merge3(oldDefaults, newDefaults);
+  const DEFAULTS22 = merge2(oldDefaults, newDefaults);
   const endpoint2 = endpointWithDefaults.bind(null, DEFAULTS22);
   return Object.assign(endpoint2, {
     DEFAULTS: DEFAULTS22,
     defaults: withDefaults.bind(null, DEFAULTS22),
-    merge: merge3.bind(null, DEFAULTS22),
+    merge: merge2.bind(null, DEFAULTS22),
     parse: parse3
   });
 }
@@ -67611,7 +67653,7 @@ function paginateRest(octokit) {
 paginateRest.VERSION = VERSION7;
 
 // node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
-var VERSION8 = "17.0.0";
+var VERSION8 = "18.0.0";
 
 // node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/generated/endpoints.js
 var Endpoints = {
@@ -67739,6 +67781,24 @@ var Endpoints = {
       "POST /repos/{owner}/{repo}/actions/runners/generate-jitconfig"
     ],
     getActionsCacheList: ["GET /repos/{owner}/{repo}/actions/caches"],
+    getActionsCacheRetentionLimitForEnterprise: [
+      "GET /enterprises/{enterprise}/actions/cache/retention-limit"
+    ],
+    getActionsCacheRetentionLimitForOrganization: [
+      "GET /organizations/{org}/actions/cache/retention-limit"
+    ],
+    getActionsCacheRetentionLimitForRepository: [
+      "GET /repos/{owner}/{repo}/actions/cache/retention-limit"
+    ],
+    getActionsCacheStorageLimitForEnterprise: [
+      "GET /enterprises/{enterprise}/actions/cache/storage-limit"
+    ],
+    getActionsCacheStorageLimitForOrganization: [
+      "GET /organizations/{org}/actions/cache/storage-limit"
+    ],
+    getActionsCacheStorageLimitForRepository: [
+      "GET /repos/{owner}/{repo}/actions/cache/storage-limit"
+    ],
     getActionsCacheUsage: ["GET /repos/{owner}/{repo}/actions/cache/usage"],
     getActionsCacheUsageByRepoForOrg: [
       "GET /orgs/{org}/actions/cache/usage-by-repository"
@@ -67928,6 +67988,24 @@ var Endpoints = {
     reviewPendingDeploymentsForRun: [
       "POST /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments"
     ],
+    setActionsCacheRetentionLimitForEnterprise: [
+      "PUT /enterprises/{enterprise}/actions/cache/retention-limit"
+    ],
+    setActionsCacheRetentionLimitForOrganization: [
+      "PUT /organizations/{org}/actions/cache/retention-limit"
+    ],
+    setActionsCacheRetentionLimitForRepository: [
+      "PUT /repos/{owner}/{repo}/actions/cache/retention-limit"
+    ],
+    setActionsCacheStorageLimitForEnterprise: [
+      "PUT /enterprises/{enterprise}/actions/cache/storage-limit"
+    ],
+    setActionsCacheStorageLimitForOrganization: [
+      "PUT /organizations/{org}/actions/cache/storage-limit"
+    ],
+    setActionsCacheStorageLimitForRepository: [
+      "PUT /repos/{owner}/{repo}/actions/cache/storage-limit"
+    ],
     setAllowedActionsOrganization: [
       "PUT /orgs/{org}/actions/permissions/selected-actions"
     ],
@@ -68096,9 +68174,12 @@ var Endpoints = {
     updateWebhookConfigForApp: ["PATCH /app/hook/config"]
   },
   billing: {
-    getGithubActionsBillingOrg: ["GET /orgs/{org}/settings/billing/actions"],
-    getGithubActionsBillingUser: [
-      "GET /users/{username}/settings/billing/actions"
+    deleteBudgetOrg: [
+      "DELETE /organizations/{org}/settings/billing/budgets/{budget_id}"
+    ],
+    getAllBudgetsOrg: ["GET /organizations/{org}/settings/billing/budgets"],
+    getBudgetOrg: [
+      "GET /organizations/{org}/settings/billing/budgets/{budget_id}"
     ],
     getGithubBillingPremiumRequestUsageReportOrg: [
       "GET /organizations/{org}/settings/billing/premium_request/usage"
@@ -68112,15 +68193,14 @@ var Endpoints = {
     getGithubBillingUsageReportUser: [
       "GET /users/{username}/settings/billing/usage"
     ],
-    getGithubPackagesBillingOrg: ["GET /orgs/{org}/settings/billing/packages"],
-    getGithubPackagesBillingUser: [
-      "GET /users/{username}/settings/billing/packages"
+    getGithubBillingUsageSummaryReportOrg: [
+      "GET /organizations/{org}/settings/billing/usage/summary"
     ],
-    getSharedStorageBillingOrg: [
-      "GET /orgs/{org}/settings/billing/shared-storage"
+    getGithubBillingUsageSummaryReportUser: [
+      "GET /users/{username}/settings/billing/usage/summary"
     ],
-    getSharedStorageBillingUser: [
-      "GET /users/{username}/settings/billing/shared-storage"
+    updateBudgetOrg: [
+      "PATCH /organizations/{org}/settings/billing/budgets/{budget_id}"
     ]
   },
   campaigns: {
@@ -68761,13 +68841,6 @@ var Endpoints = {
     ]
   },
   orgs: {
-    addSecurityManagerTeam: [
-      "PUT /orgs/{org}/security-managers/teams/{team_slug}",
-      {},
-      {
-        deprecated: "octokit.rest.orgs.addSecurityManagerTeam() is deprecated, see https://docs.github.com/rest/orgs/security-managers#add-a-security-manager-team"
-      }
-    ],
     assignTeamToOrgRole: [
       "PUT /orgs/{org}/organization-roles/teams/{team_slug}/{role_id}"
     ],
@@ -68781,6 +68854,9 @@ var Endpoints = {
     checkPublicMembershipForUser: ["GET /orgs/{org}/public_members/{username}"],
     convertMemberToOutsideCollaborator: [
       "PUT /orgs/{org}/outside_collaborators/{username}"
+    ],
+    createArtifactDeploymentRecord: [
+      "POST /orgs/{org}/artifacts/metadata/deployment-record"
     ],
     createArtifactStorageRecord: [
       "POST /orgs/{org}/artifacts/metadata/storage-record"
@@ -68852,6 +68928,9 @@ var Endpoints = {
     ],
     list: ["GET /organizations"],
     listAppInstallations: ["GET /orgs/{org}/installations"],
+    listArtifactDeploymentRecords: [
+      "GET /orgs/{org}/artifacts/{subject_digest}/metadata/deployment-records"
+    ],
     listArtifactStorageRecords: [
       "GET /orgs/{org}/artifacts/{subject_digest}/metadata/storage-records"
     ],
@@ -68885,13 +68964,6 @@ var Endpoints = {
     listPatGrants: ["GET /orgs/{org}/personal-access-tokens"],
     listPendingInvitations: ["GET /orgs/{org}/invitations"],
     listPublicMembers: ["GET /orgs/{org}/public_members"],
-    listSecurityManagerTeams: [
-      "GET /orgs/{org}/security-managers",
-      {},
-      {
-        deprecated: "octokit.rest.orgs.listSecurityManagerTeams() is deprecated, see https://docs.github.com/rest/orgs/security-managers#list-security-manager-teams"
-      }
-    ],
     listWebhookDeliveries: ["GET /orgs/{org}/hooks/{hook_id}/deliveries"],
     listWebhooks: ["GET /orgs/{org}/hooks"],
     pingWebhook: ["POST /orgs/{org}/hooks/{hook_id}/pings"],
@@ -68905,13 +68977,6 @@ var Endpoints = {
     ],
     removePublicMembershipForAuthenticatedUser: [
       "DELETE /orgs/{org}/public_members/{username}"
-    ],
-    removeSecurityManagerTeam: [
-      "DELETE /orgs/{org}/security-managers/teams/{team_slug}",
-      {},
-      {
-        deprecated: "octokit.rest.orgs.removeSecurityManagerTeam() is deprecated, see https://docs.github.com/rest/orgs/security-managers#remove-a-security-manager-team"
-      }
     ],
     reviewPatGrantRequest: [
       "POST /orgs/{org}/personal-access-token-requests/{pat_request_id}"
@@ -68930,6 +68995,9 @@ var Endpoints = {
     ],
     revokeOrgRoleUser: [
       "DELETE /orgs/{org}/organization-roles/users/{username}/{role_id}"
+    ],
+    setClusterDeploymentRecords: [
+      "POST /orgs/{org}/artifacts/metadata/deployment-record/cluster/{cluster}"
     ],
     setImmutableReleasesSettings: [
       "PUT /orgs/{org}/settings/immutable-releases"
@@ -69057,9 +69125,19 @@ var Endpoints = {
     ]
   },
   projects: {
+    addFieldForOrg: ["POST /orgs/{org}/projectsV2/{project_number}/fields"],
+    addFieldForUser: [
+      "POST /users/{username}/projectsV2/{project_number}/fields"
+    ],
     addItemForOrg: ["POST /orgs/{org}/projectsV2/{project_number}/items"],
     addItemForUser: [
       "POST /users/{username}/projectsV2/{project_number}/items"
+    ],
+    createDraftItemForAuthenticatedUser: [
+      "POST /user/{user_id}/projectsV2/{project_number}/drafts"
+    ],
+    createDraftItemForOrg: [
+      "POST /orgs/{org}/projectsV2/{project_number}/drafts"
     ],
     deleteItemForOrg: [
       "DELETE /orgs/{org}/projectsV2/{project_number}/items/{item_id}"
@@ -71887,23 +71965,24 @@ var createProbotAuth = createProbotAuthFn;
 
 // node_modules/probot/lib/octokit/octokit-plugin-probot-request-logging.js
 function probotRequestLogging(octokit) {
+  const log = octokit.log;
   octokit.hook.error("request", (error63, options2) => {
     if ("status" in error63) {
       const { method, url: url2, ...params } = octokit.request.endpoint.parse(options2);
       const msg = `GitHub request: ${method} ${url2} - ${error63.status}`;
-      octokit.log.debug(params.body || {}, msg);
+      log.debug(params.body || {}, msg);
     }
     throw error63;
   });
   octokit.hook.after("request", (result, options2) => {
     const { method, url: url2, ...params } = octokit.request.endpoint.parse(options2);
     const msg = `GitHub request: ${method} ${url2} - ${result.status}`;
-    octokit.log.debug(params.body || {}, msg);
+    log.debug(params.body || {}, msg);
   });
 }
 
 // node_modules/probot/lib/version.js
-var VERSION17 = "14.3.2";
+var VERSION17 = "14.3.7";
 
 // node_modules/probot/lib/octokit/probot-octokit.js
 var defaultOptions = {
@@ -71921,16 +72000,31 @@ var defaultOptions = {
   },
   userAgent: `probot/${VERSION17}`
 };
-var ProbotOctokit = Octokit.plugin(throttling, retry, paginateRest, restEndpointMethods, enterpriseCompatibility, probotRequestLogging, config2).defaults((instanceOptions) => {
+var PROBOT_OCTOKIT_DEFAULTS = /* @__PURE__ */ Symbol("probot octokit defaults");
+var ProbotOctokitBase = Octokit.plugin(throttling, retry, paginateRest, restEndpointMethods, enterpriseCompatibility, probotRequestLogging, config2).defaults((instanceOptions) => {
   const options2 = {
     ...defaultOptions,
     ...instanceOptions,
     ...{
-      throttle: { ...defaultOptions.throttle, ...instanceOptions?.throttle }
+      throttle: { ...defaultOptions.throttle, ...instanceOptions.throttle }
     }
   };
   return options2;
 });
+var octokitDefaults = Octokit.defaults;
+ProbotOctokitBase.defaults = function(defaults) {
+  const Constructor = octokitDefaults.call(this, defaults);
+  if (typeof defaults !== "function") {
+    Object.defineProperty(Constructor, PROBOT_OCTOKIT_DEFAULTS, {
+      value: {
+        ...this[PROBOT_OCTOKIT_DEFAULTS],
+        ...defaults
+      }
+    });
+  }
+  return Constructor;
+};
+var ProbotOctokit = ProbotOctokitBase;
 
 // node_modules/probot/lib/octokit/get-octokit-throttle-options.js
 var import_bottleneck = __toESM(require_lib(), 1);
@@ -71951,8 +72045,10 @@ async function getOctokitThrottleOptions(options2) {
   };
   if (!redisConfig)
     return throttlingOptions;
+  const { client, Redis: Redis2 } = await getRedisClient(redisConfig);
   const connection = new import_bottleneck.default.IORedisConnection({
-    client: await getRedisClient(options2)
+    client,
+    Redis: Redis2
   });
   connection.on("error", (error63) => {
     log.error(Object.assign(error63, { source: "bottleneck" }));
@@ -71961,31 +72057,36 @@ async function getOctokitThrottleOptions(options2) {
   throttlingOptions.connection = connection;
   return throttlingOptions;
 }
-var Redis = null;
-async function getRedisClient({ redisConfig }) {
-  Redis ??= (await npxImport("ioredis@5.9.3", { onlyPackageRunner: true })).Redis;
-  if (redisConfig)
-    return new Redis(redisConfig);
+var Redis;
+async function getRedisClient(redisConfig) {
+  Redis ??= (await npxImport("ioredis@5.10.1", {
+    onlyPackageRunner: true
+  })).Redis;
+  return {
+    client: typeof redisConfig === "string" ? new Redis(redisConfig) : new Redis(redisConfig),
+    Redis
+  };
 }
 
 // node_modules/probot/lib/octokit/get-probot-octokit-with-defaults.js
+function mergeThrottleOptions(runtimeOptions, explicitOptions) {
+  return { ...runtimeOptions, ...explicitOptions };
+}
 async function getProbotOctokitWithDefaults(options2) {
+  const authRequest = request.defaults({
+    ...options2.baseUrl ? { baseUrl: options2.baseUrl } : {},
+    request: {
+      fetch: options2.request?.fetch
+    }
+  });
   const authOptions = options2.githubToken ? {
     token: options2.githubToken,
-    request: request.defaults({
-      request: {
-        fetch: options2.request?.fetch
-      }
-    })
+    request: authRequest
   } : {
     cache: options2.cache,
     appId: options2.appId,
     privateKey: options2.privateKey,
-    request: request.defaults({
-      request: {
-        fetch: options2.request?.fetch
-      }
-    })
+    request: authRequest
   };
   const log = options2.log.child({ name: "octokit" });
   const octokitThrottleOptions = await getOctokitThrottleOptions({
@@ -72002,8 +72103,9 @@ async function getProbotOctokitWithDefaults(options2) {
   if (options2.baseUrl) {
     defaultOptions2.baseUrl = options2.baseUrl;
   }
-  if (octokitThrottleOptions) {
-    defaultOptions2.throttle = octokitThrottleOptions;
+  if (options2.redisConfig) {
+    const explicitDefaults = options2.Octokit[PROBOT_OCTOKIT_DEFAULTS];
+    defaultOptions2.throttle = mergeThrottleOptions(octokitThrottleOptions, explicitDefaults?.throttle);
   }
   return options2.Octokit.defaults((instanceOptions) => {
     const options3 = Object.assign({}, defaultOptions2, instanceOptions, {
@@ -72022,7 +72124,7 @@ function getErrorHandler(log) {
     const errors = error63 instanceof AggregateError ? error63.errors : [error63];
     const event = error63.event;
     for (const error64 of errors) {
-      const errMessage = (error64.message || "").toLowerCase();
+      const errMessage = (error64 instanceof Error ? error64.message : typeof error64 === "object" && error64 !== null && "message" in error64 && typeof error64.message === "string" ? error64.message : String(error64) || "").toLowerCase();
       if (errMessage.includes("x-hub-signature-256")) {
         log.error(error64, "Go to https://github.com/settings/apps/YOUR_APP and verify that the Webhook secret matches the value of the WEBHOOK_SECRET environment variable.");
         continue;
@@ -72060,6 +72162,14 @@ function getWebhooks(options2) {
   return webhooks;
 }
 
+// node_modules/probot/lib/helpers/require-value.js
+function requireValue(value, message) {
+  if (value === null || value === void 0) {
+    throw new Error(message);
+  }
+  return value;
+}
+
 // node_modules/probot/lib/server/handlers/http-logger.js
 var import_pino_http = __toESM(require_logger(), 1);
 
@@ -72074,8 +72184,7 @@ var INITIALIZED = 2;
 var Probot = class {
   static defaults(defaults) {
     const ProbotWithDefaults = class extends this {
-      constructor(...args) {
-        const options2 = args[0] || {};
+      constructor(options2 = {}) {
         super(Object.assign({}, defaults, options2));
       }
     };
@@ -72086,6 +72195,10 @@ var Probot = class {
     if (!options2.githubToken) {
       if (!options2.appId) {
         throw new Error("appId option is required");
+      }
+      const appId = Number(options2.appId);
+      if (!Number.isSafeInteger(appId) || appId <= 0) {
+        throw new Error("appId option must be a positive integer");
       }
       if (!options2.privateKey) {
         throw new Error("privateKey option is required");
@@ -72099,13 +72212,14 @@ var Probot = class {
       octokit: null,
       webhooks: null,
       log: options2.log || null,
+      getLog: options2.getLog || getLog,
       logFormat: options2.logFormat || "pretty",
       logLevelInString: options2.logLevelInString || false,
       logLevel: options2.logLevel || "warn",
       logMessageKey: options2.logMessageKey,
       sentryDsn: options2.sentryDsn,
       githubToken: options2.githubToken,
-      appId: Number.parseInt(options2.appId, 10),
+      appId: Number.parseInt(String(options2.appId), 10),
       privateKey: options2.privateKey,
       host: options2.host,
       port: options2.port,
@@ -72132,14 +72246,14 @@ var Probot = class {
         // Cache for 1 minute less than GitHub expiry
         1e3 * 60 * 59
       );
-      this.#state.log = this.#state.log || await getLog({
+      const log = this.#state.log || await this.#state.getLog({
         logFormat: this.#state.logFormat,
         logLevelInString: this.#state.logLevelInString,
         level: this.#state.logLevel,
         logMessageKey: this.#state.logMessageKey,
         sentryDsn: this.#state.sentryDsn
       });
-      this.#state.log = this.#state.log.child({ name: "probot" });
+      this.#state.log = log.child({ name: "probot" });
       const Octokit2 = await getProbotOctokitWithDefaults({
         githubToken: this.#state.githubToken,
         Octokit: this.#state.OctokitBase,
@@ -72186,39 +72300,39 @@ var Probot = class {
   }
   async getNodeMiddleware({ log, path: path2 } = {}) {
     await this.#initialize();
-    return createNodeMiddleware(this.#state.webhooks, {
-      log: log || this.#state.log,
+    return createNodeMiddleware(requireValue(this.#state.webhooks, "Probot webhooks are not initialized"), {
+      log: log || requireValue(this.#state.log, "Probot logger is not initialized"),
       path: path2 || this.#state.webhookPath
     });
   }
   async auth(installationId) {
     await this.#initialize();
     return await getAuthenticatedOctokit({
-      log: this.#state.log,
-      octokit: this.#state.octokit,
+      log: requireValue(this.#state.log, "Probot logger is not initialized"),
+      octokit: requireValue(this.#state.octokit, "Probot Octokit is not initialized"),
       installationId
     });
   }
-  async load(appFn, options2 = {
-    cwd: process.cwd()
-  }) {
+  async load(appFn, options2 = {}) {
     await this.#state.initializedPromise.promise;
-    if (typeof options2.addHandler !== "function") {
-      options2.addHandler = this.#state.server ? this.#state.server.addHandler.bind(this.#state.server) : () => {
+    const applicationOptions = {
+      ...options2,
+      cwd: options2.cwd || process.cwd(),
+      addHandler: options2.addHandler || (this.#state.server ? this.#state.server.addHandler.bind(this.#state.server) : () => {
         throw new Error("No server instance");
-      };
-    }
+      })
+    };
     if (Array.isArray(appFn)) {
       for (const fn of appFn) {
-        await this.load(fn, options2);
+        await this.load(fn, applicationOptions);
       }
       return;
     }
-    await appFn(this, options2);
+    await appFn(this, applicationOptions);
     return;
   }
   get log() {
-    return this.#state.log;
+    return requireValue(this.#state.log, "Probot logger is not initialized");
   }
   on = (eventName, callback) => {
     if (Array.isArray(eventName)) {
@@ -72233,24 +72347,28 @@ var Probot = class {
       });
     }
     if (this.#state.initializationState !== INITIALIZED) {
-      this.#state.initEventListeners.push(["on", callback, eventName]);
+      this.#state.initEventListeners.push([
+        "on",
+        callback,
+        eventName
+      ]);
       return;
     }
-    this.#state.webhooks.on(eventName, callback);
+    requireValue(this.#state.webhooks, "Probot webhooks are not initialized").on(eventName, callback);
   };
   onAny = (callback) => {
     if (this.#state.initializationState !== INITIALIZED) {
       this.#state.initEventListeners.push(["onAny", callback]);
       return;
     }
-    this.#state.webhooks.onAny(callback);
+    requireValue(this.#state.webhooks, "Probot webhooks are not initialized").onAny(callback);
   };
   onError = (callback) => {
     if (this.#state.initializationState !== INITIALIZED) {
       this.#state.initEventListeners.push(["onError", callback]);
       return;
     }
-    this.#state.webhooks.onError(callback);
+    requireValue(this.#state.webhooks, "Probot webhooks are not initialized").onError(callback);
   };
   async ready() {
     await this.#state.initializedPromise.promise;
@@ -72258,8 +72376,8 @@ var Probot = class {
   }
   async receive(event) {
     await this.#state.initializedPromise.promise;
-    this.#state.log.debug({ event }, "Webhook received");
-    await this.#state.webhooks.receive(event);
+    requireValue(this.#state.log, "Probot logger is not initialized").debug({ event }, "Webhook received");
+    await requireValue(this.#state.webhooks, "Probot webhooks are not initialized").receive(event);
     return;
   }
   static get version() {
@@ -72269,7 +72387,7 @@ var Probot = class {
     return VERSION17;
   }
   get webhooks() {
-    return this.#state.webhooks;
+    return requireValue(this.#state.webhooks, "Probot webhooks are not initialized");
   }
   get webhookPath() {
     return this.#state.webhookPath;
@@ -72372,6 +72490,30 @@ ${end}`;
 }
 getPrivateKey.VERSION = VERSION18;
 
+// node_modules/probot/lib/helpers/validate-log-level.js
+var validLevels = [
+  "trace",
+  "debug",
+  "info",
+  "warn",
+  "error",
+  "fatal",
+  "silent"
+];
+function validateLogLevel(value) {
+  if (typeof value !== "string" || !validLevels.some((level) => level === value)) {
+    throw new Error(`Invalid log level`);
+  }
+}
+
+// node_modules/probot/lib/helpers/validate-log-format.js
+var validFormats = ["pretty", "json"];
+function validateLogFormat(value) {
+  if (typeof value !== "string" || !validFormats.some((format) => format === value)) {
+    throw new Error(`Invalid log format`);
+  }
+}
+
 // node_modules/probot/lib/create-probot.js
 var DEFAULTS2 = {
   APP_ID: "",
@@ -72393,10 +72535,12 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
   } catch {
   }
   const envWithDefaults = { ...DEFAULTS2, ...env };
+  const envLogFormat = envWithDefaults.LOG_FORMAT === "" ? envWithDefaults.NODE_ENV === "production" ? "json" : "pretty" : envWithDefaults.LOG_FORMAT;
   const envOptions = {
     logLevel: envWithDefaults.LOG_LEVEL,
+    logFormat: envLogFormat,
     appId: Number(envWithDefaults.APP_ID),
-    privateKey: privateKey && privateKey.toString() || void 0,
+    privateKey: privateKey ? privateKey.toString() : void 0,
     secret: envWithDefaults.WEBHOOK_SECRET,
     redisConfig: envWithDefaults.REDIS_URL,
     webhookPath: envWithDefaults.WEBHOOK_PATH,
@@ -72407,14 +72551,21 @@ function createProbot({ overrides = {}, defaults = {}, env = process.env } = {})
     ...envOptions,
     ...overrides
   };
+  const { logLevel, logFormat } = probotOptions;
+  if (logLevel !== void 0) {
+    validateLogLevel(logLevel);
+  }
+  if (logFormat !== void 0) {
+    validateLogFormat(logFormat);
+  }
   return new Probot({
     log: probotOptions.log,
-    logLevel: probotOptions.logLevel,
-    logFormat: envWithDefaults.LOG_FORMAT,
     logLevelInString: envWithDefaults.LOG_LEVEL_IN_STRING === "true",
     logMessageKey: envWithDefaults.LOG_MESSAGE_KEY,
     sentryDsn: envWithDefaults.SENTRY_DSN,
-    ...probotOptions
+    ...probotOptions,
+    logLevel,
+    logFormat
   });
 }
 
@@ -72561,6 +72712,10 @@ content-type/dist/index.js:
 @octokit/graphql/dist-bundle/index.js:
   (* v8 ignore if -- @preserve *)
 
+@octokit/plugin-paginate-rest/dist-bundle/index.js:
+@octokit/auth-oauth-app/dist-bundle/index.js:
+  (* v8 ignore next -- @preserve *)
+
 @octokit/oauth-methods/dist-bundle/index.js:
   (* v8 ignore next: we always pass a custom request in tests -- @preserve *)
 
@@ -72569,9 +72724,6 @@ content-type/dist/index.js:
 
 @octokit/auth-oauth-user/dist-bundle/index.js:
   (* v8 ignore if -- @preserve *)
-  (* v8 ignore next -- @preserve *)
-
-@octokit/auth-oauth-app/dist-bundle/index.js:
   (* v8 ignore next -- @preserve *)
 
 @octokit/auth-app/dist-node/index.js:
